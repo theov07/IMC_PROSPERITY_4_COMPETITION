@@ -19,6 +19,7 @@ def main():
 
     loader = DataLoader(datas_dir)
     visualizer = MarketVisualizer()
+    animate = os.getenv("VIZ_ANIMATE", "0") == "1"
 
     # Process Price Data (Order Depths)
     price_files = [f for f in os.listdir(datas_dir) if f.startswith('prices') and f.endswith('.csv')]
@@ -41,6 +42,19 @@ def main():
             save_path = os.path.join(output_dir, f"{p_file.replace('.csv', '')}_{product}_liquidity.png")
             visualizer.plot_liquidity_over_time(history, product, save_path)
 
+            print(f"  Visualizing orderbook imbalance for {product}...")
+            save_path = os.path.join(output_dir, f"{p_file.replace('.csv', '')}_{product}_imbalance.png")
+            visualizer.plot_orderbook_imbalance(history, product, save_path)
+
+            print(f"  Visualizing volatility for {product}...")
+            save_path = os.path.join(output_dir, f"{p_file.replace('.csv', '')}_{product}_volatility.png")
+            visualizer.plot_volatility(history, product, window=50, save_path=save_path)
+
+            if animate:
+                print(f"  Generating orderbook animation for {product}...")
+                save_path = os.path.join(output_dir, f"{p_file.replace('.csv', '')}_{product}_orderbook.mp4")
+                visualizer.animate_orderbook(history, product, save_path=save_path)
+
     # Process Trades Data (Trade objects)
     trade_files = [f for f in os.listdir(datas_dir) if f.startswith('trades') and f.endswith('.csv')]
     for t_file in trade_files:
@@ -52,6 +66,14 @@ def main():
             print(f"  Visualizing trades for {product}...")
             save_path = os.path.join(output_dir, f"{t_file.replace('.csv', '')}_{product}_trades.png")
             visualizer.plot_trades(trades, product, save_path)
+
+            print(f"  Visualizing VWAP for {product}...")
+            save_path = os.path.join(output_dir, f"{t_file.replace('.csv', '')}_{product}_vwap.png")
+            visualizer.plot_vwap(trades, product, save_path)
+
+            print(f"  Visualizing VPIN for {product}...")
+            save_path = os.path.join(output_dir, f"{t_file.replace('.csv', '')}_{product}_vpin.png")
+            visualizer.plot_vpin(trades, product, bucket_volume=500, save_path=save_path)
 
     print(f"Analysis complete. Results saved in {output_dir}")
 

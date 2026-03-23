@@ -9,7 +9,11 @@ Ce dossier permet de visualiser les données Round 0 en s'appuyant au maximum su
 - Visualisations :
   - Mid price / best bid / best ask
   - Liquidité (volumes bid/ask) + spread
+  - Imbalance (order book imbalance)
+  - Volatilité (rolling std des log-returns)
   - Trades (prix vs temps)
+  - VWAP
+  - VPIN (Volume-synchronized Probability of Informed Trading)
 
 Les sorties sont enregistrées dans `vizualizer/output/`.
 
@@ -18,6 +22,16 @@ Les sorties sont enregistrées dans `vizualizer/output/`.
 ```bash
 .venv/bin/python vizualizer/main.py
 ```
+
+### Animation de l’order book (vue dynamique)
+
+Pour générer une animation MP4, active l’option :
+
+```bash
+VIZ_ANIMATE=1 .venv/bin/python vizualizer/main.py
+```
+
+Le fichier sera créé dans `vizualizer/output/`.
 
 ## Notes
 
