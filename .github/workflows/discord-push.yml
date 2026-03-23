@@ -1,0 +1,117 @@
+name: Discord Push Notification
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  notify-discord:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Discord webhook
+        uses: actions/github-script@v7
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        with:
+          script: |
+            const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+            if (!webhookUrl) {
+              core.setFailed("Missing DISCORD_WEBHOOK_URL secret");
+              return;
+            }
+
+            const payload = context.payload;
+            const branch = payload.ref.replace("refs/heads/", "");
+            const pusher = payload.pusher?.name || payload.sender?.login || "Unknown";
+            const avatar = payload.sender?.avatar_url || "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png";
+            const compareUrl = payload.compare || payload.repository.html_url;
+            const commits = payload.commits || [];
+
+            const filesSet = new Set();
+            for (const commit of commits) {
+              for (const f of (commit.added || [])) filesSet.add(`➕ ${f}`);
+              for (const f of (commit.modified || [])) filesSet.add(`✏️ ${f}`);
+              for (const f of (commit.removed || [])) filesSet.add(`❌ ${f}`);
+            }
+
+            let filesList = [...filesSet];
+            if (filesList.length === 0) {
+              filesList = ["No file details available"];
+            }
+
+            let filesText = "";
+            for (const file of filesList) {
+              if ((filesText + file + "\n").length > 1000) {
+                const shown = filesText.trim().split("\n").length;
+                filesText += `...and ${filesList.length - shown} more`;
+                break;
+              }
+              filesText += file + "\n";
+            }
+
+            const latestCommit = commits[commits.length - 1];
+            const commitMessage = latestCommit?.message || "New push";
+            const commitUrl = latestCommit?.url
+              ? latestCommit.url.replace("api.github.com/repos", "github.com").replace("/commits/", "/commit/")
+              : compareUrl;
+
+            const discordBody = {
+              username: "GitHub Notifier",
+              avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              embeds: [
+                {
+                  title: "🚀 New Push",
+                  url: compareUrl,
+                  color: 3447003,
+                  author: {
+                    name: pusher,
+                    icon_url: avatar
+                  },
+                  description: `**${pusher}** pushed to **\`${branch}\`**`,
+                  fields: [
+                    {
+                      name: "👤 Pushed by",
+                      value: pusher,
+                      inline: true
+                    },
+                    {
+                      name: "🌿 Branch",
+                      value: branch,
+                      inline: true
+                    },
+                    {
+                      name: "📦 Commits",
+                      value: String(commits.length || 1),
+                      inline: true
+                    },
+                    {
+                      name: "📝 Latest Commit",
+                      value: `[${commitMessage.slice(0, 200)}](${commitUrl})`
+                    },
+                    {
+                      name: "📂 Files changed",
+                      value: filesText.slice(0, 1024)
+                    }
+                  ],
+                  footer: {
+                    text: "GitHub → Discord"
+                  },
+                  timestamp: new Date().toISOString()
+                }
+              ]
+            };
+
+            const response = await fetch(webhookUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify(discordBody)
+            });
+
+            if (!response.ok) {
+              const text = await response.text();
+              core.setFailed(`Discord webhook failed: ${response.status} ${text}`);
+            }
