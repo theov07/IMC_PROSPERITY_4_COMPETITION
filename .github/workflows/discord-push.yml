@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "**"
+  workflow_dispatch:
 
 jobs:
   notify-discord:
@@ -51,47 +52,31 @@ jobs:
               filesText += file + "\n";
             }
 
-            const latestCommit = commits[commits.length - 1];
-            const commitMessage = latestCommit?.message || "New push";
-            const commitUrl = latestCommit?.url
-              ? latestCommit.url.replace("api.github.com/repos", "github.com").replace("/commits/", "/commit/")
-              : compareUrl;
+            const commitMessages = commits.map(c => `• ${c.message.split("\n")[0]}`);
+            let messageText = commitMessages.join("\n");
+            if (!messageText) {
+              messageText = "• New push";
+            }
+            if (messageText.length > 1024) {
+              messageText = messageText.slice(0, 1000) + "\n...";
+            }
 
             const discordBody = {
-              username: "GitHub Notifier",
-              avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              username: pusher,
+              avatar_url: avatar,
               embeds: [
                 {
                   title: "🚀 New Push",
                   url: compareUrl,
-                  color: 3447003,
-                  author: {
-                    name: pusher,
-                    icon_url: avatar
-                  },
+                  color: 3092790,
                   description: `**${pusher}** pushed to **\`${branch}\`**`,
                   fields: [
                     {
-                      name: "👤 Pushed by",
-                      value: pusher,
-                      inline: true
+                      name: "Commit Message",
+                      value: messageText
                     },
                     {
-                      name: "🌿 Branch",
-                      value: branch,
-                      inline: true
-                    },
-                    {
-                      name: "📦 Commits",
-                      value: String(commits.length || 1),
-                      inline: true
-                    },
-                    {
-                      name: "📝 Latest Commit",
-                      value: `[${commitMessage.slice(0, 200)}](${commitUrl})`
-                    },
-                    {
-                      name: "📂 Files changed",
+                      name: "Files Changed",
                       value: filesText.slice(0, 1024)
                     }
                   ],
