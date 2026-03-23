@@ -23,6 +23,22 @@ Les sorties sont enregistrées dans `vizualizer/output/`.
 .venv/bin/python vizualizer/main.py
 ```
 
+## Dashboard interactif (Plotly + Dash)
+
+Un dashboard web interactif est disponible pour explorer les indicateurs, l’order book et les trades.
+
+```bash
+.venv/bin/python vizualizer/dashboard.py
+```
+
+Puis ouvre l’URL affichée dans le terminal (par défaut http://127.0.0.1:8050/).
+
+### Lecture dynamique (type Binance)
+
+- Utilise la case **Play** pour faire défiler le temps automatiquement.
+- Le sélecteur **Speed** ajuste la vitesse.
+- La barre de timestamp + la ligne verticale synchronisent les graphes et l’order book.
+
 ### Animation de l’order book (vue dynamique)
 
 Pour générer une animation MP4, active l’option :
