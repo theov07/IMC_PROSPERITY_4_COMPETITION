@@ -1,12 +1,12 @@
 import pandas as pd
 import sys
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Iterable
 
 # Add parent directory to path to import datamodel
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from datamodel import OrderDepth, Trade, Symbol
+from datamodel import OrderDepth, Trade, Symbol, Listing, TradingState, Observation
 
 class DataLoader:
     def __init__(self, data_dir: str):
@@ -21,6 +21,32 @@ class DataLoader:
         """Loads trade data from a CSV file."""
         file_path = os.path.join(self.data_dir, file_name)
         return pd.read_csv(file_path, sep=';')
+
+    def load_trade_objects(self, file_name: str) -> List[Trade]:
+        """Loads trades and converts rows to Trade objects from datamodel."""
+        df = self.load_trades(file_name)
+        trades: List[Trade] = []
+
+        for _, row in df.iterrows():
+            timestamp = int(row['timestamp'])
+            symbol = str(row['symbol'])
+            price = int(float(row['price']))
+            quantity = int(row['quantity'])
+            buyer = str(row['buyer']) if pd.notna(row['buyer']) and row['buyer'] != '' else None
+            seller = str(row['seller']) if pd.notna(row['seller']) and row['seller'] != '' else None
+
+            trades.append(
+                Trade(
+                    symbol=symbol,
+                    price=price,
+                    quantity=quantity,
+                    buyer=buyer,
+                    seller=seller,
+                    timestamp=timestamp,
+                )
+            )
+
+        return trades
 
     def row_to_order_depth(self, row: pd.Series) -> OrderDepth:
         """Converts a row from the prices DataFrame to an OrderDepth object."""
@@ -68,3 +94,42 @@ class DataLoader:
             history[timestamp][product] = self.row_to_order_depth(row)
             
         return history
+
+    def build_listings(self, products: Iterable[str], denomination: str = "XIRECS") -> Dict[Symbol, Listing]:
+        """Creates Listing objects for each product."""
+        listings: Dict[Symbol, Listing] = {}
+        for product in sorted(set(products)):
+            listings[product] = Listing(symbol=product, product=product, denomination=denomination)
+        return listings
+
+    def group_trades_by_timestamp(self, trades: List[Trade]) -> Dict[int, Dict[Symbol, List[Trade]]]:
+        """Groups Trade objects by timestamp and symbol for TradingState snapshots."""
+        grouped: Dict[int, Dict[Symbol, List[Trade]]] = {}
+        for trade in trades:
+            grouped.setdefault(trade.timestamp, {}).setdefault(trade.symbol, []).append(trade)
+        return grouped
+
+    def build_trading_state_snapshots(
+        self,
+        order_depth_history: Dict[int, Dict[Symbol, OrderDepth]],
+        listings: Dict[Symbol, Listing],
+        market_trades: List[Trade],
+    ) -> Dict[int, TradingState]:
+        """Builds TradingState snapshots using datamodel objects (no own_trades/positions)."""
+        trades_by_time = self.group_trades_by_timestamp(market_trades)
+        observations = Observation(plainValueObservations={}, conversionObservations={})
+
+        snapshots: Dict[int, TradingState] = {}
+        for timestamp, order_depths in order_depth_history.items():
+            snapshots[timestamp] = TradingState(
+                traderData="",
+                timestamp=timestamp,
+                listings=listings,
+                order_depths=order_depths,
+                own_trades={},
+                market_trades=trades_by_time.get(timestamp, {}),
+                position={},
+                observations=observations,
+            )
+
+        return snapshots

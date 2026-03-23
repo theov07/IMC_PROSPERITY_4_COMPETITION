@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
-import pandas as pd
-from typing import Dict, List
+from typing import Dict, List, Iterable
 import sys
 import os
 
@@ -13,27 +12,44 @@ class MarketVisualizer:
     def __init__(self):
         pass
 
-    def plot_mid_prices(self, price_data: pd.DataFrame, product: Symbol, save_path: str = None):
-        """Plots the mid price of a product over time."""
-        product_data = price_data[price_data['product'] == product]
-        
-        if product_data.empty:
-            print(f"No data found for product {product}")
+    def plot_mid_prices(self, history: Dict[int, Dict[Symbol, OrderDepth]], product: Symbol, save_path: str = None):
+        """Plots mid, best bid and best ask using OrderDepth objects."""
+        timestamps: List[int] = []
+        mids: List[float] = []
+        best_bids: List[int] = []
+        best_asks: List[int] = []
+
+        for timestamp in sorted(history.keys()):
+            if product not in history[timestamp]:
+                continue
+            order_depth = history[timestamp][product]
+            if not order_depth.buy_orders or not order_depth.sell_orders:
+                continue
+
+            best_bid = max(order_depth.buy_orders.keys())
+            best_ask = min(order_depth.sell_orders.keys())
+            mid = (best_bid + best_ask) / 2
+
+            timestamps.append(timestamp)
+            best_bids.append(best_bid)
+            best_asks.append(best_ask)
+            mids.append(mid)
+
+        if not timestamps:
+            print(f"No order book data found for product {product}")
             return
 
         plt.figure(figsize=(12, 6))
-        plt.plot(product_data['timestamp'], product_data['mid_price'], label='Mid Price')
-        
-        # Plot Best Bid and Best Ask
-        plt.plot(product_data['timestamp'], product_data['bid_price_1'], label='Best Bid', alpha=0.5, linestyle='--')
-        plt.plot(product_data['timestamp'], product_data['ask_price_1'], label='Best Ask', alpha=0.5, linestyle='--')
-        
+        plt.plot(timestamps, mids, label='Mid Price')
+        plt.plot(timestamps, best_bids, label='Best Bid', alpha=0.6, linestyle='--')
+        plt.plot(timestamps, best_asks, label='Best Ask', alpha=0.6, linestyle='--')
+
         plt.title(f'Price History - {product}')
         plt.xlabel('Timestamp')
         plt.ylabel('Price')
         plt.legend()
         plt.grid(True)
-        
+
         if save_path:
             plt.savefig(save_path)
             print(f"Plot saved to {save_path}")
@@ -64,9 +80,8 @@ class MarketVisualizer:
             bids = order_depth.buy_orders
             asks = order_depth.sell_orders
             
-            # Visualization logic for a single snapshot (e.g., bar chart of volume at price)
-            # This would generate too many plots. 
-            # Instead, let's aggregate 'liquidity' or 'spread' from OrderDepth objects and plot that.
+            # Example snapshot plot (optional) - skipped by default to avoid too many files.
+            # This method is left as a hook for deeper order book exploration.
             pass
 
     def plot_liquidity_over_time(self, history: Dict[int, Dict[Symbol, OrderDepth]], product: Symbol, save_path: str = None):
@@ -122,33 +137,27 @@ class MarketVisualizer:
             plt.show()
         plt.close()
 
-    def plot_trades(self, trade_data: pd.DataFrame, product: Symbol, save_path: str = None):
-        """Plots executed trades for a product."""
-        product_trades = trade_data[trade_data['symbol'] == product]
-        
-        if product_trades.empty:
+    def plot_trades(self, trades: Iterable[Trade], product: Symbol, save_path: str = None):
+        """Plots executed trades for a product using Trade objects."""
+        filtered = [trade for trade in trades if trade.symbol == product]
+
+        if not filtered:
             print(f"No trades found for product {product}")
             return
 
+        timestamps = [trade.timestamp for trade in filtered]
+        prices = [trade.price for trade in filtered]
+        sizes = [max(10, min(80, abs(trade.quantity) * 4)) for trade in filtered]
+
         plt.figure(figsize=(12, 6))
-        
-        # Plot buy trades
-        buy_trades = product_trades[product_trades['quantity'] > 0] # Assuming quantity > 0 is buy? Actually checking buyer column is safer if quantity is always positive.
-        # Check datamodel: "self.buyer ... will only be non-empty strings if the algorithm itself is the buyer"
-        # But this is market data. "market_trades" are trades done by others.
-        # The CSV has `buyer`, `seller`, `quantity`.
-        # Quantity is always positive in Trade object.
-        # We need to distinguish if it was a buy or sell from the taker's perspective?
-        # Usually we just plot price.
-        
-        plt.scatter(product_trades['timestamp'], product_trades['price'], label='Trades', alpha=0.6, s=10, c='blue')
-        
+        plt.scatter(timestamps, prices, label='Trades', alpha=0.6, s=sizes, c='blue')
+
         plt.title(f'Trade Execution History - {product}')
         plt.xlabel('Timestamp')
         plt.ylabel('Price')
         plt.legend()
         plt.grid(True)
-        
+
         if save_path:
             plt.savefig(save_path)
             print(f"Plot saved to {save_path}")

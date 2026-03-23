@@ -2,4 +2,5 @@ jsonpickle
 pandas
 numpy
 matplotlib
+matplotlib
 jupyter
