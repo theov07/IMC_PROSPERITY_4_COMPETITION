@@ -84,6 +84,14 @@ Priority list for turning this repository from a solid framework into a competit
 - Add per-member templates for recording experiments in `team/`.
 - Document the expected CSV naming conventions and data ingestion assumptions.
 
+## Log Analysis
+
+- Improve the log analyzer so it makes fuller use of merged `.json` + `.log` data.
+- Add position-over-time views to log analysis outputs.
+- Surface submission metadata such as final profit, status, submission id, and loaded files directly in reports.
+- Add runtime log inspection when useful debug information is present.
+- Add richer HTML or dashboard summaries so post-submission review is faster.
+
 ## Nice To Have
 
 - One-click scripts for export plus compile-check.

@@ -2,6 +2,7 @@
 
 Usage:
   python -m prosperity.tooling.dashboard --log examples/official_logs/16248.json
+  python -m prosperity.tooling.dashboard --log examples/official_logs/16248.log
   python -m prosperity.tooling.dashboard --backtest-json artifacts/backtest_results.json
   python -m prosperity.tooling.dashboard --data-dir data --round 0 --day -2
 
@@ -96,7 +97,7 @@ def _build_price_figure(activities: pd.DataFrame, trades: pd.DataFrame, symbol: 
 
 
 def _load_official_log(path: str | Path):
-    """Load and parse an official Prosperity JSON log."""
+    """Load and parse an official Prosperity JSON / LOG bundle."""
     from prosperity.tooling.logs import load_official_log
     return load_official_log(path)
 
@@ -112,7 +113,7 @@ def run_static(log_path: str | None = None, symbol: str | None = None, output: s
 
     for sym in symbols:
         fig = _build_price_figure(log.activities, log.trades, sym)
-        out_path = output or f"artifacts/analysis/{log.submission_id}_{sym}_dashboard.html"
+        out_path = output or f"artifacts/analysis/{log.analysis_group}/{log.submission_id}_{sym}_dashboard.html"
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
         fig.write_html(out_path)
         print(f"Saved {out_path}")
@@ -158,7 +159,7 @@ def run_dash(log_path: str):
 
 def run_cli(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prosperity interactive dashboard")
-    parser.add_argument("--log", help="Path to official JSON log")
+    parser.add_argument("--log", help="Path to official JSON or LOG file")
     parser.add_argument("--symbol", help="Specific product to show")
     parser.add_argument("--static", action="store_true", help="Export static HTML instead of running Dash")
     parser.add_argument("--output", help="Output path for static HTML")
