@@ -1,0 +1,151 @@
+"""Product configuration and round-level strategy registry.
+
+Each product maps to a strategy name + params dict.  The Trader dispatcher
+uses this to instantiate the right BaseStrategy subclass per product.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field, replace
+from typing import Any, Dict
+
+
+@dataclass(frozen=True)
+class ProductConfig:
+    """Everything needed to instantiate and configure a strategy for one product."""
+    symbol: str
+    strategy: str                          # key into STRATEGY_REGISTRY
+    position_limit: int = 20
+    params: Dict[str, Any] = field(default_factory=dict)
+
+
+# ── Round 0 ──────────────────────────────────────────────────────────
+ROUND_0: Dict[str, ProductConfig] = {
+    "EMERALDS": ProductConfig(
+        symbol="EMERALDS",
+        strategy="market_maker",
+        position_limit=80,
+        params=dict(
+            anchor_price=10000.0,
+            fair_mode="anchored_microprice",
+            anchor_weight=0.92,
+            ema_alpha=0.08,
+            take_edge=1.0,
+            quote_half_spread=2,
+            inventory_aversion=1.2,
+            max_inventory_bias_ticks=4,
+            maker_size=16,
+            join_best=True,
+            improve_ticks=1,
+        ),
+    ),
+    "TOMATOES": ProductConfig(
+        symbol="TOMATOES",
+        strategy="market_maker",
+        position_limit=80,
+        params=dict(
+            anchor_price=None,
+            fair_mode="microprice_ema",
+            anchor_weight=0.0,
+            ema_alpha=0.18,
+            take_edge=1.0,
+            quote_half_spread=2,
+            inventory_aversion=1.5,
+            max_inventory_bias_ticks=5,
+            maker_size=14,
+            join_best=True,
+            improve_ticks=1,
+        ),
+    ),
+}
+
+# ── Round templates (filled in when products are revealed) ───────────
+# These are EXAMPLES showing how future rounds will be configured.
+# Update them as soon as the round opens and products are disclosed.
+
+ROUND_1: Dict[str, ProductConfig] = {
+    # Example: a stable product
+    # "RESIN": ProductConfig(symbol="RESIN", strategy="market_maker", position_limit=50,
+    #     params=dict(anchor_price=10000.0, fair_mode="fixed", ...)),
+    # Example: a volatile product
+    # "KELP": ProductConfig(symbol="KELP", strategy="avellaneda_stoikov", position_limit=50,
+    #     params=dict(gamma=0.1, sigma_window=50, ...)),
+    # Example: a basket
+    # "PICNIC_BASKET": ProductConfig(symbol="PICNIC_BASKET", strategy="stat_arb", position_limit=60,
+    #     params=dict(components={"BAGUETTE": 2, "DIP": 4, "UKULELE": 1}, ...)),
+}
+
+ROUND_2: Dict[str, ProductConfig] = {}
+ROUND_3: Dict[str, ProductConfig] = {}
+ROUND_4: Dict[str, ProductConfig] = {}
+ROUND_5: Dict[str, ProductConfig] = {}
+
+
+ROUNDS: Dict[int, Dict[str, ProductConfig]] = {
+    0: ROUND_0,
+    1: ROUND_1,
+    2: ROUND_2,
+    3: ROUND_3,
+    4: ROUND_4,
+    5: ROUND_5,
+}
+
+
+# ── Per-member overrides (for experimentation) ──────────────────────
+
+def _override(base: ProductConfig, **kwargs) -> ProductConfig:
+    """Return a copy of base with params updated."""
+    new_params = {**base.params, **kwargs}
+    return ProductConfig(
+        symbol=base.symbol,
+        strategy=kwargs.pop("strategy", base.strategy) if "strategy" in kwargs else base.strategy,
+        position_limit=kwargs.pop("position_limit", base.position_limit) if "position_limit" in kwargs else base.position_limit,
+        params=new_params,
+    )
+
+
+MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
+    "champion": {},   # uses base configs as-is
+    "leo": {
+        0: {
+            "EMERALDS": _override(ROUND_0["EMERALDS"], quote_half_spread=2, maker_size=18, inventory_aversion=1.0),
+            "TOMATOES": _override(ROUND_0["TOMATOES"], ema_alpha=0.14, take_edge=0.75, maker_size=12, inventory_aversion=1.2),
+        },
+    },
+    "leo_naive": {
+        0: {
+            "EMERALDS": _override(
+                ROUND_0["EMERALDS"],
+                strategy="naive_tight_mm",
+                maker_size=18,
+                tighten_ticks=1,
+            ),
+            "TOMATOES": _override(
+                ROUND_0["TOMATOES"],
+                strategy="naive_tight_mm",
+                maker_size=10,
+                tighten_ticks=1,
+            ),
+        },
+    },
+    "theo": {
+        0: {
+            "EMERALDS": _override(ROUND_0["EMERALDS"], take_edge=0.5, quote_half_spread=1, maker_size=14, inventory_aversion=1.6),
+            "TOMATOES": _override(ROUND_0["TOMATOES"], ema_alpha=0.22, take_edge=0.5, quote_half_spread=1, maker_size=16, inventory_aversion=1.8, max_inventory_bias_ticks=6),
+        },
+    },
+    "pietro": {
+        0: {
+            "EMERALDS": _override(ROUND_0["EMERALDS"], quote_half_spread=3, maker_size=12),
+            "TOMATOES": _override(ROUND_0["TOMATOES"], ema_alpha=0.10, take_edge=1.5, quote_half_spread=3, maker_size=10, inventory_aversion=1.0),
+        },
+    },
+}
+
+
+def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
+    """Build the product config for a given round + member."""
+    base = dict(ROUNDS.get(round_num, {}))
+    overrides = MEMBER_OVERRIDES.get(member, {}).get(round_num, {})
+    base.update(overrides)
+    return base

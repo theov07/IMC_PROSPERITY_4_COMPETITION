@@ -2,7 +2,15 @@ import json
 from json import JSONEncoder
 from typing import Dict, List
 
-import jsonpickle
+try:
+    import jsonpickle
+except ImportError:  # pragma: no cover - fallback for stripped environments
+    class _JsonPickleFallback:
+        @staticmethod
+        def encode(value):
+            return json.dumps(value, default=lambda item: getattr(item, "__dict__", str(item)))
+
+    jsonpickle = _JsonPickleFallback()
 
 Time = int
 Symbol = str
@@ -13,7 +21,7 @@ ObservationValue = int
 
 
 class Listing:
-    def __init__(self, symbol: Symbol, product: Product, denomination: int):
+    def __init__(self, symbol: Symbol, product: Product, denomination: Product):
         self.symbol = symbol
         self.product = product
         self.denomination = denomination
@@ -27,16 +35,19 @@ class ConversionObservation:
         transportFees: float,
         exportTariff: float,
         importTariff: float,
-        sugarPrice: float,
-        sunlightIndex: float,
+        sunlight: float = 0.0,
+        humidity: float = 0.0,
+        **kwargs,
     ):
         self.bidPrice = bidPrice
         self.askPrice = askPrice
         self.transportFees = transportFees
         self.exportTariff = exportTariff
         self.importTariff = importTariff
-        self.sugarPrice = sugarPrice
-        self.sunlightIndex = sunlightIndex
+        self.sunlight = sunlight
+        self.humidity = humidity
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 class Observation:

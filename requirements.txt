@@ -1,8 +1,7 @@
 jsonpickle
-pandas
 numpy
+pandas
 matplotlib
 plotly
 dash
-matplotlib
-jupyter
+pytest

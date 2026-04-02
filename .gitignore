@@ -8,8 +8,12 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
-dist/
 build/
+dist/
+.pytest_cache/
+
+# Artifacts (generated)
+artifacts/
 
 # IDE
 .vscode/
@@ -17,3 +21,10 @@ build/
 
 # macOS
 .DS_Store
+
+# Secrets
+.env
+*.env
+
+# Research output (regenerable)
+research/visualizer/__pycache__/

@@ -1,0 +1,44 @@
+"""Strategy registry — maps strategy names to classes."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Type
+
+from prosperity.strategies.base import BaseStrategy
+
+_REGISTRY: Dict[str, Type[BaseStrategy]] = {}
+_LOADED = False
+
+
+def _load_registry():
+    global _LOADED
+    if _LOADED:
+        return
+    from prosperity.strategies.market_maker import MarketMakerStrategy
+    from prosperity.strategies.naive_tight_mm import NaiveTightMarketMakerStrategy
+    from prosperity.strategies.avellaneda_stoikov import AvellanedaStoikovStrategy
+    from prosperity.strategies.stat_arb import StatArbStrategy
+    from prosperity.strategies.black_scholes import BlackScholesStrategy
+    from prosperity.strategies.conversion_arb import ConversionArbStrategy
+    from prosperity.strategies.signal_trader import SignalTraderStrategy
+
+    _REGISTRY["market_maker"] = MarketMakerStrategy
+    _REGISTRY["naive_tight_mm"] = NaiveTightMarketMakerStrategy
+    _REGISTRY["avellaneda_stoikov"] = AvellanedaStoikovStrategy
+    _REGISTRY["stat_arb"] = StatArbStrategy
+    _REGISTRY["black_scholes"] = BlackScholesStrategy
+    _REGISTRY["conversion_arb"] = ConversionArbStrategy
+    _REGISTRY["signal_trader"] = SignalTraderStrategy
+    _LOADED = True
+
+
+def get_strategy_class(name: str) -> Type[BaseStrategy]:
+    _load_registry()
+    if name not in _REGISTRY:
+        raise ValueError(f"Unknown strategy: {name!r}. Available: {list(_REGISTRY.keys())}")
+    return _REGISTRY[name]
+
+
+def build_strategy(name: str, product: str, params: Dict[str, Any]) -> BaseStrategy:
+    cls = get_strategy_class(name)
+    return cls(product=product, params=params)
