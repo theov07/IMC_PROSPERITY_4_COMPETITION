@@ -12,8 +12,6 @@ build/
 dist/
 .pytest_cache/
 
-# Artifacts (generated)
-artifacts/
 
 # IDE
 .vscode/

@@ -1,0 +1,38 @@
+{
+  "round": 0,
+  "day": "-2",
+  "product_summary": {
+    "EMERALDS": {
+      "ticks": 10000,
+      "mid_mean": 10000.0,
+      "mid_std": 0.73,
+      "mid_min": 9996.0,
+      "mid_max": 10004.0,
+      "avg_spread": 15.73,
+      "min_spread": 8,
+      "max_spread": 16,
+      "avg_bid_vol": 12.5,
+      "avg_ask_vol": 12.5,
+      "realized_vol_per_tick": 1.0277,
+      "total_price_range": 8.0
+    },
+    "TOMATOES": {
+      "ticks": 10000,
+      "mid_mean": 5007.95,
+      "mid_std": 10.29,
+      "mid_min": 4988.0,
+      "mid_max": 5036.0,
+      "avg_spread": 13.07,
+      "min_spread": 5,
+      "max_spread": 14,
+      "avg_bid_vol": 7.4,
+      "avg_ask_vol": 7.4,
+      "realized_vol_per_tick": 1.345,
+      "total_price_range": 48.0
+    }
+  },
+  "bot_report": {
+    "TOMATOES": [],
+    "EMERALDS": []
+  }
+}
