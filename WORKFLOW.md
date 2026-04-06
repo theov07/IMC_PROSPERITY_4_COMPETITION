@@ -126,8 +126,13 @@ Based on your exploration, decide which strategy to use per product, then tune p
 #### Step 2.0: If you need to create a new strategy:
 
 - Create prosperity/strategies/my_strategy.py — the canonical source
+  - First, look at base.py to see what you need to implement
 - Register in `prosperity/strategies/__init__.py`
 - Add one line to STRATEGY_REGISTRY in `scripts/export_submission.py` (name → file + class name)
+- Add to Configuration: edit `config.py`
+- Add Unit Tests (Recommended): Create/update `test_strategies.py`
+
+
 
 
 #### Step 2a: Understand Available Strategies
