@@ -1,3 +1,5 @@
+Extract from official prosperity competition wiki:
+
 # Writing an Algorithm in Python
 
 The explanation below assumes familiarity with the basics of Object-Oriented Programming in Python. To refresh this knowledge you can have a look at the source provided on the [Programming resources](https://www.notion.so/Programming-resources-325e8453a0938006a589dbaa2a72a5e3?pvs=21).

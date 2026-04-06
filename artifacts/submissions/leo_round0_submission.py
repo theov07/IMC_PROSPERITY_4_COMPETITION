@@ -1,3 +1,8 @@
+
+
+# supposed to be equivalent to "artifacts/submissions/round0_leo_submission.py" 
+# but built with the new exporter
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -316,9 +321,9 @@ PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
               'ema_alpha': 0.08,
               'fair_mode': 'anchored_microprice',
               'improve_ticks': 1,
-              'inventory_aversion': 1.2,
+              'inventory_aversion': 1.0,
               'join_best': True,
-              'maker_size': 16,
+              'maker_size': 18,
               'max_inventory_bias_ticks': 4,
               'position_limit': 80,
               'quote_half_spread': 2,
@@ -326,17 +331,17 @@ PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
               'take_edge': 1.0},
  'TOMATOES': {'anchor_price': None,
               'anchor_weight': 0.0,
-              'ema_alpha': 0.18,
+              'ema_alpha': 0.14,
               'fair_mode': 'microprice_ema',
               'improve_ticks': 1,
-              'inventory_aversion': 1.5,
+              'inventory_aversion': 1.2,
               'join_best': True,
-              'maker_size': 14,
+              'maker_size': 12,
               'max_inventory_bias_ticks': 5,
               'position_limit': 80,
               'quote_half_spread': 2,
               'strategy': 'market_maker',
-              'take_edge': 1.0}}
+              'take_edge': 0.75}}
 
 STRATEGY_CLASSES = {"market_maker": MarketMakerStrategy}
 
