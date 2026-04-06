@@ -19,13 +19,11 @@ import sys
 from pathlib import Path
 from pprint import pformat
 from textwrap import dedent
-from prosperity.config import MEMBER_OVERRIDES
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from prosperity.config import get_round_config
+from prosperity.config import MEMBER_OVERRIDES, get_round_config
 
 
 # ── Strategy registry ──────────────────────────────────────────────────────
@@ -214,10 +212,54 @@ def main() -> int:
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(output, encoding="utf-8")
-
     print(f"Wrote {output_path} ({len(output):,} bytes)")
     print(f"Inlined : {', '.join(module_files)}")
     print(f"Strategies: {', '.join(sorted(needed))}")
+
+    # Write the submissions/ wrapper so the backtester can import it directly.
+    wrapper_path = ROOT / "submissions" / f"{args.member}.py"
+    wrapper = dedent(f'''\
+        """Backtester entrypoint — {args.member}."""
+
+        from prosperity.strategies.trader import CURRENT_ROUND
+        from prosperity.config import get_round_config
+        from prosperity.persistence import dump_state, load_state
+        from prosperity.strategies import build_strategy
+        from prosperity.strategies.base import BaseStrategy
+
+        from datamodel import Order, TradingState
+        from typing import Dict, List
+
+
+        class Trader:
+            def __init__(self):
+                config = get_round_config(CURRENT_ROUND, "{args.member}")
+                self.strategies: Dict[str, BaseStrategy] = {{}}
+                for symbol, pc in config.items():
+                    merged = {{"position_limit": pc.position_limit, **pc.params}}
+                    self.strategies[symbol] = build_strategy(pc.strategy, symbol, merged)
+
+            def bid(self) -> int:
+                return 15
+
+            def run(self, state: TradingState):
+                saved = load_state(state.traderData)
+                mems = saved.setdefault("products", {{}})
+                result: Dict[str, List[Order]] = {{}}
+                convs = 0
+                for product, strat in self.strategies.items():
+                    if product not in state.order_depths:
+                        continue
+                    mem = mems.setdefault(product, {{}})
+                    orders, c = strat.on_tick(state, mem)
+                    result[product] = orders
+                    convs += c
+                saved["last_timestamp"] = state.timestamp
+                return result, convs, dump_state(saved)
+        ''')
+    wrapper_path.write_text(wrapper, encoding="utf-8")
+    print(f"Wrote {wrapper_path}")
+
     return 0
 
 

@@ -13,18 +13,11 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from datamodel import Order, OrderDepth, Trade, TradingState
 
-from prosperity.config import ProductConfig, get_round_config
+from prosperity.config import MEMBER_OVERRIDES, get_round_config
 from prosperity.tooling.data import MarketDataLoader
 
 
-STRATEGY_ALIASES = {
-    "champion": "submissions.champion",
-    "leo": "submissions.leo",
-    "leo_naive": "submissions.leo_naive",
-    "theo": "submissions.theo",
-    "pietro": "submissions.pietro",
-    'tibo_AvSt': "submissions.tibo_AvSt",
-}
+STRATEGY_ALIASES = {name: f"submissions.{name}" for name in MEMBER_OVERRIDES}
 
 
 @dataclass
@@ -301,3 +294,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         Path(args.json_out).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_cli())
