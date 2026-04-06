@@ -123,6 +123,13 @@ python research/visualizer/main.py
 
 Based on your exploration, decide which strategy to use per product, then tune parameters.
 
+#### Step 2.0: If you need to create a new strategy:
+
+- Create prosperity/strategies/my_strategy.py — the canonical source
+- Register in `prosperity/strategies/__init__.py`
+- Add one line to STRATEGY_REGISTRY in `scripts/export_submission.py` (name → file + class name)
+
+
 #### Step 2a: Understand Available Strategies
 
 Check what's already configured in [prosperity/config.py](prosperity/config.py):
