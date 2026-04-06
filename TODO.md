@@ -4,7 +4,6 @@ Priority list for turning this repository from a solid framework into a competit
 
 ## Critical
 
-- Remove `.env` from git tracking and replace it with `.env.example` if needed.
 - Make the submission exporter derive from a stricter canonical source to reduce drift between modular code and exported code.
 - Build a local-vs-official reconciliation tool for fills, pnl, and positions.
 - Add an experiment registry: strategy, round, params, days tested, total pnl, per-product pnl, notes, submission id.
