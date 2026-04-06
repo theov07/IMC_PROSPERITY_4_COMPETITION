@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from pprint import pformat
 from textwrap import dedent
+from prosperity.config import MEMBER_OVERRIDES
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -139,8 +140,8 @@ _TRADER_CLASS = dedent("""\
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export a single-file Prosperity submission")
-    parser.add_argument("--member", default="champion",
-                        choices=["champion", "leo", "leo_naive", "theo", "pietro"])
+    valid_members = sorted(MEMBER_OVERRIDES.keys())
+    parser.add_argument("--member", default="champion", choices=valid_members)
     parser.add_argument("--round", type=int, default=0)
     parser.add_argument("--output", default=None, help="Output file path")
     args = parser.parse_args()
