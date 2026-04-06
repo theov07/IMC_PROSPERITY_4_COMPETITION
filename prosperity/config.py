@@ -112,6 +112,36 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             "TOMATOES": _override(ROUND_0["TOMATOES"], ema_alpha=0.14, take_edge=0.75, maker_size=12, inventory_aversion=1.2),
         },
     },
+    "tibo_AvSt": {
+        0: {
+            "EMERALDS": _override(
+                ROUND_0["EMERALDS"],
+                strategy="avellaneda_stoikov",
+                gamma=0.1,
+                kappa=1.5,
+                sigma_window=50,
+                sigma_default=1.0,
+                sigma_floor=0.5,
+                min_half_spread=1.0,
+                total_ticks=10000,
+                maker_size=6,
+                take_edge=1.0,
+            ),
+            "TOMATOES": _override(
+                ROUND_0["TOMATOES"],
+                strategy="avellaneda_stoikov",
+                gamma=0.1,
+                kappa=1.5,
+                sigma_window=50,
+                sigma_default=1.0,
+                sigma_floor=0.5,
+                min_half_spread=1.0,
+                total_ticks=10000,
+                maker_size=6,
+                take_edge=1.0,
+            ),
+        },
+    },
     "leo_naive": {
         0: {
             "EMERALDS": _override(
