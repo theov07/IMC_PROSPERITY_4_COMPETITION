@@ -23,6 +23,7 @@ STRATEGY_ALIASES = {
     "leo_naive": "submissions.leo_naive",
     "theo": "submissions.theo",
     "pietro": "submissions.pietro",
+    'tibo_AvSt': "submissions.tibo_AvSt",
 }
 
 
