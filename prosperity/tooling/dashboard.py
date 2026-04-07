@@ -45,8 +45,14 @@ C_SPREAD   = "#868e96"   # grey fill
 C_POSITION = "#7048e8"   # purple
 C_IMB_POS  = "#51cf66"   # light green bars
 C_IMB_NEG  = "#ff6b6b"   # light red bars
-C_PNL_IMC  = "#f59f00"   # amber
-C_PNL_BT   = "#339af0"   # sky blue
+C_PNL_TOTAL = "#212529"   # near-black total line
+
+# Per-product color palette (cycled when > 6 products)
+PRODUCT_COLORS = ["#339af0", "#f59f00", "#51cf66", "#ff6b6b", "#cc5de8", "#20c997"]
+
+
+def _product_color_map(symbols: list[str]) -> dict[str, str]:
+    return {sym: PRODUCT_COLORS[i % len(PRODUCT_COLORS)] for i, sym in enumerate(sorted(symbols))}
 
 SUBPLOT_TITLE_STYLE = dict(font=dict(size=12, color="#495057"))
 LEGEND_STYLE = dict(
@@ -117,6 +123,127 @@ def _position_series(fills: pd.DataFrame | list[dict], symbol: str | None = None
     return df[["timestamp", "position"]]
 
 
+# ── PnL helpers ────────────────────────────────────────────────────────────
+
+def _imc_per_product_pnl(log) -> pd.DataFrame:
+    """Extract per-product profit_and_loss time series from activities log."""
+    df = log.activities[["timestamp", "product", "profit_and_loss"]].copy()
+    return df.rename(columns={"product": "symbol", "profit_and_loss": "pnl"}).sort_values("timestamp")
+
+
+def _bt_per_product_pnl(backtest_data: dict, market_df_raw: pd.DataFrame | None) -> pd.DataFrame:
+    """Compute MTM PnL per symbol over time, one day at a time, then chain.
+
+    Each backtester day is independent (positions reset to 0). We compute
+    intra-day MTM PnL from fills + mid prices, then carry the official
+    end-of-day PnL (from product_summaries) as the offset for the next day.
+    Timestamps are offset to be monotonically increasing across days.
+    """
+    rows: list[dict] = []
+    ts_offset = 0
+    pnl_carry: dict[str, float] = {}   # cumulative PnL from completed days, per symbol
+
+    for day in backtest_data["days"]:
+        curve = day.get("equity_curve", [])
+        day_max_ts = curve[-1][0] if curve else 0
+        tick = (curve[1][0] - curve[0][0]) if len(curve) >= 2 else 100
+
+        raw_fills = day.get("fills", [])
+        fills_df = pd.DataFrame(raw_fills) if raw_fills else pd.DataFrame()
+
+        # Market data for this day only
+        day_mkt: pd.DataFrame = pd.DataFrame()
+        if market_df_raw is not None and not market_df_raw.empty:
+            day_label = str(day["day"])
+            if "day" in market_df_raw.columns:
+                day_mkt = market_df_raw[market_df_raw["day"].astype(str) == day_label].copy()
+            else:
+                day_mkt = market_df_raw.copy()
+
+        has_market = not day_mkt.empty and "product" in day_mkt.columns
+
+        if not fills_df.empty:
+            all_syms = sorted(fills_df["symbol"].unique())
+        elif has_market:
+            all_syms = sorted(day_mkt["product"].unique())
+        else:
+            all_syms = []
+
+        for sym in all_syms:
+            sym_fills = (fills_df[fills_df["symbol"] == sym].sort_values("timestamp").copy()
+                         if not fills_df.empty else pd.DataFrame())
+
+            if not sym_fills.empty:
+                sym_fills["signed_qty"] = sym_fills.apply(
+                    lambda r: r["quantity"] if r["side"] == "BUY" else -r["quantity"], axis=1
+                )
+                sym_fills["cash_delta"] = sym_fills.apply(
+                    lambda r: -r["price"] * r["quantity"] if r["side"] == "BUY" else r["price"] * r["quantity"], axis=1
+                )
+
+            if has_market:
+                sym_mkt = day_mkt[day_mkt["product"] == sym].sort_values("timestamp")
+                timestamps = sorted(sym_mkt["timestamp"].unique())
+            elif not sym_fills.empty:
+                timestamps = sorted(sym_fills["timestamp"].unique())
+            else:
+                continue
+
+            cash = 0.0
+            position = 0
+            fill_records = sym_fills.to_dict("records") if not sym_fills.empty else []
+            fill_idx = 0
+            carry = pnl_carry.get(sym, 0.0)
+
+            for ts in timestamps:
+                while fill_idx < len(fill_records) and fill_records[fill_idx]["timestamp"] <= ts:
+                    cash += fill_records[fill_idx]["cash_delta"]
+                    position += fill_records[fill_idx]["signed_qty"]
+                    fill_idx += 1
+
+                if has_market:
+                    mkt_row = sym_mkt[sym_mkt["timestamp"] == ts]
+                    if not mkt_row.empty:
+                        bid = mkt_row["bid_price_1"].iloc[0]
+                        ask = mkt_row["ask_price_1"].iloc[0]
+                        mid = ((bid + ask) / 2.0 if pd.notna(bid) and pd.notna(ask)
+                               else float(bid if pd.notna(bid) else ask if pd.notna(ask) else 0))
+                    else:
+                        mid = 0.0
+                    intraday_pnl = cash + position * mid
+                else:
+                    intraday_pnl = cash  # realized only
+
+                rows.append({"timestamp": ts + ts_offset, "symbol": sym, "pnl": carry + intraday_pnl})
+
+        # Advance carry using official end-of-day PnL from product_summaries
+        for sym, ps in day.get("product_summaries", {}).items():
+            pnl_carry[sym] = pnl_carry.get(sym, 0.0) + ps["pnl"]
+
+        ts_offset += day_max_ts + tick
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["timestamp", "symbol", "pnl"])
+
+
+def _add_pnl_traces(fig, pnl_df: pd.DataFrame, color_map: dict[str, str], row: int,
+                    total_df: pd.DataFrame | None = None, total_color: str = C_PNL_TOTAL):
+    """Add stacked per-product PnL areas and a total dotted line."""
+    for sym in sorted(pnl_df["symbol"].unique()):
+        df = pnl_df[pnl_df["symbol"] == sym].sort_values("timestamp")
+        color = color_map.get(sym, "#868e96")
+        r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+        fig.add_trace(go.Scatter(
+            x=df["timestamp"], y=df["pnl"], name=f"{sym} PnL",
+            line=dict(color=color, width=1.2),
+            stackgroup="pnl", fillcolor=f"rgba({r},{g},{b},0.35)",
+        ), row=row, col=1)
+    if total_df is not None and not total_df.empty:
+        fig.add_trace(go.Scatter(
+            x=total_df["timestamp"], y=total_df["value"], name="Total PnL",
+            line=dict(color=total_color, width=2, dash="dot"),
+        ), row=row, col=1)
+
+
 # ── IMC figure ─────────────────────────────────────────────────────────────
 
 def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -179,11 +306,11 @@ def build_imc_figure(log, symbol: str) -> go.Figure:
         marker_color=[C_IMB_POS if v > 0 else C_IMB_NEG for v in imb],
         opacity=0.6, showlegend=False), row=3, col=1)
 
-    # PnL
-    if not log.graph.empty:
-        fig.add_trace(go.Scatter(x=log.graph["timestamp"], y=log.graph["value"],
-            name="IMC PnL", line=dict(color=C_PNL_IMC, width=2), fill="tozeroy",
-            fillcolor="rgba(245,159,0,0.12)"), row=4, col=1)
+    # PnL — per-product areas + total line
+    pnl_df = _imc_per_product_pnl(log)
+    symbols = sorted(pnl_df["symbol"].unique())
+    color_map = _product_color_map(symbols)
+    _add_pnl_traces(fig, pnl_df, color_map, row=4, total_df=log.graph if not log.graph.empty else None)
 
     fig.update_layout(height=820, legend=LEGEND_STYLE, **LAYOUT_BASE)
     fig.update_annotations(**SUBPLOT_TITLE_STYLE)
@@ -280,11 +407,15 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
             line=dict(color=C_POSITION, width=1.5), fill="tozeroy",
             fillcolor="rgba(112,72,232,0.12)"), row=pos_row, col=1)
 
-    # Equity PnL
-    if not equity_df.empty:
+    # Equity PnL — per-product stacked areas + total line
+    per_prod_pnl = _bt_per_product_pnl(backtest_data, market_df_raw)
+    if not per_prod_pnl.empty:
+        bt_color_map = _product_color_map(sorted(per_prod_pnl["symbol"].unique()))
+        _add_pnl_traces(fig, per_prod_pnl, bt_color_map, row=pnl_row,
+                        total_df=equity_df if not equity_df.empty else None)
+    elif not equity_df.empty:
         fig.add_trace(go.Scatter(x=equity_df["timestamp"], y=equity_df["value"],
-            name="Backtest PnL", line=dict(color=C_PNL_BT, width=2), fill="tozeroy",
-            fillcolor="rgba(51,154,240,0.12)"), row=pnl_row, col=1)
+            name="Total PnL", line=dict(color=C_PNL_TOTAL, width=2)), row=pnl_row, col=1)
 
     height = 680 if has_market else 480
     fig.update_layout(height=height, legend=LEGEND_STYLE, **LAYOUT_BASE)
