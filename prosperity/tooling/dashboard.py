@@ -1,19 +1,15 @@
 """Interactive Plotly/Dash dashboard for analyzing backtests and official logs.
 
 Usage:
+  # IMC results only (pass either .json or .log — companion file auto-discovered)
   python -m prosperity.tooling.dashboard --log examples/official_logs/16248.json
-  python -m prosperity.tooling.dashboard --log examples/official_logs/16248.log
-  python -m prosperity.tooling.dashboard --backtest-json artifacts/backtest_results.json
-  python -m prosperity.tooling.dashboard --data-dir data --round 0 --day -2
 
-Features:
-  - Price chart with bid/ask/mid/fair overlay
-  - Trade markers (buys/sells) with size encoding
-  - Order book depth heatmap
-  - PnL equity curve
-  - Position over time
-  - Spread and imbalance indicators
-  - Timestamp navigation
+  # Internal backtest only
+  python -m prosperity.tooling.dashboard --backtest-json artifacts/backtest_results.json --data-dir data
+
+  # Combined: IMC on top, internal backtest on bottom
+  python -m prosperity.tooling.dashboard --log examples/official_logs/16248.json \
+      --backtest-json artifacts/backtest_results.json --data-dir data
 """
 
 from __future__ import annotations
@@ -39,139 +35,422 @@ except ImportError:
     HAS_DASH = False
 
 
-def _build_price_figure(activities: pd.DataFrame, trades: pd.DataFrame, symbol: str) -> go.Figure:
-    """Build the main price + trades figure for one symbol."""
-    sym_act = activities[activities["product"] == symbol].copy().sort_values("timestamp")
-    if sym_act.empty:
+# ── Palette ────────────────────────────────────────────────────────────────
+C_BID      = "#1971c2"   # blue
+C_ASK      = "#c92a2a"   # red
+C_FAIR     = "#2b8a3e"   # green dotted
+C_BUY      = "#2f9e44"   # green triangles
+C_SELL     = "#e03131"   # red triangles
+C_SPREAD   = "#868e96"   # grey fill
+C_POSITION = "#7048e8"   # purple
+C_IMB_POS  = "#51cf66"   # light green bars
+C_IMB_NEG  = "#ff6b6b"   # light red bars
+C_PNL_IMC  = "#f59f00"   # amber
+C_PNL_BT   = "#339af0"   # sky blue
+
+SUBPLOT_TITLE_STYLE = dict(font=dict(size=12, color="#495057"))
+LEGEND_STYLE = dict(
+    orientation="h",
+    yanchor="top", y=-0.04,
+    xanchor="center", x=0.5,
+    bgcolor="rgba(255,255,255,0.85)",
+    bordercolor="#dee2e6",
+    borderwidth=1,
+    font=dict(size=11),
+)
+LAYOUT_BASE = dict(
+    template="plotly_white",
+    hovermode="x unified",
+    margin=dict(l=60, r=40, t=60, b=80),
+    plot_bgcolor="#f8f9fa",
+    paper_bgcolor="#ffffff",
+    font=dict(family="Inter, sans-serif", size=12, color="#212529"),
+)
+
+
+# ── Shared helpers ─────────────────────────────────────────────────────────
+
+def _trade_markers(fig, df: pd.DataFrame, row: int, prefix: str = ""):
+    """Add buy/sell triangle markers to a subplot row."""
+    if df.empty:
+        return
+    mkw = dict(line=dict(width=0.6, color="#212529"))
+    buys = df[df["side"] == "BUY"]
+    sells = df[df["side"] == "SELL"]
+    if not buys.empty:
+        fig.add_trace(go.Scatter(
+            x=buys["timestamp"], y=buys["price"], mode="markers",
+            name=f"{prefix}Buy",
+            marker=dict(symbol="triangle-up", color=C_BUY,
+                        size=(buys["quantity"].clip(1, 20) * 1.8).astype(int), **mkw),
+            text=[f"qty={q}  px={p}" for q, p in zip(buys["quantity"], buys["price"])],
+            hoverinfo="text+name",
+        ), row=row, col=1)
+    if not sells.empty:
+        fig.add_trace(go.Scatter(
+            x=sells["timestamp"], y=sells["price"], mode="markers",
+            name=f"{prefix}Sell",
+            marker=dict(symbol="triangle-down", color=C_SELL,
+                        size=(sells["quantity"].clip(1, 20) * 1.8).astype(int), **mkw),
+            text=[f"qty={q}  px={p}" for q, p in zip(sells["quantity"], sells["price"])],
+            hoverinfo="text+name",
+        ), row=row, col=1)
+
+
+def _position_series(fills: pd.DataFrame | list[dict], symbol: str | None = None) -> pd.DataFrame:
+    """Compute cumulative position from fills. Pass a list[dict] or a DataFrame."""
+    if isinstance(fills, list):
+        rows = fills if symbol is None else [f for f in fills if f["symbol"] == symbol]
+        df = pd.DataFrame(rows) if rows else pd.DataFrame()
+    else:
+        df = fills if symbol is None else fills[fills["symbol"] == symbol].copy()
+
+    if df.empty:
+        return pd.DataFrame(columns=["timestamp", "position"])
+
+    df = df.sort_values("timestamp").copy()
+    if "signed_qty" not in df.columns:
+        df["signed_qty"] = df.apply(
+            lambda r: r["quantity"] if r["side"] == "BUY" else -r["quantity"], axis=1
+        )
+    df["position"] = df["signed_qty"].cumsum()
+    return df[["timestamp", "position"]]
+
+
+# ── IMC figure ─────────────────────────────────────────────────────────────
+
+def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    if trades.empty:
+        return pd.DataFrame()
+    buyer_sub = trades.get("buyer", pd.Series(dtype=str)).fillna("") == "SUBMISSION"
+    seller_sub = trades.get("seller", pd.Series(dtype=str)).fillna("") == "SUBMISSION"
+    mask = (trades["symbol"] == symbol) & (buyer_sub | seller_sub)
+    df = trades.loc[mask].copy()
+    if df.empty:
+        return df
+    df["side"] = df["buyer"].fillna("").eq("SUBMISSION").map({True: "BUY", False: "SELL"})
+    df["signed_qty"] = df["quantity"] * df["side"].map({"BUY": 1, "SELL": -1})
+    return df.sort_values("timestamp")
+
+
+def build_imc_figure(log, symbol: str) -> go.Figure:
+    from prosperity.tooling.logs import _compute_activity_features
+
+    act = log.activities[log.activities["product"] == symbol].copy().sort_values("timestamp")
+    if act.empty:
         return go.Figure()
 
-    # Compute features
-    sym_act["mid"] = (sym_act["bid_price_1"] + sym_act["ask_price_1"]) / 2
-    bv1 = sym_act["bid_volume_1"].clip(lower=1)
-    av1 = sym_act["ask_volume_1"].clip(lower=1)
-    sym_act["microprice"] = (sym_act["bid_price_1"] * av1 + sym_act["ask_price_1"] * bv1) / (bv1 + av1)
-    sym_act["fair_ewm"] = sym_act["microprice"].ewm(span=25, adjust=False).mean()
-    sym_act["spread"] = sym_act["ask_price_1"] - sym_act["bid_price_1"]
-    sym_act["imbalance"] = (bv1 - av1) / (bv1 + av1)
+    act = _compute_activity_features(act)
+    sym_trades = _imc_sym_trades(log.trades, symbol)
+    pos_df = _position_series(sym_trades)
 
     fig = make_subplots(
         rows=4, cols=1, shared_xaxes=True,
-        row_heights=[0.45, 0.2, 0.15, 0.2],
-        subplot_titles=[f"{symbol} — Price & Trades", "Spread", "Imbalance", "PnL / Position"],
-        vertical_spacing=0.04,
+        row_heights=[0.42, 0.14, 0.16, 0.28],
+        subplot_titles=["Price & Trades", "Spread", "Position & Imbalance", "PnL"],
+        vertical_spacing=0.07,
     )
 
-    # Row 1: Price
-    fig.add_trace(go.Scatter(x=sym_act["timestamp"], y=sym_act["bid_price_1"], name="Best Bid", line=dict(color="#0b7285", width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=sym_act["timestamp"], y=sym_act["ask_price_1"], name="Best Ask", line=dict(color="#c92a2a", width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=sym_act["timestamp"], y=sym_act["fair_ewm"], name="Fair (EWM)", line=dict(color="#2b8a3e", width=1.5, dash="dot")), row=1, col=1)
+    # Price
+    fig.add_trace(go.Scatter(x=act["timestamp"], y=act["bid_price_1"], name="Best Bid",
+        line=dict(color=C_BID, width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=act["timestamp"], y=act["ask_price_1"], name="Best Ask",
+        line=dict(color=C_ASK, width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=act["timestamp"], y=act["fair"], name="Fair (EWM)",
+        line=dict(color=C_FAIR, width=1.3, dash="dot")), row=1, col=1)
+    _trade_markers(fig, sym_trades, row=1)
 
-    # Trades
-    if not trades.empty:
-        sym_trades = trades[trades["symbol"] == symbol].copy()
-        buyer_sub = sym_trades.get("buyer", pd.Series(dtype=str)).fillna("") == "SUBMISSION"
-        seller_sub = sym_trades.get("seller", pd.Series(dtype=str)).fillna("") == "SUBMISSION"
-        sub_trades = sym_trades[buyer_sub | seller_sub].copy()
-        if not sub_trades.empty:
-            sub_trades["side"] = sub_trades["buyer"].fillna("").eq("SUBMISSION").map({True: "BUY", False: "SELL"})
-            buys = sub_trades[sub_trades["side"] == "BUY"]
-            sells = sub_trades[sub_trades["side"] == "SELL"]
-            if not buys.empty:
-                fig.add_trace(go.Scatter(x=buys["timestamp"], y=buys["price"], mode="markers", name="Buy",
-                    marker=dict(symbol="triangle-up", color="#2f9e44", size=buys["quantity"].clip(1, 20) * 2, line=dict(width=0.5, color="black")),
-                    text=[f"qty={q}, px={p}" for q, p in zip(buys["quantity"], buys["price"])], hoverinfo="text+name"), row=1, col=1)
-            if not sells.empty:
-                fig.add_trace(go.Scatter(x=sells["timestamp"], y=sells["price"], mode="markers", name="Sell",
-                    marker=dict(symbol="triangle-down", color="#f03e3e", size=sells["quantity"].clip(1, 20) * 2, line=dict(width=0.5, color="black")),
-                    text=[f"qty={q}, px={p}" for q, p in zip(sells["quantity"], sells["price"])], hoverinfo="text+name"), row=1, col=1)
+    # Spread
+    fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",
+        line=dict(color=C_SPREAD, width=1), fill="tozeroy",
+        fillcolor="rgba(134,142,150,0.15)", showlegend=False), row=2, col=1)
 
-    # Row 2: Spread
-    fig.add_trace(go.Scatter(x=sym_act["timestamp"], y=sym_act["spread"], name="Spread", line=dict(color="#495057", width=1), fill="tozeroy"), row=2, col=1)
+    # Position
+    if not pos_df.empty:
+        fig.add_trace(go.Scatter(x=pos_df["timestamp"], y=pos_df["position"], name="Position",
+            line=dict(color=C_POSITION, width=1.5), fill="tozeroy",
+            fillcolor="rgba(112,72,232,0.12)"), row=3, col=1)
 
-    # Row 3: Imbalance
-    colors = ["#2f9e44" if v > 0 else "#f03e3e" for v in sym_act["imbalance"]]
-    fig.add_trace(go.Bar(x=sym_act["timestamp"], y=sym_act["imbalance"], name="Imbalance", marker_color=colors), row=3, col=1)
+    # Imbalance
+    bv = act["bid_volume_1"].clip(lower=1)
+    av = act["ask_volume_1"].clip(lower=1)
+    imb = (bv - av) / (bv + av)
+    fig.add_trace(go.Bar(x=act["timestamp"], y=imb, name="Imbalance",
+        marker_color=[C_IMB_POS if v > 0 else C_IMB_NEG for v in imb],
+        opacity=0.6, showlegend=False), row=3, col=1)
 
-    fig.update_layout(height=900, showlegend=True, template="plotly_white", hovermode="x unified")
+    # PnL
+    if not log.graph.empty:
+        fig.add_trace(go.Scatter(x=log.graph["timestamp"], y=log.graph["value"],
+            name="IMC PnL", line=dict(color=C_PNL_IMC, width=2), fill="tozeroy",
+            fillcolor="rgba(245,159,0,0.12)"), row=4, col=1)
+
+    fig.update_layout(height=820, legend=LEGEND_STYLE, **LAYOUT_BASE)
+    fig.update_annotations(**SUBPLOT_TITLE_STYLE)
     return fig
 
 
-def _load_official_log(path: str | Path):
-    """Load and parse an official Prosperity JSON / LOG bundle."""
-    from prosperity.tooling.logs import load_official_log
-    return load_official_log(path)
+# ── Backtest figure ────────────────────────────────────────────────────────
+
+def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Merge all days with monotonically increasing timestamps.
+
+    Each day's timestamps start at 0 and repeat across days, so we offset each
+    day by (previous_day_max_ts + one_tick) to make them sequential. The same
+    offset is applied to fills, equity curve, and market price data so all charts
+    share a consistent x-axis.
+    """
+    all_fills: list[dict] = []
+    equity_rows: list[dict] = []
+    market_frames: list[pd.DataFrame] = []
+    pnl_offset = 0.0
+    ts_offset = 0
+
+    for day in backtest_data["days"]:
+        curve = day.get("equity_curve", [])
+        fills = day.get("fills", [])
+
+        # Determine tick size and max ts from the equity curve
+        day_max_ts = curve[-1][0] if curve else 0
+        tick = (curve[1][0] - curve[0][0]) if len(curve) >= 2 else 100
+
+        # Equity curve: offset timestamps, chain PnL
+        for ts, val in curve:
+            equity_rows.append({"timestamp": ts + ts_offset, "value": val + pnl_offset})
+        if curve:
+            pnl_offset += curve[-1][1]
+
+        # Fills: offset timestamps
+        for f in fills:
+            all_fills.append({**f, "timestamp": f["timestamp"] + ts_offset})
+
+        # Market data: offset timestamps for this day
+        if market_df_raw is not None and not market_df_raw.empty:
+            day_label = str(day["day"])
+            if "day" in market_df_raw.columns:
+                day_mkt = market_df_raw[market_df_raw["day"].astype(str) == day_label].copy()
+            else:
+                day_mkt = market_df_raw.copy()
+            if not day_mkt.empty:
+                day_mkt["timestamp"] = day_mkt["timestamp"] + ts_offset
+                market_frames.append(day_mkt)
+
+        ts_offset += day_max_ts + tick
+
+    fills_df = pd.DataFrame(all_fills) if all_fills else pd.DataFrame()
+    equity_df = pd.DataFrame(equity_rows) if equity_rows else pd.DataFrame()
+    market_df = pd.concat(market_frames, ignore_index=True) if market_frames else pd.DataFrame()
+    return fills_df, equity_df, market_df
 
 
-def run_static(log_path: str | None = None, symbol: str | None = None, output: str | None = None):
-    """Generate static HTML charts (no Dash server needed)."""
-    if log_path is None:
-        print("Provide --log for static mode")
-        return
+def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None) -> go.Figure:
+    fills_df, equity_df, market_df = _merge_backtest_days(backtest_data, market_df_raw)
 
-    log = _load_official_log(log_path)
-    symbols = [symbol] if symbol else sorted(log.activities["product"].dropna().unique())
+    sym_fills = fills_df[fills_df["symbol"] == symbol].copy() if not fills_df.empty else pd.DataFrame()
+    if not sym_fills.empty:
+        sym_fills["side"] = sym_fills["side"].str.upper()
 
-    for sym in symbols:
-        fig = _build_price_figure(log.activities, log.trades, sym)
-        out_path = output or f"artifacts/analysis/{log.analysis_group}/{log.submission_id}_{sym}_dashboard.html"
-        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-        fig.write_html(out_path)
-        print(f"Saved {out_path}")
+    has_market = not market_df.empty
+    n_rows = 3 if has_market else 2
+    heights = [0.45, 0.20, 0.35] if has_market else [0.35, 0.65]
+    titles = (["Price & Fills", "Position", "Equity PnL"] if has_market
+              else ["Position", "Equity PnL"])
+
+    fig = make_subplots(rows=n_rows, cols=1, shared_xaxes=True,
+        row_heights=heights, subplot_titles=titles, vertical_spacing=0.08)
+
+    price_row = 1
+    pos_row   = 2 if has_market else 1
+    pnl_row   = 3 if has_market else 2
+
+    # Price + fills
+    if has_market:
+        sym_mkt = market_df[market_df["product"] == symbol].sort_values("timestamp")
+        if not sym_mkt.empty:
+            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=sym_mkt["bid_price_1"],
+                name="Best Bid", line=dict(color=C_BID, width=1)), row=price_row, col=1)
+            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=sym_mkt["ask_price_1"],
+                name="Best Ask", line=dict(color=C_ASK, width=1)), row=price_row, col=1)
+        _trade_markers(fig, sym_fills, row=price_row)
+
+    # Position
+    pos_df = _position_series(sym_fills)
+    if not pos_df.empty:
+        fig.add_trace(go.Scatter(x=pos_df["timestamp"], y=pos_df["position"], name="Position",
+            line=dict(color=C_POSITION, width=1.5), fill="tozeroy",
+            fillcolor="rgba(112,72,232,0.12)"), row=pos_row, col=1)
+
+    # Equity PnL
+    if not equity_df.empty:
+        fig.add_trace(go.Scatter(x=equity_df["timestamp"], y=equity_df["value"],
+            name="Backtest PnL", line=dict(color=C_PNL_BT, width=2), fill="tozeroy",
+            fillcolor="rgba(51,154,240,0.12)"), row=pnl_row, col=1)
+
+    height = 680 if has_market else 480
+    fig.update_layout(height=height, legend=LEGEND_STYLE, **LAYOUT_BASE)
+    fig.update_annotations(**SUBPLOT_TITLE_STYLE)
+    return fig
 
 
-def run_dash(log_path: str):
-    """Launch interactive Dash app."""
+# ── Dash app ───────────────────────────────────────────────────────────────
+
+_PAGE_STYLE = {
+    "maxWidth": "1280px",
+    "margin": "0 auto",
+    "padding": "0 24px 40px",
+    "fontFamily": "Inter, system-ui, sans-serif",
+    "backgroundColor": "#f8f9fa",
+    "minHeight": "100vh",
+}
+
+_HEADER_STYLE = {
+    "padding": "20px 0 16px",
+    "borderBottom": "2px solid #dee2e6",
+    "marginBottom": "24px",
+}
+
+def _section_header(label, color):
+    return html.Div([
+        html.Span("▌", style={"color": color, "marginRight": "8px", "fontSize": "20px"}),
+        html.Span(label, style={"fontSize": "16px", "fontWeight": "600", "color": "#212529"}),
+    ], style={"display": "flex", "alignItems": "center", "padding": "8px 0 4px"})
+
+
+def _divider():
+    return html.Hr(style={"margin": "32px 0", "borderColor": "#dee2e6", "borderWidth": "1px"})
+
+
+_CARD_STYLE = {
+    "background": "#ffffff",
+    "borderRadius": "8px",
+    "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+    "padding": "4px 0 0",
+    "marginBottom": "24px",
+}
+
+
+def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None = None):
     if not HAS_DASH:
         print("dash not installed. Run: pip install dash")
-        print("Falling back to static HTML export.")
-        run_static(log_path)
         return
 
-    log = _load_official_log(log_path)
-    symbols = sorted(log.activities["product"].dropna().unique())
+    imc_symbols: list[str] = sorted(log.activities["product"].dropna().unique()) if log else []
+    bt_symbols: list[str] = []
+    if backtest_data:
+        all_fills = [f for d in backtest_data["days"] for f in d["fills"]]
+        bt_symbols = sorted({f["symbol"] for f in all_fills})
 
-    app = Dash(__name__)
-    app.layout = html.Div([
-        html.H2(f"Prosperity Dashboard — {log.submission_id}"),
+    all_symbols = sorted(set(imc_symbols) | set(bt_symbols))
+    if not all_symbols:
+        print("No symbols found.")
+        return
+
+    # Pre-load raw market data per day (timestamp offsetting happens inside _merge_backtest_days)
+    market_df_raw: pd.DataFrame | None = None
+    if data_dir and backtest_data:
+        from prosperity.tooling.data import MarketDataLoader
+        loader = MarketDataLoader(data_dir)
+        round_num = backtest_data.get("round", 0)
+        frames = []
+        for day in backtest_data["days"]:
+            try:
+                df = loader.load_prices(f"prices_round_{round_num}_day_{day['day']}.csv")
+                df["day"] = str(day["day"])
+                frames.append(df)
+            except Exception:
+                pass
+        market_df_raw = pd.concat(frames, ignore_index=True) if frames else None
+
+    # Build subtitle
+    parts = []
+    if log:
+        parts.append(f"IMC · {log.submission_id}  |  profit = {log.profit}")
+    if backtest_data:
+        total = sum(d["pnl"] for d in backtest_data["days"])
+        days_str = ", ".join(str(d["day"]) for d in backtest_data["days"])
+        parts.append(f"Backtest · {backtest_data.get('strategy', '')}  |  PnL = {total:+.2f}  (days {days_str})")
+
+    app = Dash(__name__, title="Prosperity Dashboard")
+
+    layout_children: list = [
         html.Div([
-            html.Label("Product:"),
-            dcc.Dropdown(id="symbol-select", options=[{"label": s, "value": s} for s in symbols], value=symbols[0] if symbols else None),
-        ], style={"width": "300px", "marginBottom": "20px"}),
-        dcc.Graph(id="main-chart", style={"height": "900px"}),
-        html.Div(id="summary-text", style={"fontFamily": "monospace", "whiteSpace": "pre", "padding": "10px"}),
-    ])
+            html.H2("Prosperity Trading Dashboard",
+                style={"margin": "0 0 4px", "fontSize": "22px", "color": "#1971c2", "fontWeight": "700"}),
+            *[html.P(p, style={"margin": "2px 0", "color": "#495057", "fontSize": "13px"}) for p in parts],
+        ], style=_HEADER_STYLE),
 
-    @app.callback(
-        [Output("main-chart", "figure"), Output("summary-text", "children")],
-        [Input("symbol-select", "value")],
-    )
-    def update(selected_symbol):
-        if not selected_symbol:
-            return go.Figure(), ""
-        fig = _build_price_figure(log.activities, log.trades, selected_symbol)
-        profit = log.profit
-        summary = f"Submission: {log.submission_id}\nProfit: {profit}\nProduct: {selected_symbol}"
-        return fig, summary
+        html.Div([
+            html.Label("Product", style={"fontWeight": "600", "fontSize": "13px", "color": "#495057",
+                                          "marginRight": "10px"}),
+            dcc.Dropdown(id="symbol-select",
+                options=[{"label": s, "value": s} for s in all_symbols],
+                value=all_symbols[0],
+                clearable=False,
+                style={"width": "200px", "fontSize": "13px"}),
+        ], style={"display": "flex", "alignItems": "center", "marginBottom": "20px"}),
+    ]
 
-    print("Starting dashboard at http://127.0.0.1:8050")
+    _graph_config = {"displayModeBar": True, "displaylogo": False,
+                     "modeBarButtonsToKeep": ["zoom2d", "pan2d", "resetScale2d", "toImage"]}
+
+    if log:
+        layout_children += [
+            _section_header("IMC Official Results", "#1971c2"),
+            html.Div(dcc.Graph(id="imc-chart", config=_graph_config), style=_CARD_STYLE),
+        ]
+
+    if log and backtest_data:
+        layout_children.append(_divider())
+
+    if backtest_data:
+        layout_children += [
+            _section_header("Internal Backtest", "#2f9e44"),
+            html.Div(dcc.Graph(id="bt-chart", config=_graph_config), style=_CARD_STYLE),
+        ]
+
+    app.layout = html.Div(layout_children, style=_PAGE_STYLE)
+
+    if log:
+        @app.callback(Output("imc-chart", "figure"), Input("symbol-select", "value"))
+        def update_imc(symbol):
+            return build_imc_figure(log, symbol) if symbol else go.Figure()
+
+    if backtest_data:
+        @app.callback(Output("bt-chart", "figure"), Input("symbol-select", "value"))
+        def update_bt(symbol):
+            return build_backtest_figure(backtest_data, symbol, market_df_raw) if symbol else go.Figure()
+
+    print(f"Dashboard → http://127.0.0.1:8050")
     app.run(debug=False, port=8050)
 
 
+# ── CLI ────────────────────────────────────────────────────────────────────
+
 def run_cli(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prosperity interactive dashboard")
-    parser.add_argument("--log", help="Path to official JSON or LOG file")
-    parser.add_argument("--symbol", help="Specific product to show")
-    parser.add_argument("--static", action="store_true", help="Export static HTML instead of running Dash")
-    parser.add_argument("--output", help="Output path for static HTML")
+    parser.add_argument("--log", help="Path to official IMC JSON or LOG file")
+    parser.add_argument("--backtest-json", help="Path to backtest JSON (from --json-out)")
+    parser.add_argument("--data-dir", default=None,
+        help="Market data directory (enables price chart in backtest view)")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    if args.static or not HAS_DASH:
-        run_static(args.log, args.symbol, args.output)
-    else:
-        if args.log:
-            run_dash(args.log)
-        else:
-            print("Provide --log <path> to launch dashboard")
+    if not args.log and not args.backtest_json:
+        parser.error("Provide at least one of --log or --backtest-json")
+
+    log = None
+    if args.log:
+        from prosperity.tooling.logs import load_official_log
+        log = load_official_log(args.log)
+        print(f"Loaded IMC log: {log.submission_id}  profit={log.profit}")
+
+    backtest_data = None
+    if args.backtest_json:
+        backtest_data = json.loads(Path(args.backtest_json).read_text(encoding="utf-8"))
+        total = sum(d["pnl"] for d in backtest_data["days"])
+        print(f"Loaded backtest: strategy={backtest_data.get('strategy')}  "
+              f"days={[d['day'] for d in backtest_data['days']]}  total_pnl={total:.2f}")
+
+    run_dash(log=log, backtest_data=backtest_data, data_dir=args.data_dir)
     return 0
 
 
