@@ -32,7 +32,7 @@ class AvellanedaStoikovStrategy(BaseStrategy):
 
     # ── volatility estimation ────────────────────────────────────────
     def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
-        window = self.params.get("sigma_window", 50)
+        window = int(self.params.get("sigma_window", 50))
         prices = memory.setdefault("mid_history", [])
         prices.append(mid)
         if len(prices) > window + 1:
@@ -55,9 +55,9 @@ class AvellanedaStoikovStrategy(BaseStrategy):
     def _compute_as_quotes(
         self, mid: float, position: int, sigma: float, memory: Dict[str, Any],
     ) -> Tuple[float, float, float]:
-        gamma = self.params.get("gamma", 0.1)
-        kappa = self.params.get("kappa", 1.5)
-        total_ticks = self.params.get("total_ticks", 10000)
+        gamma = float(self.params.get("gamma", 0.1))
+        kappa = float(self.params.get("kappa", 1.5))
+        total_ticks = int(self.params.get("total_ticks", 10000))
         tick_num = memory.get("tick_count", 0)
         memory["tick_count"] = tick_num + 1
 
@@ -70,7 +70,7 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         half_spread = (gamma * sigma * sigma * tau) / 2.0 + math.log(1.0 + gamma / kappa) / gamma
 
         # Apply min spread from params
-        min_half_spread = self.params.get("min_half_spread", 1.0)
+        min_half_spread = float(self.params.get("min_half_spread", 1.0))
         half_spread = max(half_spread, min_half_spread)
 
         return reservation, half_spread, tau
@@ -91,8 +91,8 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         sigma = self._update_volatility(mid, memory)
         reservation, half_spread, tau = self._compute_as_quotes(mid, position, sigma, memory)
 
-        bid_price = math.floor(reservation - half_spread)
-        ask_price = math.ceil(reservation + half_spread)
+        bid_price = int(math.floor(reservation - half_spread))
+        ask_price = int(math.ceil(reservation + half_spread))
 
         # Ensure we don't cross the book
         if book.best_ask is not None:
@@ -105,11 +105,11 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
 
-        maker_size = self.params.get("maker_size", 10)
+        maker_size = int(self.params.get("maker_size", 10))
         orders: List[Order] = []
 
         # ── Aggressive taking when edge is clear ──
-        take_edge = self.params.get("take_edge", 0.5)
+        take_edge = float(self.params.get("take_edge", 0.5))
         for ask_p in sorted(order_depth.sell_orders):
             available = -order_depth.sell_orders[ask_p]
             if ask_p > reservation - take_edge or buy_cap <= 0:
