@@ -7,7 +7,7 @@ import importlib
 import json
 from math import ceil
 from collections import defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -42,12 +42,21 @@ class ProductSummary:
 
 
 @dataclass
+class Quote:
+    timestamp: int
+    symbol: str
+    bid: float | None   # best buy order price submitted (None if no buy orders)
+    ask: float | None   # best sell order price submitted (None if no sell orders)
+
+
+@dataclass
 class DaySummary:
     day: str
     pnl: float
     fills: List[Fill]
     product_summaries: Dict[str, ProductSummary]
     equity_curve: List[Tuple[int, float]]
+    quotes: List[Quote] = field(default_factory=list)
 
 
 class BacktestEngine:
@@ -178,6 +187,7 @@ class BacktestEngine:
 
         recent_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
         all_fills: List[Fill] = []
+        all_quotes: List[Quote] = []
         equity_curve: List[Tuple[int, float]] = []
         trader_data = ""
 
@@ -200,6 +210,17 @@ class BacktestEngine:
 
             trader_result, _, trader_data = trader.run(state)
             next_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
+
+            # Record best bid/ask quotes submitted by the strategy
+            for product, orders in trader_result.items():
+                buy_prices = [o.price for o in orders if o.quantity > 0]
+                sell_prices = [o.price for o in orders if o.quantity < 0]
+                all_quotes.append(Quote(
+                    timestamp=timestamp,
+                    symbol=product,
+                    bid=max(buy_prices) if buy_prices else None,
+                    ask=min(sell_prices) if sell_prices else None,
+                ))
 
             for product, orders in trader_result.items():
                 safe_orders = self._respect_exchange_limits(product, positions.get(product, 0), orders)
@@ -251,7 +272,7 @@ class BacktestEngine:
                 turnover=turnover_by_product[product], max_abs_position=max_abs_position[product],
             )
 
-        return DaySummary(day=day, pnl=total_pnl, fills=all_fills, product_summaries=product_summaries, equity_curve=equity_curve)
+        return DaySummary(day=day, pnl=total_pnl, fills=all_fills, product_summaries=product_summaries, equity_curve=equity_curve, quotes=all_quotes)
 
 
 def _result_to_jsonable(summary: DaySummary) -> Dict[str, object]:
@@ -261,6 +282,7 @@ def _result_to_jsonable(summary: DaySummary) -> Dict[str, object]:
         "fills": [asdict(fill) for fill in summary.fills],
         "product_summaries": {product: asdict(ps) for product, ps in summary.product_summaries.items()},
         "equity_curve": summary.equity_curve,
+        "quotes": [asdict(q) for q in summary.quotes],
     }
 
 
