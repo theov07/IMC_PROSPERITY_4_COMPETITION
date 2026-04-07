@@ -278,14 +278,15 @@ Rank  EMERALDS.ema_alpha  EMERALDS.quote_half_spread  TOMATOES.ema_alpha  Total 
 Once you've found good parameters, run a final backtest and visually inspect the trades.
 
 ```bash
-python backtest.py --strategy my_attempt_v1 --round 0 --days -2 -1 --verbose
+python -m prosperity.tooling.backtest --strategy tibo_AvSt --round 0 --data-dir data --json-out artifacts/backtest_results.json
 ```
 
-The `--verbose` flag outputs detailed trade-by-trade information.
+run dashboard:
 
-**[OPTIONAL] Visual Deep Dive:**
+```bash
+python -m prosperity.tooling.dashboard --backtest-json artifacts/backtest_results.json --data-dir data
+```
 
-If you want to see actual trades overlaid on price charts, the backtest currently outputs JSON. You can manually load it into the dashboard (this requires a small enhancement to `prosperity/tooling/dashboard.py` if not already present).
 
 **Sanity checks:**
 - Do I see fills when I expect to? (around the mid price)
@@ -384,6 +385,10 @@ Download from IMC dashboard:
 
 ```bash
 python -m prosperity.tooling.dashboard --log examples/official_logs/16248.log
+```
+or (to see backtest and live trading on the same screen):
+```bash
+python -m prosperity.tooling.dashboard --log path/to/file.json --backtest-json artifacts/backtest_results.json --data-dir data
 ```
 
 This opens an interactive Plotly dashboard showing:
