@@ -35,43 +35,94 @@ except ImportError:
     HAS_DASH = False
 
 
-# ── Palette ────────────────────────────────────────────────────────────────
-C_BID      = "#1971c2"   # blue
-C_ASK      = "#c92a2a"   # red
-C_FAIR     = "#2b8a3e"   # green dotted
-C_BUY      = "#2f9e44"   # green triangles
-C_SELL     = "#e03131"   # red triangles
-C_SPREAD   = "#868e96"   # grey fill
-C_POSITION = "#7048e8"   # purple
-C_IMB_POS  = "#51cf66"   # light green bars
-C_IMB_NEG  = "#ff6b6b"   # light red bars
-C_PNL_TOTAL = "#212529"   # near-black total line
+# ── Neon trace palette (catppuccin-mocha — works in dark and light) ────────
+C_BID      = "#89b4fa"   # sapphire blue
+C_ASK      = "#f38ba8"   # coral red
+C_FAIR     = "#a6e3a1"   # green
+C_BUY      = "#a6e3a1"   # green triangles
+C_SELL     = "#f38ba8"   # coral triangles
+C_SPREAD   = "#89dceb"   # sky cyan fill
+C_POSITION = "#cba6f7"   # mauve purple
+C_IMB_POS  = "#a6e3a1"   # green bars
+C_IMB_NEG  = "#f38ba8"   # red bars
+C_PNL_TOTAL = "#f9e2af"  # yellow total line
 
-# Per-product color palette (cycled when > 6 products)
-PRODUCT_COLORS = ["#339af0", "#f59f00", "#51cf66", "#ff6b6b", "#cc5de8", "#20c997"]
+# Per-product color palette
+PRODUCT_COLORS = ["#89b4fa", "#f9e2af", "#a6e3a1", "#f38ba8", "#cba6f7", "#89dceb"]
 
 
 def _product_color_map(symbols: list[str]) -> dict[str, str]:
     return {sym: PRODUCT_COLORS[i % len(PRODUCT_COLORS)] for i, sym in enumerate(sorted(symbols))}
 
-SUBPLOT_TITLE_STYLE = dict(font=dict(size=12, color="#495057"))
-LEGEND_STYLE = dict(
-    orientation="h",
-    yanchor="top", y=-0.04,
-    xanchor="center", x=0.5,
-    bgcolor="rgba(255,255,255,0.85)",
-    bordercolor="#dee2e6",
-    borderwidth=1,
-    font=dict(size=11),
-)
-LAYOUT_BASE = dict(
-    template="plotly_white",
-    hovermode="x unified",
-    margin=dict(l=60, r=40, t=60, b=80),
-    plot_bgcolor="#f8f9fa",
-    paper_bgcolor="#ffffff",
-    font=dict(family="Inter, sans-serif", size=12, color="#212529"),
-)
+
+# ── Themes ─────────────────────────────────────────────────────────────────
+THEMES: dict[str, dict] = {
+    "dark": {
+        "page_bg":      "#1e1e2e",
+        "outer_bg":     "#13131f",   # full-page backdrop
+        "card_bg":      "#181825",
+        "border":       "#313244",
+        "text":         "#cdd6f4",
+        "text_muted":   "#a6adc8",
+        "accent":       "#89b4fa",
+        "section_bar":  "#cba6f7",
+        "divider":      "#313244",
+        "btn_bg":       "#313244",
+        "btn_hover":    "#45475a",
+        "plotly_tpl":   "plotly_dark",
+        "paper_bg":     "#181825",
+        "plot_bg":      "#1e1e2e",
+        "legend_bg":    "rgba(24,24,37,0.92)",
+        "legend_border":"#313244",
+        "font_color":   "#cdd6f4",
+        "subplot_title":"#a6adc8",
+    },
+    "light": {
+        "page_bg":      "#f8f9fa",
+        "outer_bg":     "#e9ecef",
+        "card_bg":      "#ffffff",
+        "border":       "#dee2e6",
+        "text":         "#212529",
+        "text_muted":   "#495057",
+        "accent":       "#1971c2",
+        "section_bar":  "#7048e8",
+        "divider":      "#dee2e6",
+        "btn_bg":       "#e9ecef",
+        "btn_hover":    "#dee2e6",
+        "plotly_tpl":   "plotly_white",
+        "paper_bg":     "#ffffff",
+        "plot_bg":      "#f8f9fa",
+        "legend_bg":    "rgba(255,255,255,0.92)",
+        "legend_border":"#dee2e6",
+        "font_color":   "#212529",
+        "subplot_title":"#495057",
+    },
+}
+
+
+def _layout_base(theme: str) -> dict:
+    t = THEMES[theme]
+    return dict(
+        template=t["plotly_tpl"],
+        hovermode="x unified",
+        margin=dict(l=60, r=40, t=60, b=80),
+        plot_bgcolor=t["plot_bg"],
+        paper_bgcolor=t["paper_bg"],
+        font=dict(family="Inter, sans-serif", size=12, color=t["font_color"]),
+        legend=dict(
+            orientation="h",
+            yanchor="top", y=-0.04,
+            xanchor="center", x=0.5,
+            bgcolor=t["legend_bg"],
+            bordercolor=t["legend_border"],
+            borderwidth=1,
+            font=dict(size=11, color=t["font_color"]),
+        ),
+    )
+
+
+def _subplot_title_style(theme: str) -> dict:
+    return dict(font=dict(size=12, color=THEMES[theme]["subplot_title"]))
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────
@@ -260,7 +311,7 @@ def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return df.sort_values("timestamp")
 
 
-def build_imc_figure(log, symbol: str) -> go.Figure:
+def build_imc_figure(log, symbol: str, theme: str = "dark") -> go.Figure:
     from prosperity.tooling.logs import _compute_activity_features
 
     act = log.activities[log.activities["product"] == symbol].copy().sort_values("timestamp")
@@ -312,8 +363,8 @@ def build_imc_figure(log, symbol: str) -> go.Figure:
     color_map = _product_color_map(symbols)
     _add_pnl_traces(fig, pnl_df, color_map, row=4, total_df=log.graph if not log.graph.empty else None)
 
-    fig.update_layout(height=820, legend=LEGEND_STYLE, **LAYOUT_BASE)
-    fig.update_annotations(**SUBPLOT_TITLE_STYLE)
+    fig.update_layout(height=820, **_layout_base(theme))
+    fig.update_annotations(**_subplot_title_style(theme))
     return fig
 
 
@@ -370,7 +421,7 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
     return fills_df, equity_df, market_df
 
 
-def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None) -> go.Figure:
+def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None, theme: str = "dark") -> go.Figure:
     fills_df, equity_df, market_df = _merge_backtest_days(backtest_data, market_df_raw)
 
     sym_fills = fills_df[fills_df["symbol"] == symbol].copy() if not fills_df.empty else pd.DataFrame()
@@ -418,52 +469,93 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
             name="Total PnL", line=dict(color=C_PNL_TOTAL, width=2)), row=pnl_row, col=1)
 
     height = 680 if has_market else 480
-    fig.update_layout(height=height, legend=LEGEND_STYLE, **LAYOUT_BASE)
-    fig.update_annotations(**SUBPLOT_TITLE_STYLE)
+    fig.update_layout(height=height, **_layout_base(theme))
+    fig.update_annotations(**_subplot_title_style(theme))
     return fig
 
 
 # ── Dash app ───────────────────────────────────────────────────────────────
 
-_PAGE_STYLE = {
-    "maxWidth": "1280px",
-    "margin": "0 auto",
-    "padding": "0 24px 40px",
-    "fontFamily": "Inter, system-ui, sans-serif",
-    "backgroundColor": "#f8f9fa",
-    "minHeight": "100vh",
-}
+_GRAPH_CONFIG = {"displayModeBar": True, "displaylogo": False,
+                 "modeBarButtonsToKeep": ["zoom2d", "pan2d", "resetScale2d", "toImage"]}
 
-_HEADER_STYLE = {
-    "padding": "20px 0 16px",
-    "borderBottom": "2px solid #dee2e6",
-    "marginBottom": "24px",
-}
 
-def _section_header(label, color):
+def _page_style(theme: str) -> dict:
+    t = THEMES[theme]
+    return {
+        "backgroundColor": t["outer_bg"],
+        "minHeight": "100vh",
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "color": t["text"],
+    }
+
+
+def _inner_style(theme: str) -> dict:
+    return {
+        "maxWidth": "1280px",
+        "margin": "0 auto",
+        "padding": "0 24px 48px",
+    }
+
+
+def _header_style(theme: str) -> dict:
+    return {
+        "padding": "24px 0 16px",
+        "borderBottom": f"2px solid {THEMES[theme]['border']}",
+        "marginBottom": "28px",
+        "display": "flex",
+        "alignItems": "center",
+        "justifyContent": "space-between",
+    }
+
+
+def _card_style(theme: str) -> dict:
+    t = THEMES[theme]
+    return {
+        "background": t["card_bg"],
+        "borderRadius": "10px",
+        "border": f"1px solid {t['border']}",
+        "boxShadow": "0 4px 24px rgba(0,0,0,0.35)" if theme == "dark" else "0 1px 4px rgba(0,0,0,0.08)",
+        "padding": "4px 0 0",
+        "marginBottom": "24px",
+    }
+
+
+def _section_header(label: str, theme: str) -> "html.Div":
+    t = THEMES[theme]
     return html.Div([
-        html.Span("▌", style={"color": color, "marginRight": "8px", "fontSize": "20px"}),
-        html.Span(label, style={"fontSize": "16px", "fontWeight": "600", "color": "#212529"}),
-    ], style={"display": "flex", "alignItems": "center", "padding": "8px 0 4px"})
+        html.Span("▌", style={"color": t["section_bar"], "marginRight": "8px", "fontSize": "20px"}),
+        html.Span(label, style={"fontSize": "15px", "fontWeight": "700", "color": t["text"],
+                                "letterSpacing": "0.02em"}),
+    ], style={"display": "flex", "alignItems": "center", "padding": "10px 0 6px"})
 
 
-def _divider():
-    return html.Hr(style={"margin": "32px 0", "borderColor": "#dee2e6", "borderWidth": "1px"})
+def _divider(theme: str) -> "html.Hr":
+    return html.Hr(style={"margin": "32px 0", "borderColor": THEMES[theme]["divider"], "borderWidth": "1px"})
 
 
-_CARD_STYLE = {
-    "background": "#ffffff",
-    "borderRadius": "8px",
-    "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
-    "padding": "4px 0 0",
-    "marginBottom": "24px",
-}
+def _toggle_btn_style(theme: str) -> dict:
+    t = THEMES[theme]
+    return {
+        "background": t["btn_bg"],
+        "color": t["text"],
+        "border": f"1px solid {t['border']}",
+        "borderRadius": "6px",
+        "padding": "6px 14px",
+        "fontSize": "13px",
+        "cursor": "pointer",
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontWeight": "500",
+        "flexShrink": "0",
+    }
 
 
 def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None = None):
     if not HAS_DASH:
         print("dash not installed. Run: pip install dash")
         return
+
+    from dash import State
 
     imc_symbols: list[str] = sorted(log.activities["product"].dropna().unique()) if log else []
     bt_symbols: list[str] = []
@@ -476,7 +568,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         print("No symbols found.")
         return
 
-    # Pre-load raw market data per day (timestamp offsetting happens inside _merge_backtest_days)
+    # Pre-load raw market data
     market_df_raw: pd.DataFrame | None = None
     if data_dir and backtest_data:
         from prosperity.tooling.data import MarketDataLoader
@@ -492,7 +584,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                 pass
         market_df_raw = pd.concat(frames, ignore_index=True) if frames else None
 
-    # Build subtitle
+    # Subtitle lines
     parts = []
     if log:
         parts.append(f"IMC · {log.submission_id}  |  profit = {log.profit}")
@@ -503,55 +595,127 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
 
     app = Dash(__name__, title="Prosperity Dashboard")
 
-    layout_children: list = [
-        html.Div([
-            html.H2("Prosperity Trading Dashboard",
-                style={"margin": "0 0 4px", "fontSize": "22px", "color": "#1971c2", "fontWeight": "700"}),
-            *[html.P(p, style={"margin": "2px 0", "color": "#495057", "fontSize": "13px"}) for p in parts],
-        ], style=_HEADER_STYLE),
-
-        html.Div([
-            html.Label("Product", style={"fontWeight": "600", "fontSize": "13px", "color": "#495057",
-                                          "marginRight": "10px"}),
-            dcc.Dropdown(id="symbol-select",
-                options=[{"label": s, "value": s} for s in all_symbols],
-                value=all_symbols[0],
-                clearable=False,
-                style={"width": "200px", "fontSize": "13px"}),
-        ], style={"display": "flex", "alignItems": "center", "marginBottom": "20px"}),
-    ]
-
-    _graph_config = {"displayModeBar": True, "displaylogo": False,
-                     "modeBarButtonsToKeep": ["zoom2d", "pan2d", "resetScale2d", "toImage"]}
-
+    # ── Static layout shell (theme-independent IDs) ──
+    chart_ids: list[str] = []
     if log:
-        layout_children += [
-            _section_header("IMC Official Results", "#1971c2"),
-            html.Div(dcc.Graph(id="imc-chart", config=_graph_config), style=_CARD_STYLE),
-        ]
-
-    if log and backtest_data:
-        layout_children.append(_divider())
-
+        chart_ids.append("imc-chart")
     if backtest_data:
-        layout_children += [
-            _section_header("Internal Backtest", "#2f9e44"),
-            html.Div(dcc.Graph(id="bt-chart", config=_graph_config), style=_CARD_STYLE),
-        ]
+        chart_ids.append("bt-chart")
 
-    app.layout = html.Div(layout_children, style=_PAGE_STYLE)
+    app.layout = html.Div(id="outer-wrapper", children=[
+        dcc.Store(id="theme-store", data="dark"),
+        # Dynamic CSS injected here on theme change
+        dcc.Markdown(id="theme-css", dangerously_allow_html=True),
+        html.Div(id="inner-wrapper", children=[
+            # Header
+            html.Div(id="header-div", children=[
+                html.Div([
+                    html.H2("Prosperity Trading Dashboard", id="title-h2",
+                        style={"margin": "0 0 4px", "fontSize": "22px", "fontWeight": "700"}),
+                    *[html.P(p, id=f"subtitle-{i}",
+                             style={"margin": "2px 0", "fontSize": "13px"})
+                      for i, p in enumerate(parts)],
+                ]),
+                html.Button("☀  Light", id="theme-btn",
+                    style={"background": "#313244", "color": "#cdd6f4",
+                           "border": "1px solid #45475a", "borderRadius": "6px",
+                           "padding": "6px 14px", "fontSize": "13px", "cursor": "pointer",
+                           "fontFamily": "Inter, system-ui, sans-serif", "fontWeight": "500"}),
+            ]),
+            # Controls
+            html.Div([
+                html.Label("Product", id="product-label",
+                    style={"fontWeight": "600", "fontSize": "13px", "marginRight": "10px"}),
+                dcc.Dropdown(id="symbol-select",
+                    options=[{"label": s, "value": s} for s in all_symbols],
+                    value=all_symbols[0], clearable=False,
+                    style={"width": "200px", "fontSize": "13px"}),
+            ], style={"display": "flex", "alignItems": "center", "marginBottom": "20px"}),
+            # Chart area (rebuilt on theme/symbol change)
+            html.Div(id="charts-area"),
+        ]),
+    ])
 
-    if log:
-        @app.callback(Output("imc-chart", "figure"), Input("symbol-select", "value"))
-        def update_imc(symbol):
-            return build_imc_figure(log, symbol) if symbol else go.Figure()
+    # ── Theme toggle ──
+    app.clientside_callback(
+        """
+        function(n, current) {
+            if (!n) return current || 'dark';
+            return current === 'dark' ? 'light' : 'dark';
+        }
+        """,
+        Output("theme-store", "data"),
+        Input("theme-btn", "n_clicks"),
+        State("theme-store", "data"),
+    )
 
-    if backtest_data:
-        @app.callback(Output("bt-chart", "figure"), Input("symbol-select", "value"))
-        def update_bt(symbol):
-            return build_backtest_figure(backtest_data, symbol, market_df_raw) if symbol else go.Figure()
+    # ── Inject CSS + update chrome on theme change ──
+    @app.callback(
+        Output("outer-wrapper", "style"),
+        Output("inner-wrapper", "style"),
+        Output("header-div", "style"),
+        Output("theme-btn", "children"),
+        Output("theme-btn", "style"),
+        Output("title-h2", "style"),
+        Output("theme-css", "children"),
+        Input("theme-store", "data"),
+    )
+    def update_theme(theme):
+        t = THEMES[theme]
+        btn_label = "☀  Light" if theme == "dark" else "🌙  Dark"
+        # Inject CSS for Dash dropdown internals (not reachable via inline style)
+        css = f"""<style>
+            .Select-control {{ background-color: {t['card_bg']} !important; border-color: {t['border']} !important; }}
+            .Select-menu-outer {{ background-color: {t['card_bg']} !important; border-color: {t['border']} !important; }}
+            .Select-option {{ background-color: {t['card_bg']} !important; color: {t['text']} !important; }}
+            .Select-option.is-focused {{ background-color: {t['btn_bg']} !important; }}
+            .Select-value-label {{ color: {t['text']} !important; }}
+            .Select-placeholder {{ color: {t['text_muted']} !important; }}
+            .VirtualizedSelectOption {{ background-color: {t['card_bg']} !important; color: {t['text']} !important; }}
+        </style>"""
+        return (
+            _page_style(theme),
+            _inner_style(theme),
+            _header_style(theme),
+            btn_label,
+            _toggle_btn_style(theme),
+            {"margin": "0 0 4px", "fontSize": "22px", "fontWeight": "700", "color": t["accent"]},
+            css,
+        )
 
-    print(f"Dashboard → http://127.0.0.1:8050")
+    # ── Rebuild charts area on theme or symbol change ──
+    @app.callback(
+        Output("charts-area", "children"),
+        Input("theme-store", "data"),
+        Input("symbol-select", "value"),
+    )
+    def update_charts(theme, symbol):
+        t = THEMES[theme]
+        children = []
+        if log:
+            children += [
+                _section_header("IMC Official Results", theme),
+                html.Div(
+                    dcc.Graph(id="imc-chart", figure=build_imc_figure(log, symbol, theme),
+                              config=_GRAPH_CONFIG),
+                    style=_card_style(theme),
+                ),
+            ]
+        if log and backtest_data:
+            children.append(_divider(theme))
+        if backtest_data:
+            children += [
+                _section_header("Internal Backtest", theme),
+                html.Div(
+                    dcc.Graph(id="bt-chart",
+                              figure=build_backtest_figure(backtest_data, symbol, market_df_raw, theme),
+                              config=_GRAPH_CONFIG),
+                    style=_card_style(theme),
+                ),
+            ]
+        return children
+
+    print("Dashboard → http://127.0.0.1:8050")
     app.run(debug=False, port=8050)
 
 
