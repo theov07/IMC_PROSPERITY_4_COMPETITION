@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from prosperity.config import ProductConfig, get_round_config, ROUNDS
+from prosperity.config import ProductConfig, get_round_config, MEMBER_OVERRIDES
 from prosperity.tooling.backtest import BacktestEngine
 
 
@@ -50,9 +50,9 @@ def _parse_param_spec(spec: str) -> Tuple[str, str, List[float]]:
     return symbol, param, values
 
 
-def _apply_overrides(round_num: int, overrides: Dict[str, Dict[str, float]]):
+def _apply_overrides(round_num: int, overrides: Dict[str, Dict[str, float]], member: str = "champion"):
     """Temporarily patch ROUNDS config with overrides and return the modified round dict."""
-    base = get_round_config(round_num)
+    base = get_round_config(round_num, member)
     patched: Dict[str, ProductConfig] = {}
     for sym, pc in base.items():
         if sym in overrides:
@@ -69,6 +69,7 @@ def run_grid_search(
     data_dir: str,
     days: List[str],
     param_specs: List[str],
+    member: str = "champion",
 ) -> List[SweepResult]:
     """Run all parameter combinations and return ranked results."""
     parsed = [_parse_param_spec(s) for s in param_specs]
@@ -88,10 +89,13 @@ def run_grid_search(
             overrides.setdefault(sym, {})[param] = val
             combo_desc[f"{sym}.{param}"] = val
 
-        # Patch the global ROUNDS temporarily
-        patched = _apply_overrides(round_num, overrides)
-        original = ROUNDS.get(round_num, {})
-        ROUNDS[round_num] = patched
+        # Patch MEMBER_OVERRIDES so get_round_config sees the combo params.
+        # Patching ROUNDS is insufficient: get_round_config applies member
+        # overrides on top of ROUNDS, which would silently undo any ROUNDS patch.
+        patched = _apply_overrides(round_num, overrides, member)
+        member_rounds = MEMBER_OVERRIDES.setdefault(member, {})
+        original_member = member_rounds.get(round_num)
+        member_rounds[round_num] = patched
 
         try:
             engine = BacktestEngine(data_dir, strategy, round_num=round_num)
@@ -105,7 +109,10 @@ def run_grid_search(
             total = sum(day_pnls)
             results.append(SweepResult(params=combo_desc, total_pnl=total, per_day=day_pnls, per_product=product_pnls))
         finally:
-            ROUNDS[round_num] = original
+            if original_member is None:
+                member_rounds.pop(round_num, None)
+            else:
+                member_rounds[round_num] = original_member
 
         if (i + 1) % 10 == 0 or i + 1 == len(combos):
             print(f"  [{i + 1}/{len(combos)}] last_pnl={results[-1].total_pnl:.2f}")
@@ -116,7 +123,8 @@ def run_grid_search(
 
 def run_cli(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Grid search parameter optimizer")
-    parser.add_argument("--strategy", required=True)
+    valid_members = sorted(MEMBER_OVERRIDES.keys())
+    parser.add_argument("--strategy", required=True, choices=valid_members)
     parser.add_argument("--round", type=int, default=0)
     parser.add_argument("--days", nargs="*")
     parser.add_argument("--data-dir", default="data")
@@ -130,7 +138,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     days = args.days or loader.available_days(args.round)
 
     t0 = time.time()
-    results = run_grid_search(args.strategy, args.round, args.data_dir, days, args.param)
+    results = run_grid_search(args.strategy, args.round, args.data_dir, days, args.param, member=args.strategy)
     elapsed = time.time() - t0
 
     print(f"\n{'='*60}")
