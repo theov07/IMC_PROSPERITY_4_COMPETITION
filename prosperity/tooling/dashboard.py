@@ -370,15 +370,16 @@ def build_imc_figure(log, symbol: str, theme: str = "dark") -> go.Figure:
 
 # ── Backtest figure ────────────────────────────────────────────────────────
 
-def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Merge all days with monotonically increasing timestamps.
 
     Each day's timestamps start at 0 and repeat across days, so we offset each
     day by (previous_day_max_ts + one_tick) to make them sequential. The same
-    offset is applied to fills, equity curve, and market price data so all charts
-    share a consistent x-axis.
+    offset is applied to fills, quotes, equity curve, and market price data so
+    all charts share a consistent x-axis.
     """
     all_fills: list[dict] = []
+    all_quotes: list[dict] = []
     equity_rows: list[dict] = []
     market_frames: list[pd.DataFrame] = []
     pnl_offset = 0.0
@@ -387,6 +388,7 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
     for day in backtest_data["days"]:
         curve = day.get("equity_curve", [])
         fills = day.get("fills", [])
+        quotes = day.get("quotes", [])
 
         # Determine tick size and max ts from the equity curve
         day_max_ts = curve[-1][0] if curve else 0
@@ -402,6 +404,10 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
         for f in fills:
             all_fills.append({**f, "timestamp": f["timestamp"] + ts_offset})
 
+        # Quotes: offset timestamps
+        for q in quotes:
+            all_quotes.append({**q, "timestamp": q["timestamp"] + ts_offset})
+
         # Market data: offset timestamps for this day
         if market_df_raw is not None and not market_df_raw.empty:
             day_label = str(day["day"])
@@ -416,17 +422,27 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
         ts_offset += day_max_ts + tick
 
     fills_df = pd.DataFrame(all_fills) if all_fills else pd.DataFrame()
+    quotes_df = pd.DataFrame(all_quotes) if all_quotes else pd.DataFrame()
     equity_df = pd.DataFrame(equity_rows) if equity_rows else pd.DataFrame()
     market_df = pd.concat(market_frames, ignore_index=True) if market_frames else pd.DataFrame()
-    return fills_df, equity_df, market_df
+    return fills_df, quotes_df, equity_df, market_df
 
 
-def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None, theme: str = "dark") -> go.Figure:
-    fills_df, equity_df, market_df = _merge_backtest_days(backtest_data, market_df_raw)
+C_QUOTE_BID = "#74c7ec"   # sky — lighter than market bid to distinguish
+C_QUOTE_ASK = "#eba0ac"   # flamingo — lighter than market ask
+
+
+def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None,
+                          theme: str = "dark", show_quotes: bool = False) -> go.Figure:
+    fills_df, quotes_df, equity_df, market_df = _merge_backtest_days(backtest_data, market_df_raw)
 
     sym_fills = fills_df[fills_df["symbol"] == symbol].copy() if not fills_df.empty else pd.DataFrame()
     if not sym_fills.empty:
         sym_fills["side"] = sym_fills["side"].str.upper()
+
+    sym_quotes = pd.DataFrame()
+    if show_quotes and not quotes_df.empty:
+        sym_quotes = quotes_df[quotes_df["symbol"] == symbol].sort_values("timestamp").copy()
 
     has_market = not market_df.empty
     n_rows = 3 if has_market else 2
@@ -449,6 +465,24 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 name="Best Bid", line=dict(color=C_BID, width=1)), row=price_row, col=1)
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=sym_mkt["ask_price_1"],
                 name="Best Ask", line=dict(color=C_ASK, width=1)), row=price_row, col=1)
+
+        # MM quotes overlay
+        if not sym_quotes.empty:
+            bid_q = sym_quotes.dropna(subset=["bid"])
+            ask_q = sym_quotes.dropna(subset=["ask"])
+            if not bid_q.empty:
+                fig.add_trace(go.Scatter(
+                    x=bid_q["timestamp"], y=bid_q["bid"],
+                    name="MM Bid Quote", mode="lines",
+                    line=dict(color=C_QUOTE_BID, width=1, dash="dot"),
+                ), row=price_row, col=1)
+            if not ask_q.empty:
+                fig.add_trace(go.Scatter(
+                    x=ask_q["timestamp"], y=ask_q["ask"],
+                    name="MM Ask Quote", mode="lines",
+                    line=dict(color=C_QUOTE_ASK, width=1, dash="dot"),
+                ), row=price_row, col=1)
+
         _trade_markers(fig, sym_fills, row=price_row)
 
     # Position
@@ -630,6 +664,15 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                     options=[{"label": s, "value": s} for s in all_symbols],
                     value=all_symbols[0], clearable=False,
                     style={"width": "200px", "fontSize": "13px"}),
+                *([
+                    dcc.Checklist(
+                        id="quotes-toggle",
+                        options=[{"label": " Show MM quotes", "value": "show"}],
+                        value=[],
+                        style={"marginLeft": "24px", "fontSize": "13px"},
+                        inputStyle={"marginRight": "6px"},
+                    )
+                ] if backtest_data else [html.Div(id="quotes-toggle")]),
             ], style={"display": "flex", "alignItems": "center", "marginBottom": "20px"}),
             # Chart area (rebuilt on theme/symbol change)
             html.Div(id="charts-area"),
@@ -683,14 +726,15 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
             css,
         )
 
-    # ── Rebuild charts area on theme or symbol change ──
+    # ── Rebuild charts area on theme, symbol, or quotes-toggle change ──
     @app.callback(
         Output("charts-area", "children"),
         Input("theme-store", "data"),
         Input("symbol-select", "value"),
+        Input("quotes-toggle", "value"),
     )
-    def update_charts(theme, symbol):
-        t = THEMES[theme]
+    def update_charts(theme, symbol, quotes_value):
+        show_quotes = bool(quotes_value)
         children = []
         if log:
             children += [
@@ -708,7 +752,8 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                 _section_header("Internal Backtest", theme),
                 html.Div(
                     dcc.Graph(id="bt-chart",
-                              figure=build_backtest_figure(backtest_data, symbol, market_df_raw, theme),
+                              figure=build_backtest_figure(backtest_data, symbol, market_df_raw, theme,
+                                                           show_quotes=show_quotes),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
                 ),
