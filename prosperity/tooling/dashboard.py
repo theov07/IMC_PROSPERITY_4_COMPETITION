@@ -374,7 +374,7 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0) -
     color_map = _product_color_map(symbols)
     _add_pnl_traces(fig, pnl_df, color_map, row=4, total_df=log.graph if not log.graph.empty else None)
 
-    fig.update_layout(height=820, **_layout_base(theme))
+    fig.update_layout(height=820, uirevision=f"imc-{symbol}", **_layout_base(theme))
     fig.update_annotations(**_subplot_title_style(theme))
     return fig
 
@@ -554,7 +554,7 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
             name="Total PnL", line=dict(color=C_PNL_TOTAL, width=2)), row=pnl_row, col=1)
 
     height = 800 #if has_market else 700
-    fig.update_layout(height=height, **_layout_base(theme))
+    fig.update_layout(height=height, uirevision=f"bt-{symbol}", **_layout_base(theme))
     fig.update_annotations(**_subplot_title_style(theme))
     return fig
 
