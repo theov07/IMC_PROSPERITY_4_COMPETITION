@@ -36,8 +36,8 @@ except ImportError:
 
 
 # ── Neon trace palette (catppuccin-mocha — works in dark and light) ────────
-C_BID      = "#89b4fa"   # sapphire blue
-C_ASK      = "#f38ba8"   # coral red
+C_BID      = "#5b8fd4"   # darker blue for best bid
+C_ASK      = "#d9556e"   # darker red for best ask
 C_FAIR     = "#a6e3a1"   # green
 C_BUY      = "#a6e3a1"   # green triangles
 C_SELL     = "#f38ba8"   # coral triangles
@@ -323,6 +323,8 @@ def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
 
 def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, line_shape: str = "linear") -> go.Figure:
+    _mode = "lines+markers" if line_shape == "hv" else "lines"
+    _marker = dict(size=3) if line_shape == "hv" else {}
     from prosperity.tooling.logs import _compute_activity_features, _parse_lambda_logs
 
     act = log.activities[log.activities["product"] == symbol].copy().sort_values("timestamp")
@@ -344,21 +346,27 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
 
     # Price (with optional EWMA smoothing)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["bid_price_1"], smooth_n),
-        name="Best Bid", line=dict(color=C_BID, width=1, shape=line_shape)), row=1, col=1)
+        name="Best Bid", mode=_mode, marker=dict(**_marker, color=C_BID),
+        line=dict(color=C_BID, width=1, shape=line_shape)), row=1, col=1)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["ask_price_1"], smooth_n),
-        name="Best Ask", line=dict(color=C_ASK, width=1, shape=line_shape)), row=1, col=1)
+        name="Best Ask", mode=_mode, marker=dict(**_marker, color=C_ASK),
+        line=dict(color=C_ASK, width=1, shape=line_shape)), row=1, col=1)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["fair"], smooth_n),
-        name="Fair (EWM)", line=dict(color=C_FAIR, width=1.3, dash="dot", shape=line_shape)), row=1, col=1)
+        name="Fair (EWM)", mode=_mode, marker=dict(**_marker, color=C_FAIR),
+        line=dict(color=C_FAIR, width=1.3, shape=line_shape)), row=1, col=1)
     _trade_markers(fig, sym_trades, row=1)
 
     # Strategy lambda logs: reservation price + MM quotes
     if not lambda_sym.empty:
         fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["reservation"], smooth_n),
-            name="Reservation", line=dict(color=C_FEATURE_PALETTE[0], width=1.2, dash="dashdot", shape=line_shape)), row=1, col=1)
+            name="Reservation", mode=_mode, marker=dict(**_marker, color=C_FEATURE_PALETTE[0]),
+            line=dict(color=C_FEATURE_PALETTE[0], width=1.2, shape=line_shape)), row=1, col=1)
         fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["bid_price"], smooth_n),
-            name="MM Bid (log)", line=dict(color=C_QUOTE_BID, width=1, dash="dash", shape=line_shape)), row=1, col=1)
+            name="MM Bid (log)", mode=_mode, marker=dict(**_marker, color=C_QUOTE_BID),
+            line=dict(color=C_QUOTE_BID, width=1, shape=line_shape)), row=1, col=1)
         fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["ask_price"], smooth_n),
-            name="MM Ask (log)", line=dict(color=C_QUOTE_ASK, width=1, dash="dash", shape=line_shape)), row=1, col=1)
+            name="MM Ask (log)", mode=_mode, marker=dict(**_marker, color=C_QUOTE_ASK),
+            line=dict(color=C_QUOTE_ASK, width=1, shape=line_shape)), row=1, col=1)
 
     # Spread
     fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",
@@ -457,8 +465,8 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
     return fills_df, quotes_df, features_df, equity_df, market_df
 
 
-C_QUOTE_BID = "#74c7ec"   # sky — lighter than market bid to distinguish
-C_QUOTE_ASK = "#eba0ac"   # flamingo — lighter than market ask
+C_QUOTE_BID = "#b9d3fd"   # very light blue for MM bid quotes
+C_QUOTE_ASK = "#fbbdca"   # very light red/pink for MM ask quotes
 
 
 C_FEATURE_PALETTE = ["#fab387", "#cba6f7", "#94e2d5", "#f9e2af", "#89dceb"]
@@ -469,6 +477,8 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                           smooth_n: int = 0, line_shape: str = "linear",
                           _precomputed: tuple | None = None,
                           _per_prod_pnl: pd.DataFrame | None = None) -> go.Figure:
+    _mode = "lines+markers" if line_shape == "hv" else "lines"
+    _marker = dict(size=3) if line_shape == "hv" else {}
     if _precomputed is not None:
         fills_df, quotes_df, features_df, equity_df, market_df = _precomputed
     else:
@@ -506,13 +516,16 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
         if not sym_mkt.empty:
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"],
                 y=_smooth(sym_mkt["bid_price_1"], smooth_n),
-                name="Best Bid", line=dict(color=C_BID, width=1, shape=line_shape)), row=price_row, col=1)
+                name="Best Bid", mode=_mode, marker=dict(**_marker, color=C_BID),
+                line=dict(color=C_BID, width=1, shape=line_shape)), row=price_row, col=1)
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"],
                 y=_smooth(sym_mkt["ask_price_1"], smooth_n),
-                name="Best Ask", line=dict(color=C_ASK, width=1, shape=line_shape)), row=price_row, col=1)
+                name="Best Ask", mode=_mode, marker=dict(**_marker, color=C_ASK),
+                line=dict(color=C_ASK, width=1, shape=line_shape)), row=price_row, col=1)
             mid = (sym_mkt["bid_price_1"] + sym_mkt["ask_price_1"]) / 2
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=_smooth(mid, smooth_n),
-                name="Mid", line=dict(color=C_FAIR, width=1, dash="dot", shape=line_shape)), row=price_row, col=1)
+                name="Mid", mode=_mode, marker=dict(**_marker, color=C_FAIR),
+                line=dict(color=C_FAIR, width=1, shape=line_shape)), row=price_row, col=1)
 
         # MM quotes overlay
         if not sym_quotes.empty:
@@ -521,14 +534,14 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
             if not bid_q.empty:
                 fig.add_trace(go.Scatter(
                     x=bid_q["timestamp"], y=_smooth(bid_q["bid"], smooth_n),
-                    name="MM Bid Quote", mode="lines",
-                    line=dict(color=C_QUOTE_BID, width=1, dash="dot", shape=line_shape),
+                    name="MM Bid Quote", mode=_mode, marker=dict(**_marker, color=C_QUOTE_BID),
+                    line=dict(color=C_QUOTE_BID, width=1, shape=line_shape),
                 ), row=price_row, col=1)
             if not ask_q.empty:
                 fig.add_trace(go.Scatter(
                     x=ask_q["timestamp"], y=_smooth(ask_q["ask"], smooth_n),
-                    name="MM Ask Quote", mode="lines",
-                    line=dict(color=C_QUOTE_ASK, width=1, dash="dot", shape=line_shape),
+                    name="MM Ask Quote", mode=_mode, marker=dict(**_marker, color=C_QUOTE_ASK),
+                    line=dict(color=C_QUOTE_ASK, width=1, shape=line_shape),
                 ), row=price_row, col=1)
 
         # Strategy feature price lines (e.g. reservation price)
@@ -541,8 +554,8 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 color = C_FEATURE_PALETTE[i % len(C_FEATURE_PALETTE)]
                 fig.add_trace(go.Scatter(
                     x=col_data["timestamp"], y=_smooth(col_data[feat], smooth_n),
-                    name=feat, mode="lines",
-                    line=dict(color=color, width=1.3, dash="dashdot", shape=line_shape),
+                    name=feat, mode=_mode, marker=dict(**_marker, color=color),
+                    line=dict(color=color, width=1.3, shape=line_shape),
                 ), row=price_row, col=1)
 
         _trade_markers(fig, sym_fills, row=price_row)
@@ -708,8 +721,8 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
 
     app.layout = html.Div(id="outer-wrapper", children=[
         dcc.Store(id="theme-store", data="dark"),
-        # Dynamic CSS injected here on theme change
-        dcc.Markdown(id="theme-css", dangerously_allow_html=True),
+        # Invisible div — clientside callback writes dynamic CSS into document.head
+        html.Div(id="theme-css", style={"display": "none"}),
         html.Div(id="inner-wrapper", children=[
             # Header
             html.Div(id="header-div", children=[
@@ -727,7 +740,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                            "fontFamily": "Inter, system-ui, sans-serif", "fontWeight": "500"}),
             ]),
             # Controls
-            html.Div([
+            html.Div(id="controls-bar", children=[
                 html.Label("Product", id="product-label",
                     style={"fontWeight": "600", "fontSize": "13px", "marginRight": "10px"}),
                 dcc.Dropdown(id="symbol-select",
@@ -758,7 +771,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                     inputStyle={"marginRight": "6px"},
                 ),
                 html.Div([
-                    html.Span("N=", style={"fontSize": "12px", "marginRight": "4px"}),
+                    html.Span("N=", id="smooth-n-label", style={"fontSize": "12px", "marginRight": "4px"}),
                     dcc.Slider(
                         id="smooth-n",
                         min=0, max=100, step=1, value=20,
@@ -787,7 +800,54 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         State("theme-store", "data"),
     )
 
-    # ── Inject CSS + update chrome on theme change ──
+    # ── Inject CSS directly into document.head via clientside callback ──
+    # Themes as JSON so the clientside function can build CSS without a server round-trip
+    _THEME_CSS_DATA = {
+        name: {
+            "card_bg":  t["card_bg"],
+            "border":   t["border"],
+            "btn_bg":   t["btn_bg"],
+            "text":     t["text"],
+            "text_muted": t["text_muted"],
+            "accent":   t["accent"],
+        }
+        for name, t in THEMES.items()
+    }
+    import json as _json
+    app.clientside_callback(
+        f"""
+        function(theme) {{
+            var themes = {_json.dumps(_THEME_CSS_DATA)};
+            var t = themes[theme] || themes['dark'];
+            var css = [
+                '.Select-control {{ background-color: ' + t.card_bg + ' !important; border-color: ' + t.border + ' !important; }}',
+                '.Select-menu-outer {{ background-color: ' + t.card_bg + ' !important; border-color: ' + t.border + ' !important; }}',
+                '.Select-option {{ background-color: ' + t.card_bg + ' !important; color: ' + t.text + ' !important; }}',
+                '.Select-option.is-focused {{ background-color: ' + t.btn_bg + ' !important; }}',
+                '.Select-value-label {{ color: #212529 !important; }}',
+                '.Select-placeholder {{ color: #6c757d !important; }}',
+                '.VirtualizedSelectOption {{ background-color: ' + t.card_bg + ' !important; color: ' + t.text + ' !important; }}',
+                '.dash-checklist label {{ color: ' + t.text + ' !important; }}',
+                '.rc-slider-mark-text {{ color: ' + t.text + ' !important; }}',
+                '.rc-slider-rail {{ background-color: ' + t.border + ' !important; }}',
+                '.rc-slider-track {{ background-color: ' + t.accent + ' !important; }}',
+                '.rc-slider-handle {{ border-color: ' + t.accent + ' !important; background-color: ' + t.card_bg + ' !important; }}'
+            ].join('\\n');
+            var el = document.getElementById('prosperity-theme-style');
+            if (!el) {{
+                el = document.createElement('style');
+                el.id = 'prosperity-theme-style';
+                document.head.appendChild(el);
+            }}
+            el.textContent = css;
+            return '';
+        }}
+        """,
+        Output("theme-css", "children"),
+        Input("theme-store", "data"),
+    )
+
+    # ── Update chrome on theme change ──
     @app.callback(
         Output("outer-wrapper", "style"),
         Output("inner-wrapper", "style"),
@@ -795,22 +855,12 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         Output("theme-btn", "children"),
         Output("theme-btn", "style"),
         Output("title-h2", "style"),
-        Output("theme-css", "children"),
+        Output("controls-bar", "style"),
         Input("theme-store", "data"),
     )
     def update_theme(theme):
         t = THEMES[theme]
         btn_label = "☀  Light" if theme == "dark" else "🌙  Dark"
-        # Inject CSS for Dash dropdown internals (not reachable via inline style)
-        css = f"""<style>
-            .Select-control {{ background-color: {t['card_bg']} !important; border-color: {t['border']} !important; }}
-            .Select-menu-outer {{ background-color: {t['card_bg']} !important; border-color: {t['border']} !important; }}
-            .Select-option {{ background-color: {t['card_bg']} !important; color: {t['text']} !important; }}
-            .Select-option.is-focused {{ background-color: {t['btn_bg']} !important; }}
-            .Select-value-label {{ color: {t['text']} !important; }}
-            .Select-placeholder {{ color: {t['text_muted']} !important; }}
-            .VirtualizedSelectOption {{ background-color: {t['card_bg']} !important; color: {t['text']} !important; }}
-        </style>"""
         return (
             _page_style(theme),
             _inner_style(theme),
@@ -818,7 +868,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
             btn_label,
             _toggle_btn_style(theme),
             {"margin": "0 0 4px", "fontSize": "22px", "fontWeight": "700", "color": t["accent"]},
-            css,
+            {"display": "flex", "alignItems": "center", "marginBottom": "20px", "color": t["text"]},
         )
 
     # ── Rebuild charts area on theme, symbol, quotes-toggle, or smooth change ──
