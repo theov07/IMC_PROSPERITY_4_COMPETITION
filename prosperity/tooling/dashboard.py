@@ -322,7 +322,7 @@ def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return df.sort_values("timestamp")
 
 
-def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0) -> go.Figure:
+def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, line_shape: str = "linear") -> go.Figure:
     from prosperity.tooling.logs import _compute_activity_features, _parse_lambda_logs
 
     act = log.activities[log.activities["product"] == symbol].copy().sort_values("timestamp")
@@ -344,21 +344,21 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0) -
 
     # Price (with optional EWMA smoothing)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["bid_price_1"], smooth_n),
-        name="Best Bid", line=dict(color=C_BID, width=1)), row=1, col=1)
+        name="Best Bid", line=dict(color=C_BID, width=1, shape=line_shape)), row=1, col=1)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["ask_price_1"], smooth_n),
-        name="Best Ask", line=dict(color=C_ASK, width=1)), row=1, col=1)
+        name="Best Ask", line=dict(color=C_ASK, width=1, shape=line_shape)), row=1, col=1)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["fair"], smooth_n),
-        name="Fair (EWM)", line=dict(color=C_FAIR, width=1.3, dash="dot")), row=1, col=1)
+        name="Fair (EWM)", line=dict(color=C_FAIR, width=1.3, dash="dot", shape=line_shape)), row=1, col=1)
     _trade_markers(fig, sym_trades, row=1)
 
     # Strategy lambda logs: reservation price + MM quotes
     if not lambda_sym.empty:
         fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["reservation"], smooth_n),
-            name="Reservation", line=dict(color=C_FEATURE_PALETTE[0], width=1.2, dash="dashdot")), row=1, col=1)
+            name="Reservation", line=dict(color=C_FEATURE_PALETTE[0], width=1.2, dash="dashdot", shape=line_shape)), row=1, col=1)
         fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["bid_price"], smooth_n),
-            name="MM Bid (log)", line=dict(color=C_QUOTE_BID, width=1, dash="dash")), row=1, col=1)
+            name="MM Bid (log)", line=dict(color=C_QUOTE_BID, width=1, dash="dash", shape=line_shape)), row=1, col=1)
         fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["ask_price"], smooth_n),
-            name="MM Ask (log)", line=dict(color=C_QUOTE_ASK, width=1, dash="dash")), row=1, col=1)
+            name="MM Ask (log)", line=dict(color=C_QUOTE_ASK, width=1, dash="dash", shape=line_shape)), row=1, col=1)
 
     # Spread
     fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",
@@ -466,7 +466,7 @@ C_FEATURE_PALETTE = ["#fab387", "#cba6f7", "#94e2d5", "#f9e2af", "#89dceb"]
 
 def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None,
                           theme: str = "dark", show_quotes: bool = False,
-                          smooth_n: int = 0,
+                          smooth_n: int = 0, line_shape: str = "linear",
                           _precomputed: tuple | None = None,
                           _per_prod_pnl: pd.DataFrame | None = None) -> go.Figure:
     if _precomputed is not None:
@@ -506,13 +506,13 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
         if not sym_mkt.empty:
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"],
                 y=_smooth(sym_mkt["bid_price_1"], smooth_n),
-                name="Best Bid", line=dict(color=C_BID, width=1)), row=price_row, col=1)
+                name="Best Bid", line=dict(color=C_BID, width=1, shape=line_shape)), row=price_row, col=1)
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"],
                 y=_smooth(sym_mkt["ask_price_1"], smooth_n),
-                name="Best Ask", line=dict(color=C_ASK, width=1)), row=price_row, col=1)
+                name="Best Ask", line=dict(color=C_ASK, width=1, shape=line_shape)), row=price_row, col=1)
             mid = (sym_mkt["bid_price_1"] + sym_mkt["ask_price_1"]) / 2
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=_smooth(mid, smooth_n),
-                name="Mid", line=dict(color=C_FAIR, width=1, dash="dot")), row=price_row, col=1)
+                name="Mid", line=dict(color=C_FAIR, width=1, dash="dot", shape=line_shape)), row=price_row, col=1)
 
         # MM quotes overlay
         if not sym_quotes.empty:
@@ -522,13 +522,13 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 fig.add_trace(go.Scatter(
                     x=bid_q["timestamp"], y=_smooth(bid_q["bid"], smooth_n),
                     name="MM Bid Quote", mode="lines",
-                    line=dict(color=C_QUOTE_BID, width=1, dash="dot"),
+                    line=dict(color=C_QUOTE_BID, width=1, dash="dot", shape=line_shape),
                 ), row=price_row, col=1)
             if not ask_q.empty:
                 fig.add_trace(go.Scatter(
                     x=ask_q["timestamp"], y=_smooth(ask_q["ask"], smooth_n),
                     name="MM Ask Quote", mode="lines",
-                    line=dict(color=C_QUOTE_ASK, width=1, dash="dot"),
+                    line=dict(color=C_QUOTE_ASK, width=1, dash="dot", shape=line_shape),
                 ), row=price_row, col=1)
 
         # Strategy feature price lines (e.g. reservation price)
@@ -542,7 +542,7 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 fig.add_trace(go.Scatter(
                     x=col_data["timestamp"], y=_smooth(col_data[feat], smooth_n),
                     name=feat, mode="lines",
-                    line=dict(color=color, width=1.3, dash="dashdot"),
+                    line=dict(color=color, width=1.3, dash="dashdot", shape=line_shape),
                 ), row=price_row, col=1)
 
         _trade_markers(fig, sym_fills, row=price_row)
@@ -744,6 +744,13 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                     )
                 ] if backtest_data else [html.Div(id="quotes-toggle")]),
                 dcc.Checklist(
+                    id="step-toggle",
+                    options=[{"label": " Step chart (hv)", "value": "hv"}],
+                    value=[],
+                    style={"marginLeft": "24px", "fontSize": "13px"},
+                    inputStyle={"marginRight": "6px"},
+                ),
+                dcc.Checklist(
                     id="smooth-toggle",
                     options=[{"label": " Smooth prices", "value": "on"}],
                     value=[],
@@ -822,17 +829,19 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         Input("quotes-toggle", "value"),
         Input("smooth-toggle", "value"),
         Input("smooth-n", "value"),
+        Input("step-toggle", "value"),
     )
-    def update_charts(theme, symbol, quotes_value, smooth_value, smooth_n_raw):
+    def update_charts(theme, symbol, quotes_value, smooth_value, smooth_n_raw, step_value):
         show_quotes = bool(quotes_value)
         smooth_n = int(smooth_n_raw or 0) if smooth_value else 0
+        line_shape = "hv" if step_value else "linear"
         children = []
         if log:
             children += [
                 _section_header("IMC Official Results", theme),
                 html.Div(
                     dcc.Graph(id="imc-chart",
-                              figure=build_imc_figure(log, symbol, theme, smooth_n=smooth_n),
+                              figure=build_imc_figure(log, symbol, theme, smooth_n=smooth_n, line_shape=line_shape),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
                 ),
@@ -848,6 +857,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                                   backtest_data, symbol, market_df_raw, theme,
                                   show_quotes=show_quotes,
                                   smooth_n=smooth_n,
+                                  line_shape=line_shape,
                                   _precomputed=bt_precomputed,
                                   _per_prod_pnl=bt_per_prod_pnl,
                               ),
