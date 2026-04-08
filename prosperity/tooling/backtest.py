@@ -50,6 +50,13 @@ class Quote:
 
 
 @dataclass
+class FeatureTick:
+    timestamp: int
+    symbol: str
+    features: Dict[str, float]   # e.g. {"Reservation": 10001.5}
+
+
+@dataclass
 class DaySummary:
     day: str
     pnl: float
@@ -57,6 +64,7 @@ class DaySummary:
     product_summaries: Dict[str, ProductSummary]
     equity_curve: List[Tuple[int, float]]
     quotes: List[Quote] = field(default_factory=list)
+    feature_ticks: List[FeatureTick] = field(default_factory=list)
 
 
 class BacktestEngine:
@@ -188,6 +196,7 @@ class BacktestEngine:
         recent_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
         all_fills: List[Fill] = []
         all_quotes: List[Quote] = []
+        all_feature_ticks: List[FeatureTick] = []
         equity_curve: List[Tuple[int, float]] = []
         trader_data = ""
 
@@ -208,7 +217,14 @@ class BacktestEngine:
                 observations=observations,
             )
 
-            trader_result, _, trader_data = trader.run(state)
+            run_out = trader.run(state)
+            trader_result, _, trader_data = run_out[0], run_out[1], run_out[2]
+            # 4th return value is optional: {product: {feature_name: value}}
+            strategy_features: Dict[str, Dict[str, float]] = run_out[3] if len(run_out) > 3 else {}
+            for sym, feats in strategy_features.items():
+                if feats:
+                    all_feature_ticks.append(FeatureTick(timestamp=timestamp, symbol=sym, features=feats))
+
             next_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
 
             # Record best bid/ask quotes submitted by the strategy
@@ -272,7 +288,7 @@ class BacktestEngine:
                 turnover=turnover_by_product[product], max_abs_position=max_abs_position[product],
             )
 
-        return DaySummary(day=day, pnl=total_pnl, fills=all_fills, product_summaries=product_summaries, equity_curve=equity_curve, quotes=all_quotes)
+        return DaySummary(day=day, pnl=total_pnl, fills=all_fills, product_summaries=product_summaries, equity_curve=equity_curve, quotes=all_quotes, feature_ticks=all_feature_ticks)
 
 
 def _result_to_jsonable(summary: DaySummary) -> Dict[str, object]:
@@ -283,6 +299,8 @@ def _result_to_jsonable(summary: DaySummary) -> Dict[str, object]:
         "product_summaries": {product: asdict(ps) for product, ps in summary.product_summaries.items()},
         "equity_curve": summary.equity_curve,
         "quotes": [asdict(q) for q in summary.quotes],
+        "feature_ticks": [{"timestamp": ft.timestamp, "symbol": ft.symbol, **ft.features}
+                          for ft in summary.feature_ticks],
     }
 
 

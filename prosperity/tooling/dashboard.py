@@ -105,7 +105,7 @@ def _layout_base(theme: str) -> dict:
     return dict(
         template=t["plotly_tpl"],
         hovermode="x unified",
-        margin=dict(l=60, r=40, t=60, b=80),
+        margin=dict(l=60, r=40, t=40, b=60),
         plot_bgcolor=t["plot_bg"],
         paper_bgcolor=t["paper_bg"],
         font=dict(family="Inter, sans-serif", size=12, color=t["font_color"]),
@@ -370,16 +370,17 @@ def build_imc_figure(log, symbol: str, theme: str = "dark") -> go.Figure:
 
 # ── Backtest figure ────────────────────────────────────────────────────────
 
-def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Merge all days with monotonically increasing timestamps.
 
     Each day's timestamps start at 0 and repeat across days, so we offset each
     day by (previous_day_max_ts + one_tick) to make them sequential. The same
-    offset is applied to fills, quotes, equity curve, and market price data so
-    all charts share a consistent x-axis.
+    offset is applied to fills, quotes, feature_ticks, equity curve, and market
+    price data so all charts share a consistent x-axis.
     """
     all_fills: list[dict] = []
     all_quotes: list[dict] = []
+    all_features: list[dict] = []
     equity_rows: list[dict] = []
     market_frames: list[pd.DataFrame] = []
     pnl_offset = 0.0
@@ -389,6 +390,7 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
         curve = day.get("equity_curve", [])
         fills = day.get("fills", [])
         quotes = day.get("quotes", [])
+        feature_ticks = day.get("feature_ticks", [])
 
         # Determine tick size and max ts from the equity curve
         day_max_ts = curve[-1][0] if curve else 0
@@ -408,6 +410,10 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
         for q in quotes:
             all_quotes.append({**q, "timestamp": q["timestamp"] + ts_offset})
 
+        # Feature ticks: offset timestamps (each row has timestamp + symbol + arbitrary feature cols)
+        for ft in feature_ticks:
+            all_features.append({**ft, "timestamp": ft["timestamp"] + ts_offset})
+
         # Market data: offset timestamps for this day
         if market_df_raw is not None and not market_df_raw.empty:
             day_label = str(day["day"])
@@ -423,18 +429,27 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
 
     fills_df = pd.DataFrame(all_fills) if all_fills else pd.DataFrame()
     quotes_df = pd.DataFrame(all_quotes) if all_quotes else pd.DataFrame()
+    features_df = pd.DataFrame(all_features) if all_features else pd.DataFrame()
     equity_df = pd.DataFrame(equity_rows) if equity_rows else pd.DataFrame()
     market_df = pd.concat(market_frames, ignore_index=True) if market_frames else pd.DataFrame()
-    return fills_df, quotes_df, equity_df, market_df
+    return fills_df, quotes_df, features_df, equity_df, market_df
 
 
 C_QUOTE_BID = "#74c7ec"   # sky — lighter than market bid to distinguish
 C_QUOTE_ASK = "#eba0ac"   # flamingo — lighter than market ask
 
 
+C_FEATURE_PALETTE = ["#fab387", "#cba6f7", "#94e2d5", "#f9e2af", "#89dceb"]
+
+
 def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None,
-                          theme: str = "dark", show_quotes: bool = False) -> go.Figure:
-    fills_df, quotes_df, equity_df, market_df = _merge_backtest_days(backtest_data, market_df_raw)
+                          theme: str = "dark", show_quotes: bool = False,
+                          _precomputed: tuple | None = None,
+                          _per_prod_pnl: pd.DataFrame | None = None) -> go.Figure:
+    if _precomputed is not None:
+        fills_df, quotes_df, features_df, equity_df, market_df = _precomputed
+    else:
+        fills_df, quotes_df, features_df, equity_df, market_df = _merge_backtest_days(backtest_data, market_df_raw)
 
     sym_fills = fills_df[fills_df["symbol"] == symbol].copy() if not fills_df.empty else pd.DataFrame()
     if not sym_fills.empty:
@@ -444,6 +459,11 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
     if show_quotes and not quotes_df.empty:
         sym_quotes = quotes_df[quotes_df["symbol"] == symbol].sort_values("timestamp").copy()
 
+    # Strategy feature prices for this symbol (e.g. reservation price)
+    sym_features: pd.DataFrame = pd.DataFrame()
+    if not features_df.empty and "symbol" in features_df.columns:
+        sym_features = features_df[features_df["symbol"] == symbol].sort_values("timestamp").copy()
+
     has_market = not market_df.empty
     n_rows = 3 if has_market else 2
     heights = [0.45, 0.20, 0.35] if has_market else [0.35, 0.65]
@@ -451,7 +471,7 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
               else ["Position", "Equity PnL"])
 
     fig = make_subplots(rows=n_rows, cols=1, shared_xaxes=True,
-        row_heights=heights, subplot_titles=titles, vertical_spacing=0.08)
+        row_heights=heights, subplot_titles=titles, vertical_spacing=0.05)
 
     price_row = 1
     pos_row   = 2 if has_market else 1
@@ -465,6 +485,9 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 name="Best Bid", line=dict(color=C_BID, width=1)), row=price_row, col=1)
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=sym_mkt["ask_price_1"],
                 name="Best Ask", line=dict(color=C_ASK, width=1)), row=price_row, col=1)
+            mid = (sym_mkt["bid_price_1"] + sym_mkt["ask_price_1"]) / 2
+            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=mid,
+                name="Mid", line=dict(color=C_FAIR, width=1, dash="dot")), row=price_row, col=1)
 
         # MM quotes overlay
         if not sym_quotes.empty:
@@ -483,6 +506,20 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                     line=dict(color=C_QUOTE_ASK, width=1, dash="dot"),
                 ), row=price_row, col=1)
 
+        # Strategy feature price lines (e.g. reservation price)
+        if not sym_features.empty:
+            feature_cols = [c for c in sym_features.columns if c not in ("timestamp", "symbol")]
+            for i, feat in enumerate(feature_cols):
+                col_data = sym_features.dropna(subset=[feat])
+                if col_data.empty:
+                    continue
+                color = C_FEATURE_PALETTE[i % len(C_FEATURE_PALETTE)]
+                fig.add_trace(go.Scatter(
+                    x=col_data["timestamp"], y=col_data[feat],
+                    name=feat, mode="lines",
+                    line=dict(color=color, width=1.3, dash="dashdot"),
+                ), row=price_row, col=1)
+
         _trade_markers(fig, sym_fills, row=price_row)
 
     # Position
@@ -493,7 +530,7 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
             fillcolor="rgba(112,72,232,0.12)"), row=pos_row, col=1)
 
     # Equity PnL — per-product stacked areas + total line
-    per_prod_pnl = _bt_per_product_pnl(backtest_data, market_df_raw)
+    per_prod_pnl = _per_prod_pnl if _per_prod_pnl is not None else _bt_per_product_pnl(backtest_data, market_df_raw)
     if not per_prod_pnl.empty:
         bt_color_map = _product_color_map(sorted(per_prod_pnl["symbol"].unique()))
         _add_pnl_traces(fig, per_prod_pnl, bt_color_map, row=pnl_row,
@@ -502,7 +539,7 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
         fig.add_trace(go.Scatter(x=equity_df["timestamp"], y=equity_df["value"],
             name="Total PnL", line=dict(color=C_PNL_TOTAL, width=2)), row=pnl_row, col=1)
 
-    height = 680 if has_market else 480
+    height = 800 #if has_market else 700
     fig.update_layout(height=height, **_layout_base(theme))
     fig.update_annotations(**_subplot_title_style(theme))
     return fig
@@ -526,9 +563,9 @@ def _page_style(theme: str) -> dict:
 
 def _inner_style(theme: str) -> dict:
     return {
-        "maxWidth": "1280px",
+        #"maxWidth": "1280px",
         "margin": "0 auto",
-        "padding": "0 24px 48px",
+        "padding": "0 40px 60px",
     }
 
 
@@ -626,6 +663,14 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         total = sum(d["pnl"] for d in backtest_data["days"])
         days_str = ", ".join(str(d["day"]) for d in backtest_data["days"])
         parts.append(f"Backtest · {backtest_data.get('strategy', '')}  |  PnL = {total:+.2f}  (days {days_str})")
+
+    # ── Precompute expensive data merges once at startup ──
+    bt_precomputed: tuple | None = None
+    bt_per_prod_pnl: pd.DataFrame = pd.DataFrame()
+    if backtest_data:
+        bt_precomputed = _merge_backtest_days(backtest_data, market_df_raw)
+        bt_per_prod_pnl = _bt_per_product_pnl(backtest_data, market_df_raw)
+        print("Precomputed backtest data.")
 
     app = Dash(__name__, title="Prosperity Dashboard")
 
@@ -752,8 +797,12 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                 _section_header("Internal Backtest", theme),
                 html.Div(
                     dcc.Graph(id="bt-chart",
-                              figure=build_backtest_figure(backtest_data, symbol, market_df_raw, theme,
-                                                           show_quotes=show_quotes),
+                              figure=build_backtest_figure(
+                                  backtest_data, symbol, market_df_raw, theme,
+                                  show_quotes=show_quotes,
+                                  _precomputed=bt_precomputed,
+                                  _per_prod_pnl=bt_per_prod_pnl,
+                              ),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
                 ),
