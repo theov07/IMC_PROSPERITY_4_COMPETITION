@@ -127,6 +127,8 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 total_ticks=10000,
                 maker_size=8,
                 take_edge=1.5,
+                mid_smooth_window=50, # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=25,
             ),
             "TOMATOES": _override(
                 ROUND_0["TOMATOES"],
@@ -141,6 +143,8 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 total_ticks=10000,
                 maker_size=8,
                 take_edge=0.5,
+                mid_smooth_window=50, # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=25,
             ),
         },
     },
