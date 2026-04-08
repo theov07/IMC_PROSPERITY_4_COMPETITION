@@ -323,6 +323,26 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["sigma"] = sigma
         memory["half_spread"] = half_spread
 
+        # ── Per-tick log accumulation ──
+        # log_flush_ts: interval in timestamp units between flushes (e.g. 10000 = flush every 10000 timestamps)
+        # last_tick_ts: last timestamp of the simulation, triggers end-of-sim flush
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        last_tick_ts = int(self.params.get("total_ticks", 199900) - 100)
+
+        log = memory.setdefault("_log", [])
+        log.append([state.timestamp, round(reservation, 2), bid_price, ask_price])
+
+        # Flush at end of simulation or every flush_every ticks as backup
+        end_of_sim = state.timestamp >= last_tick_ts
+        checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
+        if end_of_sim or checkpoint:
+            print(json.dumps({
+                "product": self.product,
+                "chunk_end": state.timestamp,
+                "log": log,  # [[timestamp, reservation, bid, ask], ...]
+            }))
+            memory["_log"] = []
+
         return orders, 0
 
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
@@ -342,6 +362,7 @@ PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
               'inventory_aversion': 1.2,
               'join_best': True,
               'kappa': 1.0,
+              'log_flush_ts': 1000,
               'maker_size': 8,
               'max_inventory_bias_ticks': 4,
               'mid_smooth_half_life': 25,
@@ -355,7 +376,7 @@ PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
               'sigma_window': 200,
               'strategy': 'avellaneda_stoikov',
               'take_edge': 1.5,
-              'total_ticks': 10000},
+              'total_ticks': 200000},
  'TOMATOES': {'anchor_price': None,
               'anchor_weight': 0.0,
               'ema_alpha': 0.18,
@@ -365,6 +386,7 @@ PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
               'inventory_aversion': 1.5,
               'join_best': True,
               'kappa': 1.0,
+              'log_flush_ts': 1000,
               'maker_size': 8,
               'max_inventory_bias_ticks': 5,
               'mid_smooth_half_life': 25,
@@ -378,7 +400,7 @@ PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
               'sigma_window': 200,
               'strategy': 'avellaneda_stoikov',
               'take_edge': 0.5,
-              'total_ticks': 10000}}
+              'total_ticks': 200000}}
 
 STRATEGY_CLASSES = {"avellaneda_stoikov": AvellanedaStoikovStrategy}
 

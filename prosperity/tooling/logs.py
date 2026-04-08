@@ -185,6 +185,58 @@ def load_official_log(path: str | Path) -> OfficialLog:
     )
 
 
+def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
+    """Extract strategy log entries printed via json.dumps from lambdaLog fields.
+
+    Each flush produces one JSON object per product per chunk:
+      {"product": "EMERALDS", "chunk_end": 49900, "log": [[ts, reservation, bid, ask], ...]}
+
+    Multiple products printing at the same timestamp are concatenated by IMC
+    into a single lambdaLog string (with or without newlines), so we use
+    raw_decode to walk through back-to-back JSON objects robustly.
+    """
+    decoder = json.JSONDecoder()
+    rows = []
+    for _, entry in runtime_logs.iterrows():
+        text = str(entry.get("lambdaLog", "") or "").strip()
+        if not text:
+            continue
+        pos = 0
+        while pos < len(text):
+            # Skip whitespace / newlines between objects
+            while pos < len(text) and text[pos] in " \t\r\n":
+                pos += 1
+            if pos >= len(text):
+                break
+            try:
+                obj, consumed = decoder.raw_decode(text, pos)
+                pos += consumed
+            except json.JSONDecodeError:
+                # Not valid JSON at this position — skip to next '{'
+                next_brace = text.find("{", pos + 1)
+                if next_brace == -1:
+                    break
+                pos = next_brace
+                continue
+            if not isinstance(obj, dict):
+                continue
+            product = obj.get("product")
+            if not product:
+                continue
+            for tick in obj.get("log", []):
+                if len(tick) >= 4:
+                    rows.append({
+                        "timestamp": int(tick[0]),
+                        "product": product,
+                        "reservation": float(tick[1]),
+                        "bid_price": int(tick[2]),
+                        "ask_price": int(tick[3]),
+                    })
+    if not rows:
+        return pd.DataFrame(columns=["timestamp", "product", "reservation", "bid_price", "ask_price"])
+    return pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
+
+
 def _submission_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
     if trades.empty:
         return trades
