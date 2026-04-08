@@ -147,6 +147,18 @@ class BaseStrategy(ABC):
         ...
 
     # ------------------------------------------------------------------
+    # Optional: expose named price features for the dashboard
+    # ------------------------------------------------------------------
+    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        """Return a dict of named price-level features at the current tick.
+
+        Override in concrete strategies to surface prices like reservation price,
+        fair value, etc.  Keys become trace names in the dashboard.
+        Default: no features.
+        """
+        return {}
+
+    # ------------------------------------------------------------------
     # Helpers available to all strategies
     # ------------------------------------------------------------------
     def position_limit(self) -> int:
@@ -163,9 +175,28 @@ class BaseStrategy(ABC):
 
 class AvellanedaStoikovStrategy(BaseStrategy):
 
+    # ── mid price smoothing ──────────────────────────────────────────
+    def _smooth_mid(self, mid: float, memory: Dict[str, Any]) -> float:
+        window = int(self.params.get("mid_smooth_window", 0))
+        if window <= 0:
+            return mid
+        half_life = float(self.params.get("mid_smooth_half_life", window / 2.0))
+        buf = memory.setdefault("mid_smooth_buf", [])
+        buf.append(mid)
+        if len(buf) > window:
+            buf[:] = buf[-window:]
+        if len(buf) < 2:
+            return mid
+        alpha = 1.0 - 2.0 ** (-1.0 / half_life) if half_life > 0 else 1.0
+        smoothed = buf[0]
+        for p in buf[1:]:
+            smoothed = alpha * p + (1.0 - alpha) * smoothed
+        memory["mid_smoothed"] = smoothed
+        return smoothed
+
     # ── volatility estimation ────────────────────────────────────────
     def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
-        window = self.params.get("sigma_window", 50)
+        window = int(self.params.get("sigma_window", 50))
         prices = memory.setdefault("mid_history", [])
         prices.append(mid)
         if len(prices) > window + 1:
@@ -179,31 +210,38 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         n = len(returns)
         mean_r = sum(returns) / n
         var = sum((r - mean_r) ** 2 for r in returns) / max(n - 1, 1)
-        sigma = math.sqrt(var) if var > 0 else self.params.get("sigma_default", 1.0)
+        sigma_raw = math.sqrt(var) if var > 0 else self.params.get("sigma_default", 1.0)
+
+        # Apply exponential smoothing with parametrizable half-life
+        half_life = float(self.params.get("sigma_half_life", 60))
+        alpha = 2.0 / (half_life + 1.0)
+        sigma_prev = memory.get("sigma_smoothed", sigma_raw)
+        sigma_smoothed = alpha * sigma_raw + (1.0 - alpha) * sigma_prev
+        memory["sigma_smoothed"] = sigma_smoothed
 
         # Floor to prevent degenerate spreads
-        return max(sigma, self.params.get("sigma_floor", 0.5))
+        return max(sigma_smoothed, self.params.get("sigma_floor", 0.5))
 
     # ── core A-S computation ─────────────────────────────────────────
     def _compute_as_quotes(
         self, mid: float, position: int, sigma: float, memory: Dict[str, Any],
     ) -> Tuple[float, float, float]:
-        gamma = self.params.get("gamma", 0.1)
-        kappa = self.params.get("kappa", 1.5)
-        total_ticks = self.params.get("total_ticks", 10000)
+        gamma = float(self.params.get("gamma", 0.1))
+        kappa = float(self.params.get("kappa", 1.5))
+        total_ticks = int(self.params.get("total_ticks", 10000))
         tick_num = memory.get("tick_count", 0)
         memory["tick_count"] = tick_num + 1
 
         tau = max((total_ticks - tick_num) / total_ticks, 0.001)
 
         # Reservation price
-        reservation = mid - position * gamma * sigma * sigma * tau
+        reservation = mid - position * gamma * sigma * sigma * tau 
 
         # Optimal half-spread
         half_spread = (gamma * sigma * sigma * tau) / 2.0 + math.log(1.0 + gamma / kappa) / gamma
 
         # Apply min spread from params
-        min_half_spread = self.params.get("min_half_spread", 1.0)
+        min_half_spread = float(self.params.get("min_half_spread", 1.0))
         half_spread = max(half_spread, min_half_spread)
 
         return reservation, half_spread, tau
@@ -221,11 +259,12 @@ class AvellanedaStoikovStrategy(BaseStrategy):
             return [], 0
 
         mid = book.mid_price
-        sigma = self._update_volatility(mid, memory)
-        reservation, half_spread, tau = self._compute_as_quotes(mid, position, sigma, memory)
+        mid_smooth = self._smooth_mid(mid, memory)
+        sigma = self._update_volatility(mid_smooth, memory)
+        reservation, half_spread, tau = self._compute_as_quotes(mid_smooth, position, sigma, memory)
 
-        bid_price = math.floor(reservation - half_spread)
-        ask_price = math.ceil(reservation + half_spread)
+        bid_price = int(math.floor(reservation - half_spread))
+        ask_price = int(math.ceil(reservation + half_spread))
 
         # Ensure we don't cross the book
         if book.best_ask is not None:
@@ -238,11 +277,11 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
 
-        maker_size = self.params.get("maker_size", 10)
+        maker_size = int(self.params.get("maker_size", 10))
         orders: List[Order] = []
 
         # ── Aggressive taking when edge is clear ──
-        take_edge = self.params.get("take_edge", 0.5)
+        take_edge = float(self.params.get("take_edge", 0.5))
         for ask_p in sorted(order_depth.sell_orders):
             available = -order_depth.sell_orders[ask_p]
             if ask_p > reservation - take_edge or buy_cap <= 0:
@@ -286,6 +325,12 @@ class AvellanedaStoikovStrategy(BaseStrategy):
 
         return orders, 0
 
+    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        out: Dict[str, float] = {}
+        if (r := memory.get("reservation")) is not None:
+            out["Reservation"] = r
+        return out
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
@@ -296,37 +341,43 @@ PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
               'improve_ticks': 1,
               'inventory_aversion': 1.2,
               'join_best': True,
-              'kappa': 1.5,
-              'maker_size': 6,
+              'kappa': 1.0,
+              'maker_size': 8,
               'max_inventory_bias_ticks': 4,
+              'mid_smooth_half_life': 25,
+              'mid_smooth_window': 50,
               'min_half_spread': 1.0,
               'position_limit': 80,
               'quote_half_spread': 2,
               'sigma_default': 1.0,
               'sigma_floor': 0.5,
-              'sigma_window': 50,
+              'sigma_half_life': 60,
+              'sigma_window': 200,
               'strategy': 'avellaneda_stoikov',
-              'take_edge': 1.0,
+              'take_edge': 1.5,
               'total_ticks': 10000},
  'TOMATOES': {'anchor_price': None,
               'anchor_weight': 0.0,
               'ema_alpha': 0.18,
               'fair_mode': 'microprice_ema',
-              'gamma': 0.1,
+              'gamma': 0.2,
               'improve_ticks': 1,
               'inventory_aversion': 1.5,
               'join_best': True,
-              'kappa': 1.5,
-              'maker_size': 6,
+              'kappa': 1.0,
+              'maker_size': 8,
               'max_inventory_bias_ticks': 5,
+              'mid_smooth_half_life': 25,
+              'mid_smooth_window': 50,
               'min_half_spread': 1.0,
               'position_limit': 80,
               'quote_half_spread': 2,
               'sigma_default': 1.0,
               'sigma_floor': 0.5,
-              'sigma_window': 50,
+              'sigma_half_life': 60,
+              'sigma_window': 200,
               'strategy': 'avellaneda_stoikov',
-              'take_edge': 1.0,
+              'take_edge': 0.5,
               'total_ticks': 10000}}
 
 STRATEGY_CLASSES = {"avellaneda_stoikov": AvellanedaStoikovStrategy}

@@ -246,6 +246,7 @@ def main() -> int:
                 saved = load_state(state.traderData)
                 mems = saved.setdefault("products", {{}})
                 result: Dict[str, List[Order]] = {{}}
+                features: Dict[str, Dict[str, float]] = {{}}
                 convs = 0
                 for product, strat in self.strategies.items():
                     if product not in state.order_depths:
@@ -254,8 +255,11 @@ def main() -> int:
                     orders, c = strat.on_tick(state, mem)
                     result[product] = orders
                     convs += c
+                    fp = strat.feature_prices(mem)
+                    if fp:
+                        features[product] = fp
                 saved["last_timestamp"] = state.timestamp
-                return result, convs, dump_state(saved)
+                return result, convs, dump_state(saved), features
         ''')
     wrapper_path.write_text(wrapper, encoding="utf-8")
     print(f"Wrote {wrapper_path}")
