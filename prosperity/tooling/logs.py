@@ -224,7 +224,17 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
             if not product:
                 continue
             for tick in obj.get("log", []):
-                if len(tick) >= 4:
+                if len(tick) == 3:
+                    # Format: [timestamp, bid_price, ask_price] (no reservation)
+                    rows.append({
+                        "timestamp": int(tick[0]),
+                        "product": product,
+                        "reservation": None,
+                        "bid_price": int(tick[1]),
+                        "ask_price": int(tick[2]),
+                    })
+                elif len(tick) >= 4:
+                    # Format: [timestamp, reservation, bid_price, ask_price]
                     rows.append({
                         "timestamp": int(tick[0]),
                         "product": product,

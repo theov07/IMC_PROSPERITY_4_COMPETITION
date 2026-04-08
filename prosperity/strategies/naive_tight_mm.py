@@ -15,6 +15,7 @@ This is intentionally simple and is useful as:
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Tuple
 
 from datamodel import Order, OrderDepth, TradingState
@@ -63,5 +64,22 @@ class NaiveTightMarketMakerStrategy(BaseStrategy):
         memory["last_bid_price"] = bid_price
         memory["last_ask_price"] = ask_price
         memory["last_spread"] = book.spread
+
+        # ── Per-tick log accumulation ──
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        last_tick_ts = int(self.params.get("total_ticks", 199900) - 100)
+
+        log = memory.setdefault("_log", [])
+        log.append([state.timestamp, bid_price, ask_price])
+
+        end_of_sim = state.timestamp >= last_tick_ts
+        checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
+        if end_of_sim or checkpoint:
+            print(json.dumps({
+                "product": self.product,
+                "chunk_end": state.timestamp,
+                "log": log,  # [[timestamp, bid, ask], ...]
+            }))
+            memory["_log"] = []
 
         return orders, 0
