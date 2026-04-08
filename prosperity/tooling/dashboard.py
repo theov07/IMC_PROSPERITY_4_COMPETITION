@@ -125,6 +125,17 @@ def _subplot_title_style(theme: str) -> dict:
     return dict(font=dict(size=12, color=THEMES[theme]["subplot_title"]))
 
 
+# ── EWMA smoothing helper ──────────────────────────────────────────────────
+
+def _smooth(series: "pd.Series", n: int) -> "pd.Series":
+    """Apply EWMA with half-life = n/3 ticks.  n=0 → raw data."""
+    if n <= 0:
+        return series
+    half_life = n / 3.0
+    alpha = 1.0 - 2.0 ** (-1.0 / half_life)
+    return series.ewm(alpha=alpha, adjust=False).mean()
+
+
 # ── Shared helpers ─────────────────────────────────────────────────────────
 
 def _trade_markers(fig, df: pd.DataFrame, row: int, prefix: str = ""):
@@ -311,7 +322,7 @@ def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return df.sort_values("timestamp")
 
 
-def build_imc_figure(log, symbol: str, theme: str = "dark") -> go.Figure:
+def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0) -> go.Figure:
     from prosperity.tooling.logs import _compute_activity_features
 
     act = log.activities[log.activities["product"] == symbol].copy().sort_values("timestamp")
@@ -329,13 +340,13 @@ def build_imc_figure(log, symbol: str, theme: str = "dark") -> go.Figure:
         vertical_spacing=0.07,
     )
 
-    # Price
-    fig.add_trace(go.Scatter(x=act["timestamp"], y=act["bid_price_1"], name="Best Bid",
-        line=dict(color=C_BID, width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=act["timestamp"], y=act["ask_price_1"], name="Best Ask",
-        line=dict(color=C_ASK, width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=act["timestamp"], y=act["fair"], name="Fair (EWM)",
-        line=dict(color=C_FAIR, width=1.3, dash="dot")), row=1, col=1)
+    # Price (with optional EWMA smoothing)
+    fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["bid_price_1"], smooth_n),
+        name="Best Bid", line=dict(color=C_BID, width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["ask_price_1"], smooth_n),
+        name="Best Ask", line=dict(color=C_ASK, width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["fair"], smooth_n),
+        name="Fair (EWM)", line=dict(color=C_FAIR, width=1.3, dash="dot")), row=1, col=1)
     _trade_markers(fig, sym_trades, row=1)
 
     # Spread
@@ -444,6 +455,7 @@ C_FEATURE_PALETTE = ["#fab387", "#cba6f7", "#94e2d5", "#f9e2af", "#89dceb"]
 
 def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None,
                           theme: str = "dark", show_quotes: bool = False,
+                          smooth_n: int = 0,
                           _precomputed: tuple | None = None,
                           _per_prod_pnl: pd.DataFrame | None = None) -> go.Figure:
     if _precomputed is not None:
@@ -481,12 +493,14 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
     if has_market:
         sym_mkt = market_df[market_df["product"] == symbol].sort_values("timestamp")
         if not sym_mkt.empty:
-            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=sym_mkt["bid_price_1"],
+            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"],
+                y=_smooth(sym_mkt["bid_price_1"], smooth_n),
                 name="Best Bid", line=dict(color=C_BID, width=1)), row=price_row, col=1)
-            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=sym_mkt["ask_price_1"],
+            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"],
+                y=_smooth(sym_mkt["ask_price_1"], smooth_n),
                 name="Best Ask", line=dict(color=C_ASK, width=1)), row=price_row, col=1)
             mid = (sym_mkt["bid_price_1"] + sym_mkt["ask_price_1"]) / 2
-            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=mid,
+            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=_smooth(mid, smooth_n),
                 name="Mid", line=dict(color=C_FAIR, width=1, dash="dot")), row=price_row, col=1)
 
         # MM quotes overlay
@@ -495,13 +509,13 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
             ask_q = sym_quotes.dropna(subset=["ask"])
             if not bid_q.empty:
                 fig.add_trace(go.Scatter(
-                    x=bid_q["timestamp"], y=bid_q["bid"],
+                    x=bid_q["timestamp"], y=_smooth(bid_q["bid"], smooth_n),
                     name="MM Bid Quote", mode="lines",
                     line=dict(color=C_QUOTE_BID, width=1, dash="dot"),
                 ), row=price_row, col=1)
             if not ask_q.empty:
                 fig.add_trace(go.Scatter(
-                    x=ask_q["timestamp"], y=ask_q["ask"],
+                    x=ask_q["timestamp"], y=_smooth(ask_q["ask"], smooth_n),
                     name="MM Ask Quote", mode="lines",
                     line=dict(color=C_QUOTE_ASK, width=1, dash="dot"),
                 ), row=price_row, col=1)
@@ -515,7 +529,7 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                     continue
                 color = C_FEATURE_PALETTE[i % len(C_FEATURE_PALETTE)]
                 fig.add_trace(go.Scatter(
-                    x=col_data["timestamp"], y=col_data[feat],
+                    x=col_data["timestamp"], y=_smooth(col_data[feat], smooth_n),
                     name=feat, mode="lines",
                     line=dict(color=color, width=1.3, dash="dashdot"),
                 ), row=price_row, col=1)
@@ -718,6 +732,24 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                         inputStyle={"marginRight": "6px"},
                     )
                 ] if backtest_data else [html.Div(id="quotes-toggle")]),
+                dcc.Checklist(
+                    id="smooth-toggle",
+                    options=[{"label": " Smooth prices", "value": "on"}],
+                    value=[],
+                    style={"marginLeft": "24px", "fontSize": "13px"},
+                    inputStyle={"marginRight": "6px"},
+                ),
+                html.Div([
+                    html.Span("N=", style={"fontSize": "12px", "marginRight": "4px"}),
+                    dcc.Slider(
+                        id="smooth-n",
+                        min=0, max=100, step=1, value=20,
+                        marks={0: "0", 25: "25", 50: "50", 75: "75", 100: "100"},
+                        tooltip={"placement": "top", "always_visible": False},
+                        updatemode="drag",
+                        included=True,
+                    ),
+                ], style={"display": "flex", "alignItems": "center", "marginLeft": "12px", "width": "220px"}),
             ], style={"display": "flex", "alignItems": "center", "marginBottom": "20px"}),
             # Chart area (rebuilt on theme/symbol change)
             html.Div(id="charts-area"),
@@ -771,21 +803,25 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
             css,
         )
 
-    # ── Rebuild charts area on theme, symbol, or quotes-toggle change ──
+    # ── Rebuild charts area on theme, symbol, quotes-toggle, or smooth change ──
     @app.callback(
         Output("charts-area", "children"),
         Input("theme-store", "data"),
         Input("symbol-select", "value"),
         Input("quotes-toggle", "value"),
+        Input("smooth-toggle", "value"),
+        Input("smooth-n", "value"),
     )
-    def update_charts(theme, symbol, quotes_value):
+    def update_charts(theme, symbol, quotes_value, smooth_value, smooth_n_raw):
         show_quotes = bool(quotes_value)
+        smooth_n = int(smooth_n_raw or 0) if smooth_value else 0
         children = []
         if log:
             children += [
                 _section_header("IMC Official Results", theme),
                 html.Div(
-                    dcc.Graph(id="imc-chart", figure=build_imc_figure(log, symbol, theme),
+                    dcc.Graph(id="imc-chart",
+                              figure=build_imc_figure(log, symbol, theme, smooth_n=smooth_n),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
                 ),
@@ -800,6 +836,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                               figure=build_backtest_figure(
                                   backtest_data, symbol, market_df_raw, theme,
                                   show_quotes=show_quotes,
+                                  smooth_n=smooth_n,
                                   _precomputed=bt_precomputed,
                                   _per_prod_pnl=bt_per_prod_pnl,
                               ),
