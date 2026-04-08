@@ -30,6 +30,25 @@ from prosperity.strategies.base import BaseStrategy
 
 class AvellanedaStoikovStrategy(BaseStrategy):
 
+    # ── mid price smoothing ──────────────────────────────────────────
+    def _smooth_mid(self, mid: float, memory: Dict[str, Any]) -> float:
+        window = int(self.params.get("mid_smooth_window", 0))
+        if window <= 0:
+            return mid
+        half_life = float(self.params.get("mid_smooth_half_life", window / 2.0))
+        buf = memory.setdefault("mid_smooth_buf", [])
+        buf.append(mid)
+        if len(buf) > window:
+            buf[:] = buf[-window:]
+        if len(buf) < 2:
+            return mid
+        alpha = 1.0 - 2.0 ** (-1.0 / half_life) if half_life > 0 else 1.0
+        smoothed = buf[0]
+        for p in buf[1:]:
+            smoothed = alpha * p + (1.0 - alpha) * smoothed
+        memory["mid_smoothed"] = smoothed
+        return smoothed
+
     # ── volatility estimation ────────────────────────────────────────
     def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
         window = int(self.params.get("sigma_window", 50))
@@ -71,7 +90,7 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         tau = max((total_ticks - tick_num) / total_ticks, 0.001)
 
         # Reservation price
-        reservation = mid - position * gamma * sigma * sigma * tau
+        reservation = mid - position * gamma * sigma * sigma * tau 
 
         # Optimal half-spread
         half_spread = (gamma * sigma * sigma * tau) / 2.0 + math.log(1.0 + gamma / kappa) / gamma
@@ -95,8 +114,9 @@ class AvellanedaStoikovStrategy(BaseStrategy):
             return [], 0
 
         mid = book.mid_price
-        sigma = self._update_volatility(mid, memory)
-        reservation, half_spread, tau = self._compute_as_quotes(mid, position, sigma, memory)
+        mid_smooth = self._smooth_mid(mid, memory)
+        sigma = self._update_volatility(mid_smooth, memory)
+        reservation, half_spread, tau = self._compute_as_quotes(mid_smooth, position, sigma, memory)
 
         bid_price = int(math.floor(reservation - half_spread))
         ask_price = int(math.ceil(reservation + half_spread))
