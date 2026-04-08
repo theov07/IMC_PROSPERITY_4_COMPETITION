@@ -323,7 +323,7 @@ def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
 
 def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0) -> go.Figure:
-    from prosperity.tooling.logs import _compute_activity_features
+    from prosperity.tooling.logs import _compute_activity_features, _parse_lambda_logs
 
     act = log.activities[log.activities["product"] == symbol].copy().sort_values("timestamp")
     if act.empty:
@@ -332,6 +332,8 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0) -
     act = _compute_activity_features(act)
     sym_trades = _imc_sym_trades(log.trades, symbol)
     pos_df = _position_series(sym_trades)
+    lambda_df = _parse_lambda_logs(log.runtime_logs)
+    lambda_sym = lambda_df[lambda_df["product"] == symbol] if not lambda_df.empty else pd.DataFrame()
 
     fig = make_subplots(
         rows=4, cols=1, shared_xaxes=True,
@@ -348,6 +350,15 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0) -
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["fair"], smooth_n),
         name="Fair (EWM)", line=dict(color=C_FAIR, width=1.3, dash="dot")), row=1, col=1)
     _trade_markers(fig, sym_trades, row=1)
+
+    # Strategy lambda logs: reservation price + MM quotes
+    if not lambda_sym.empty:
+        fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["reservation"], smooth_n),
+            name="Reservation", line=dict(color=C_FEATURE_PALETTE[0], width=1.2, dash="dashdot")), row=1, col=1)
+        fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["bid_price"], smooth_n),
+            name="MM Bid (log)", line=dict(color=C_QUOTE_BID, width=1, dash="dash")), row=1, col=1)
+        fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["ask_price"], smooth_n),
+            name="MM Ask (log)", line=dict(color=C_QUOTE_ASK, width=1, dash="dash")), row=1, col=1)
 
     # Spread
     fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",

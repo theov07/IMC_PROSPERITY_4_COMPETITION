@@ -19,6 +19,7 @@ References:
 
 from __future__ import annotations
 
+import json
 import math
 from typing import Any, Dict, List, Tuple
 
@@ -177,6 +178,26 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["reservation"] = reservation
         memory["sigma"] = sigma
         memory["half_spread"] = half_spread
+
+        # ── Per-tick log accumulation ──
+        # log_flush_ts: interval in timestamp units between flushes (e.g. 10000 = flush every 10000 timestamps)
+        # last_tick_ts: last timestamp of the simulation, triggers end-of-sim flush
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        last_tick_ts = int(self.params.get("total_ticks", 199900) - 100)
+
+        log = memory.setdefault("_log", [])
+        log.append([state.timestamp, round(reservation, 2), bid_price, ask_price])
+
+        # Flush at end of simulation or every flush_every ticks as backup
+        end_of_sim = state.timestamp >= last_tick_ts
+        checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
+        if end_of_sim or checkpoint:
+            print(json.dumps({
+                "product": self.product,
+                "chunk_end": state.timestamp,
+                "log": log,  # [[timestamp, reservation, bid, ask], ...]
+            }))
+            memory["_log"] = []
 
         return orders, 0
 

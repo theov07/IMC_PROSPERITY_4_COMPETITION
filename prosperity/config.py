@@ -124,11 +124,12 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 sigma_floor=0.5,
                 sigma_half_life=60,
                 min_half_spread=1.0,
-                total_ticks=10000,
+                total_ticks=200000, # last tick value
                 maker_size=8,
                 take_edge=1.5,
                 mid_smooth_window=50, # mid_smooth_window=0 => disabled
                 mid_smooth_half_life=25,
+                log_flush_ts=1000,    # The checkpoint fires when timestamp % 10000 == 9900, so you get prints at 9900, 19900, 29900, ..., 199900 — 20 chunks of 100 entries each.
             ),
             "TOMATOES": _override(
                 ROUND_0["TOMATOES"],
@@ -140,11 +141,12 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 sigma_floor=0.5,
                 sigma_half_life=60,
                 min_half_spread=1.0,
-                total_ticks=10000,
+                total_ticks=200000,
                 maker_size=8,
                 take_edge=0.5,
                 mid_smooth_window=50, # mid_smooth_window=0 => disabled
                 mid_smooth_half_life=25,
+                log_flush_ts=1000,    # flush every 10000 timestamps (timestamps increment by 100)
             ),
         },
     },
