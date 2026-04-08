@@ -46,10 +46,17 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         n = len(returns)
         mean_r = sum(returns) / n
         var = sum((r - mean_r) ** 2 for r in returns) / max(n - 1, 1)
-        sigma = math.sqrt(var) if var > 0 else self.params.get("sigma_default", 1.0)
+        sigma_raw = math.sqrt(var) if var > 0 else self.params.get("sigma_default", 1.0)
+
+        # Apply exponential smoothing with parametrizable half-life
+        half_life = float(self.params.get("sigma_half_life", 60))
+        alpha = 2.0 / (half_life + 1.0)
+        sigma_prev = memory.get("sigma_smoothed", sigma_raw)
+        sigma_smoothed = alpha * sigma_raw + (1.0 - alpha) * sigma_prev
+        memory["sigma_smoothed"] = sigma_smoothed
 
         # Floor to prevent degenerate spreads
-        return max(sigma, self.params.get("sigma_floor", 0.5))
+        return max(sigma_smoothed, self.params.get("sigma_floor", 0.5))
 
     # ── core A-S computation ─────────────────────────────────────────
     def _compute_as_quotes(
@@ -152,3 +159,9 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["half_spread"] = half_spread
 
         return orders, 0
+
+    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        out: Dict[str, float] = {}
+        if (r := memory.get("reservation")) is not None:
+            out["Reservation"] = r
+        return out

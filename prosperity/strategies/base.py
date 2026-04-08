@@ -61,6 +61,18 @@ class BaseStrategy(ABC):
         ...
 
     # ------------------------------------------------------------------
+    # Optional: expose named price features for the dashboard
+    # ------------------------------------------------------------------
+    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        """Return a dict of named price-level features at the current tick.
+
+        Override in concrete strategies to surface prices like reservation price,
+        fair value, etc.  Keys become trace names in the dashboard.
+        Default: no features.
+        """
+        return {}
+
+    # ------------------------------------------------------------------
     # Helpers available to all strategies
     # ------------------------------------------------------------------
     def position_limit(self) -> int:
