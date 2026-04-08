@@ -1,13 +1,13 @@
-"""Submission entrypoint for Leo's first naive strategy."""
+"""Backtester entrypoint — leo_naive."""
 
-from datamodel import Order, TradingState
-from typing import Dict, List
-
+from prosperity.strategies.trader import CURRENT_ROUND
 from prosperity.config import get_round_config
 from prosperity.persistence import dump_state, load_state
 from prosperity.strategies import build_strategy
 from prosperity.strategies.base import BaseStrategy
-from prosperity.strategies.trader import CURRENT_ROUND
+
+from datamodel import Order, TradingState
+from typing import Dict, List
 
 
 class Trader:
@@ -25,8 +25,8 @@ class Trader:
         saved = load_state(state.traderData)
         mems = saved.setdefault("products", {})
         result: Dict[str, List[Order]] = {}
+        features: Dict[str, Dict[str, float]] = {}
         convs = 0
-
         for product, strat in self.strategies.items():
             if product not in state.order_depths:
                 continue
@@ -34,6 +34,8 @@ class Trader:
             orders, c = strat.on_tick(state, mem)
             result[product] = orders
             convs += c
-
+            fp = strat.feature_prices(mem)
+            if fp:
+                features[product] = fp
         saved["last_timestamp"] = state.timestamp
-        return result, convs, dump_state(saved)
+        return result, convs, dump_state(saved), features
