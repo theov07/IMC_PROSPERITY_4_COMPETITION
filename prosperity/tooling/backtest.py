@@ -5,9 +5,8 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
-from math import ceil
-from collections import defaultdict
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -18,6 +17,29 @@ from prosperity.tooling.data import MarketDataLoader
 
 
 STRATEGY_ALIASES = {name: f"submissions.{name}" for name in MEMBER_OVERRIDES}
+
+
+class TradeMatchingMode(str, Enum):
+    """Controls how resting (passive) limit orders are matched against market trades.
+
+    all   — fill if the market trade price is <= buy order price (or >= sell order price).
+            Optimistic: assumes you have queue priority at your exact price level.
+    worse — fill only if the market trade price is strictly worse for the aggressor
+            (< buy order price, > sell order price). More conservative: only fills you
+            if someone traded through your price, not just at it.
+    none  — no passive fills via market trades; only aggressive (book-crossing) fills fire.
+    """
+    all   = "all"
+    worse = "worse"
+    none  = "none"
+
+
+@dataclass
+class _MarketTradeSlot:
+    """Tracks remaining fill capacity for one market trade at a given price."""
+    price: int
+    buy_avail: int   # units available to fill our passive sell orders
+    sell_avail: int  # units available to fill our passive buy orders
 
 
 @dataclass
@@ -108,8 +130,9 @@ class BacktestEngine:
     def _simulate_fills(
         order_depth: OrderDepth,
         orders: List[Order],
-        future_market_trades: List[Trade],
+        current_market_trades: List[Trade],
         timestamp: int,
+        mode: TradeMatchingMode = TradeMatchingMode.all,
     ) -> List[Fill]:
         fills: List[Fill] = []
         available_bids = [[price, volume] for price, volume in sorted(order_depth.buy_orders.items(), key=lambda item: item[0], reverse=True)]
@@ -148,33 +171,42 @@ class BacktestEngine:
                 if remaining > 0:
                     pending_passive.append((order, remaining))
 
-        # Passive fill simulation using future market trades
-        future_volume_by_price: Dict[int, int] = defaultdict(int)
-        for trade in future_market_trades:
-            future_volume_by_price[trade.price] += trade.quantity
+        if mode == TradeMatchingMode.none or not pending_passive:
+            return fills
 
-        for order, remaining in sorted(pending_passive, key=lambda x: (-x[0].price if x[0].quantity > 0 else x[0].price)):
+        # Build per-trade slots from same-tick market trades (full volume, no discount).
+        slots: List[_MarketTradeSlot] = [
+            _MarketTradeSlot(price=t.price, buy_avail=t.quantity, sell_avail=t.quantity)
+            for t in current_market_trades
+        ]
+
+        for order, remaining in pending_passive:
             if remaining <= 0:
                 continue
             is_buy = order.quantity > 0
-            candidate_prices = sorted(
-                (p for p, v in future_volume_by_price.items() if v > 0 and (p <= order.price if is_buy else p >= order.price)),
-                reverse=is_buy,
-            )
-            for trade_price in candidate_prices:
-                available = ceil(future_volume_by_price[trade_price] * 0.35)
-                traded = min(remaining, available)
-                if traded <= 0:
-                    continue
-                fills.append(Fill(timestamp=timestamp, symbol=order.symbol, side="BUY" if is_buy else "SELL", price=order.price, quantity=traded, aggressive=False))
-                remaining -= traded
-                future_volume_by_price[trade_price] = max(0, future_volume_by_price[trade_price] - traded)
+            for slot in slots:
                 if remaining <= 0:
                     break
+                if is_buy:
+                    price_ok = (slot.price < order.price) if mode == TradeMatchingMode.worse else (slot.price <= order.price)
+                    if not price_ok or slot.sell_avail <= 0:
+                        continue
+                    traded = min(remaining, slot.sell_avail)
+                    fills.append(Fill(timestamp=timestamp, symbol=order.symbol, side="BUY", price=order.price, quantity=traded, aggressive=False))
+                    slot.sell_avail -= traded
+                    remaining -= traded
+                else:
+                    price_ok = (slot.price > order.price) if mode == TradeMatchingMode.worse else (slot.price >= order.price)
+                    if not price_ok or slot.buy_avail <= 0:
+                        continue
+                    traded = min(remaining, slot.buy_avail)
+                    fills.append(Fill(timestamp=timestamp, symbol=order.symbol, side="SELL", price=order.price, quantity=traded, aggressive=False))
+                    slot.buy_avail -= traded
+                    remaining -= traded
 
         return fills
 
-    def run_day(self, day: str) -> DaySummary:
+    def run_day(self, day: str, mode: TradeMatchingMode = TradeMatchingMode.all) -> DaySummary:
         price_file = f"prices_round_{self.round_num}_day_{day}.csv"
         trade_file = f"trades_round_{self.round_num}_day_{day}.csv"
 
@@ -204,8 +236,7 @@ class BacktestEngine:
 
         for index, timestamp in enumerate(timestamps):
             order_depths = order_history[timestamp]
-            next_timestamp = timestamps[index + 1] if index + 1 < len(timestamps) else None
-            future_market_trades = market_by_timestamp.get(next_timestamp, {}) if next_timestamp is not None else {}
+            current_market_trades_by_product = market_by_timestamp.get(timestamp, {})
             state = TradingState(
                 traderData=trader_data,
                 timestamp=timestamp,
@@ -243,8 +274,9 @@ class BacktestEngine:
                 fills = self._simulate_fills(
                     order_depths.get(product, OrderDepth()),
                     safe_orders,
-                    future_market_trades.get(product, []),
+                    current_market_trades_by_product.get(product, []),
                     timestamp,
+                    mode,
                 )
 
                 for fill in fills:
@@ -311,14 +343,26 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--days", nargs="*", help="Days to run, e.g. -2 -1")
     parser.add_argument("--data-dir", default="data", help="Directory with CSV files")
     parser.add_argument("--json-out", help="Optional JSON output file")
+    parser.add_argument(
+        "--match-trades",
+        default="all",
+        choices=["all", "worse", "none"],
+        help=(
+            "Passive fill mode against same-tick market trades. "
+            "all=fill at or better than your price (optimistic), "
+            "worse=fill only if trade went strictly through your price (conservative), "
+            "none=no passive fills at all."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
+    mode = TradeMatchingMode(args.match_trades)
     engine = BacktestEngine(args.data_dir, args.strategy, round_num=args.round)
     days = args.days or engine.loader.available_days(args.round)
     if not days:
         raise RuntimeError("No price files found in the selected data directory.")
 
-    summaries = [engine.run_day(day) for day in days]
+    summaries = [engine.run_day(day, mode=mode) for day in days]
 
     grand_total = 0.0
     for summary in summaries:
