@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from werkzeug.serving import make_server
 
 try:
     from dash import Dash, dcc, html, Input, Output
@@ -710,7 +711,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         bt_per_prod_pnl = _bt_per_product_pnl(backtest_data, market_df_raw)
         print("Precomputed backtest data.")
 
-    app = Dash(__name__, title="Prosperity Dashboard")
+    app = Dash(__name__, title="Prosperity Trading Dashboard")
 
     # ── Static layout shell (theme-independent IDs) ──
     chart_ids: list[str] = []
@@ -917,8 +918,16 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
             ]
         return children
 
-    print("Dashboard → http://127.0.0.1:8050")
-    app.run(debug=False, port=8050)
+    host = "127.0.0.1"
+    print(f"Starting tooling dashboard on http://{host}:8050")
+    server = make_server(host, 8050, app.server, threaded=False)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping tooling dashboard...")
+    finally:
+        server.server_close()
+        print("Tooling dashboard stopped.")
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────

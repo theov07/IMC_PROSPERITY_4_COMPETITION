@@ -35,8 +35,15 @@ En pratique:
 ### Visualisateur de recherche interactif
 
 ```powershell
-python research\visualizer\dashboard.py
+.venv\Scripts\python research\visualizer\dashboard.py
 ```
+
+Role:
+
+- dashboard de recherche pour explorer uniquement la `data/` brute
+- utile au debut d'un round, avant d'avoir une strategie
+- demarre sur `http://127.0.0.1:8051`
+- le titre de page est `Prosperity Round Data Explorer`
 
 ### Generer des graphes dans `artifacts/visualizer_output/`
 
@@ -161,6 +168,13 @@ Tu verras selon les variantes:
 - position
 - features comme la reservation price si la strategie les expose
 
+Role:
+
+- dashboard de review de strategie
+- sert pour les backtests et les logs officiels IMC
+- demarre sur `http://127.0.0.1:8050`
+- le titre de page est `Prosperity Trading Dashboard`
+
 ## 7. Comparer plusieurs variantes
 
 ```powershell
@@ -282,6 +296,7 @@ Role:
 
 ```powershell
 python -m pytest tests/ -v
+.venv\Scripts\python research\visualizer\dashboard.py
 python backtest.py --strategy champion --round 0 --days -2 -1
 python backtest.py --strategy champion --round 0 --days -2 -1 --json-out artifacts\backtest_results\champion.json
 python -m prosperity.tooling.dashboard --backtest-json artifacts\backtest_results\champion.json --data-dir data
@@ -294,6 +309,12 @@ python scripts\export_submission.py --member champion --round 0 --output artifac
 
 ## 14. Notes importantes
 
+- Il y a deux dashboards differents:
+  - `research/visualizer/dashboard.py` pour la recherche sur la data brute
+  - `prosperity/tooling/dashboard.py` pour les backtests et logs
+- Ils n'utilisent plus le meme port par defaut:
+  - research: `8051`
+  - tooling: `8050`
 - `WORKFLOW.md` contient des bonnes idees, mais certaines commandes sont plus anciennes que le code actuel.
 - Si une strategie n'apparait pas au backtest, verifier:
   - `prosperity/config.py`

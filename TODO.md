@@ -7,6 +7,7 @@ Priority list for turning this repository from a solid framework into a competit
 - ~~Make the submission exporter derive from a stricter canonical source to reduce drift between modular code and exported code.~~ (done: exporter now inlines actual strategy source files)
 - Build a local-vs-official reconciliation tool for fills, pnl, and positions.
 - Add an experiment registry: strategy, round, params, days tested, total pnl, per-product pnl, notes, submission id.
+-Notebook 
 
 ## High Value
 
