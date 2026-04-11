@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -234,75 +235,80 @@ class BacktestEngine:
 
         timestamps = sorted(order_history.keys())
 
-        for index, timestamp in enumerate(timestamps):
-            order_depths = order_history[timestamp]
-            current_market_trades_by_product = market_by_timestamp.get(timestamp, {})
-            state = TradingState(
-                traderData=trader_data,
-                timestamp=timestamp,
-                listings=listings,
-                order_depths=order_depths,
-                own_trades=recent_own_trades,
-                market_trades=market_by_timestamp.get(timestamp, {}),
-                position=positions,
-                observations=observations,
-            )
-
-            run_out = trader.run(state)
-            trader_result, _, trader_data = run_out[0], run_out[1], run_out[2]
-            # 4th return value is optional: {product: {feature_name: value}}
-            strategy_features: Dict[str, Dict[str, float]] = run_out[3] if len(run_out) > 3 else {}
-            for sym, feats in strategy_features.items():
-                if feats:
-                    all_feature_ticks.append(FeatureTick(timestamp=timestamp, symbol=sym, features=feats))
-
-            next_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
-
-            # Record best bid/ask quotes submitted by the strategy
-            for product, orders in trader_result.items():
-                buy_prices = [o.price for o in orders if o.quantity > 0]
-                sell_prices = [o.price for o in orders if o.quantity < 0]
-                all_quotes.append(Quote(
+        os.environ["INTERNAL_BACKTEST"] = "1"
+        try:
+            for index, timestamp in enumerate(timestamps):
+                order_depths = order_history[timestamp]
+                current_market_trades_by_product = market_by_timestamp.get(timestamp, {})
+                state = TradingState(
+                    traderData=trader_data,
                     timestamp=timestamp,
-                    symbol=product,
-                    bid=max(buy_prices) if buy_prices else None,
-                    ask=min(sell_prices) if sell_prices else None,
-                ))
-
-            for product, orders in trader_result.items():
-                safe_orders = self._respect_exchange_limits(product, positions.get(product, 0), orders)
-                fills = self._simulate_fills(
-                    order_depths.get(product, OrderDepth()),
-                    safe_orders,
-                    current_market_trades_by_product.get(product, []),
-                    timestamp,
-                    mode,
+                    listings=listings,
+                    order_depths=order_depths,
+                    own_trades=recent_own_trades,
+                    market_trades=market_by_timestamp.get(timestamp, {}),
+                    position=positions,
+                    observations=observations,
                 )
 
-                for fill in fills:
-                    all_fills.append(fill)
-                    signed_quantity = fill.quantity if fill.side == "BUY" else -fill.quantity
-                    positions[product] += signed_quantity
-                    turnover_by_product[product] += fill.quantity * fill.price
-                    max_abs_position[product] = max(max_abs_position[product], abs(positions[product]))
+                run_out = trader.run(state)
+                trader_result, _, trader_data = run_out[0], run_out[1], run_out[2]
+                # 4th return value is optional: {product: {feature_name: value}}
+                strategy_features: Dict[str, Dict[str, float]] = run_out[3] if len(run_out) > 3 else {}
+                for sym, feats in strategy_features.items():
+                    if feats:
+                        all_feature_ticks.append(FeatureTick(timestamp=timestamp, symbol=sym, features=feats))
 
-                    if fill.side == "BUY":
-                        cash_by_product[product] -= fill.quantity * fill.price
-                        own_trade = Trade(symbol=fill.symbol, price=fill.price, quantity=fill.quantity, buyer="SUBMISSION", seller=None, timestamp=timestamp)
-                    else:
-                        cash_by_product[product] += fill.quantity * fill.price
-                        own_trade = Trade(symbol=fill.symbol, price=fill.price, quantity=fill.quantity, buyer=None, seller="SUBMISSION", timestamp=timestamp)
+                next_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
 
-                    next_own_trades[product].append(own_trade)
+                # Record best bid/ask quotes submitted by the strategy
+                for product, orders in trader_result.items():
+                    buy_prices = [o.price for o in orders if o.quantity > 0]
+                    sell_prices = [o.price for o in orders if o.quantity < 0]
+                    all_quotes.append(Quote(
+                        timestamp=timestamp,
+                        symbol=product,
+                        bid=max(buy_prices) if buy_prices else None,
+                        ask=min(sell_prices) if sell_prices else None,
+                    ))
 
-            recent_own_trades = next_own_trades
-            marked_equity = 0.0
-            for product in products:
-                marked_equity += cash_by_product[product]
-                order_depth = order_depths.get(product)
-                if order_depth is not None:
-                    marked_equity += positions[product] * self._mid_price(order_depth)
-            equity_curve.append((timestamp, marked_equity))
+                for product, orders in trader_result.items():
+                    safe_orders = self._respect_exchange_limits(product, positions.get(product, 0), orders)
+                    fills = self._simulate_fills(
+                        order_depths.get(product, OrderDepth()),
+                        safe_orders,
+                        current_market_trades_by_product.get(product, []),
+                        timestamp,
+                        mode,
+                    )
+
+                    for fill in fills:
+                        all_fills.append(fill)
+                        signed_quantity = fill.quantity if fill.side == "BUY" else -fill.quantity
+                        positions[product] += signed_quantity
+                        turnover_by_product[product] += fill.quantity * fill.price
+                        max_abs_position[product] = max(max_abs_position[product], abs(positions[product]))
+
+                        if fill.side == "BUY":
+                            cash_by_product[product] -= fill.quantity * fill.price
+                            own_trade = Trade(symbol=fill.symbol, price=fill.price, quantity=fill.quantity, buyer="SUBMISSION", seller=None, timestamp=timestamp)
+                        else:
+                            cash_by_product[product] += fill.quantity * fill.price
+                            own_trade = Trade(symbol=fill.symbol, price=fill.price, quantity=fill.quantity, buyer=None, seller="SUBMISSION", timestamp=timestamp)
+
+                        next_own_trades[product].append(own_trade)
+
+                recent_own_trades = next_own_trades
+                marked_equity = 0.0
+                for product in products:
+                    marked_equity += cash_by_product[product]
+                    order_depth = order_depths.get(product)
+                    if order_depth is not None:
+                        marked_equity += positions[product] * self._mid_price(order_depth)
+                equity_curve.append((timestamp, marked_equity))
+
+        finally:
+            os.environ.pop("INTERNAL_BACKTEST", None)
 
         product_summaries: Dict[str, ProductSummary] = {}
         total_pnl = 0.0

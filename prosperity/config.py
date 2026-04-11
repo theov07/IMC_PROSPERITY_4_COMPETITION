@@ -124,12 +124,14 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 sigma_floor=0.5,
                 sigma_half_life=60,
                 min_half_spread=1.0,
-                total_ticks=200000, # last tick value
+                ts_increment=100,
+                last_ts_value=199900,       # IMC live: last timestamp of the day
+                bt_last_ts_value=999900,    # internal backtest data: last timestamp of the day
                 maker_size=8,
                 take_edge=1.5,
                 mid_smooth_window=50, # mid_smooth_window=0 => disabled
                 mid_smooth_half_life=25,
-                log_flush_ts=1000,    # The checkpoint fires when timestamp % 10000 == 9900, so you get prints at 9900, 19900, 29900, ..., 199900 — 20 chunks of 100 entries each.
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
             ),
             "TOMATOES": _override(
                 ROUND_0["TOMATOES"],
@@ -141,12 +143,14 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 sigma_floor=0.5,
                 sigma_half_life=60,
                 min_half_spread=1.0,
-                total_ticks=200000,
+                ts_increment=100,
+                last_ts_value=199900,
+                bt_last_ts_value=199900,
                 maker_size=8,
                 take_edge=0.5,
                 mid_smooth_window=50, # mid_smooth_window=0 => disabled
                 mid_smooth_half_life=25,
-                log_flush_ts=1000,    # flush every 10000 timestamps (timestamps increment by 100)
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
             ),
         },
     },
@@ -158,7 +162,8 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 maker_size=18,
                 tighten_ticks=1,
                 log_flush_ts=1000,
-                total_ticks=200000,
+                ts_increment=100,
+                last_ts_value=199900,
             ),
             "TOMATOES": _override(
                 ROUND_0["TOMATOES"],
@@ -166,7 +171,8 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 maker_size=10,
                 tighten_ticks=1,
                 log_flush_ts=1000,
-                total_ticks=200000,
+                ts_increment=100,
+                last_ts_value=199900,
             ),
         },
     },

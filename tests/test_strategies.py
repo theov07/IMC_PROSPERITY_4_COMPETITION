@@ -94,7 +94,7 @@ class TestAvellanedaStoikov(unittest.TestCase):
         strat = build_strategy("avellaneda_stoikov", "TEST", {
             "position_limit": 50, "gamma": 0.1, "kappa": 1.5,
             "sigma_window": 10, "sigma_default": 1.0, "sigma_floor": 0.5,
-            "total_ticks": 1000, "min_half_spread": 1.0,
+            "ts_increment": 100, "last_ts_value": 99900, "min_half_spread": 1.0,
             "maker_size": 8, "take_edge": 0.5,
         })
         state = _make_state()
@@ -106,7 +106,7 @@ class TestAvellanedaStoikov(unittest.TestCase):
         params = {
             "position_limit": 50, "gamma": 0.5, "kappa": 1.5,
             "sigma_window": 10, "sigma_default": 2.0, "sigma_floor": 0.5,
-            "total_ticks": 1000, "min_half_spread": 1.0,
+            "ts_increment": 100, "last_ts_value": 99900, "min_half_spread": 1.0,
             "maker_size": 8, "take_edge": 0.5,
         }
         # Long position should skew reservation DOWN

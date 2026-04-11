@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from typing import Any, Dict, List, Tuple
 
 from datamodel import Order, OrderDepth, TradingState
@@ -84,11 +85,14 @@ class AvellanedaStoikovStrategy(BaseStrategy):
     ) -> Tuple[float, float, float]:
         gamma = float(self.params.get("gamma", 0.1))
         kappa = float(self.params.get("kappa", 1.5))
-        total_ticks = int(self.params.get("total_ticks", 10000))
+        ts_increment = int(self.params.get("ts_increment", 100))
+        last_ts_key = "bt_last_ts_value" if os.environ.get("INTERNAL_BACKTEST") else "last_ts_value"
+        last_ts = int(self.params.get(last_ts_key, self.params.get("last_ts_value", 199900)))
+        num_ticks = last_ts // ts_increment + 1
         tick_num = memory.get("tick_count", 0)
         memory["tick_count"] = tick_num + 1
 
-        tau = max((total_ticks - tick_num) / total_ticks, 0.001)
+        tau = max((num_ticks - tick_num) / num_ticks, 0.001)
 
         # Reservation price
         reservation = mid - position * gamma * sigma * sigma * tau 
@@ -117,7 +121,7 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         mid = book.mid_price
         mid_smooth = self._smooth_mid(mid, memory)
         sigma = self._update_volatility(mid_smooth, memory)
-        reservation, half_spread, tau = self._compute_as_quotes(mid_smooth, position, sigma, memory)
+        reservation, half_spread, _ = self._compute_as_quotes(mid_smooth, position, sigma, memory)
 
         bid_price = int(math.floor(reservation - half_spread))
         ask_price = int(math.ceil(reservation + half_spread))
@@ -179,25 +183,23 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["sigma"] = sigma
         memory["half_spread"] = half_spread
 
-        # ── Per-tick log accumulation ──
-        # log_flush_ts: interval in timestamp units between flushes (e.g. 10000 = flush every 10000 timestamps)
-        # last_tick_ts: last timestamp of the simulation, triggers end-of-sim flush
-        flush_ts = int(self.params.get("log_flush_ts", 10000))
-        last_tick_ts = int(self.params.get("total_ticks", 199900) - 100)
+        # ── Per-tick log accumulation (live only, suppressed during internal backtest) ──
+        if not os.environ.get("INTERNAL_BACKTEST"):
+            flush_ts = int(self.params.get("log_flush_ts", 10000))
+            last_ts = int(self.params.get("last_ts_value", 199900))
 
-        log = memory.setdefault("_log", [])
-        log.append([state.timestamp, round(reservation, 2), bid_price, ask_price])
+            log = memory.setdefault("_log", [])
+            log.append([state.timestamp, round(reservation, 2), bid_price, ask_price])
 
-        # Flush at end of simulation or every flush_every ticks as backup
-        end_of_sim = state.timestamp >= last_tick_ts
-        checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
-        if end_of_sim or checkpoint:
-            print(json.dumps({
-                "product": self.product,
-                "chunk_end": state.timestamp,
-                "log": log,  # [[timestamp, reservation, bid, ask], ...]
-            }))
-            memory["_log"] = []
+            end_of_sim = state.timestamp >= last_ts
+            checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
+            if end_of_sim or checkpoint:
+                print(json.dumps({
+                    "product": self.product,
+                    "chunk_end": state.timestamp,
+                    "log": log,  # [[timestamp, reservation, bid, ask], ...]
+                }))
+                memory["_log"] = []
 
         return orders, 0
 
