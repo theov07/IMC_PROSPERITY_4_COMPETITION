@@ -4,7 +4,7 @@ peut nous mettre une paire qui sert à rien et qui
 ne possède pas d'alpha 
 -on peut avoir des positions négatives
 -le mid price est impacté par nos ordres ? Non 
-
+-Est ce que inter day l'inventaire est remis à 0 ? J'ai vu dans le dashboard on a des positions qui passe > limit à cause de ça car on reset pas inter day (entre jour 1 et 2 par exemple)
 # Market Making — Du fondamental au complexe
 ## Guide de préparation Prosperity IMC
 

@@ -176,6 +176,28 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             ),
         },
     },
+    "leo_naive_v1_max": {
+        0: {
+            "EMERALDS": _override(
+                ROUND_0["EMERALDS"],
+                strategy="naive_tight_mm",
+                maker_size=999,
+                tighten_ticks=1,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=199900,
+            ),
+            "TOMATOES": _override(
+                ROUND_0["TOMATOES"],
+                strategy="naive_tight_mm",
+                maker_size=999,
+                tighten_ticks=1,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=199900,
+            ),
+        },
+    },
     "leo_naive_v2": {
         0: {
             "EMERALDS": _override(
@@ -197,6 +219,72 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 max_tighten_ticks=4,
                 decay_interval=3,
                 inv_skew_ticks=0,
+                log_flush_ts=1000,
+                total_ticks=200000,
+            ),
+        },
+    },
+    "leo_naive_v3": {
+        0: {
+            "EMERALDS": _override(
+                ROUND_0["EMERALDS"],
+                strategy="naive_tight_mm_v3",
+                front_size=5,
+                tighten_ticks=1,
+                log_flush_ts=1000,
+                total_ticks=200000,
+            ),
+            "TOMATOES": _override(
+                ROUND_0["TOMATOES"],
+                strategy="naive_tight_mm_v3",
+                front_size=5,
+                tighten_ticks=1,
+                log_flush_ts=1000,
+                total_ticks=200000,
+            ),
+        },
+    },
+    "leo_naive_v4": {
+        0: {
+            "EMERALDS": _override(
+                ROUND_0["EMERALDS"],
+                strategy="naive_tight_mm_v4",
+                tighten_ticks=1,
+                inv_skew_ticks=0,
+                log_flush_ts=1000,
+                total_ticks=200000,
+            ),
+            "TOMATOES": _override(
+                ROUND_0["TOMATOES"],
+                strategy="naive_tight_mm_v4",
+                tighten_ticks=1,
+                inv_skew_ticks=4,
+                log_flush_ts=1000,
+                total_ticks=200000,
+            ),
+        },
+    },
+    "leo_naive_v5": {
+        0: {
+            "EMERALDS": _override(
+                ROUND_0["EMERALDS"],
+                strategy="naive_tight_mm_v5",
+                tighten_ticks=1,
+                inv_skew_ticks=0,
+                spread_extra_threshold=0,
+                size_reduce_ratio=1.0,
+                imb_threshold=0.0,
+                log_flush_ts=1000,
+                total_ticks=200000,
+            ),
+            "TOMATOES": _override(
+                ROUND_0["TOMATOES"],
+                strategy="naive_tight_mm_v5",
+                tighten_ticks=1,
+                inv_skew_ticks=0,
+                spread_extra_threshold=0,
+                size_reduce_ratio=1.0,
+                imb_threshold=0.0,
                 log_flush_ts=1000,
                 total_ticks=200000,
             ),

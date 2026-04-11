@@ -247,6 +247,27 @@ def _position_series(fills: pd.DataFrame | list[dict], symbol: str | None = None
         df["signed_qty"] = df.apply(
             lambda r: r["quantity"] if r["side"] == "BUY" else -r["quantity"], axis=1
         )
+
+    # Backtest days are independent and positions reset to zero at the start of
+    # each day. When we stitch multiple days onto one x-axis for the dashboard,
+    # preserve those daily resets instead of cumulatively carrying inventory
+    # across day boundaries.
+    if "day" in df.columns:
+        chunks: list[pd.DataFrame] = []
+        for _, day_df in df.groupby("day", sort=False):
+            day_df = day_df.sort_values("timestamp").copy()
+            day_df["position"] = day_df["signed_qty"].cumsum()
+
+            day_start_ts = (
+                int(day_df["day_start_timestamp"].iloc[0])
+                if "day_start_timestamp" in day_df.columns
+                else int(day_df["timestamp"].iloc[0])
+            )
+            reset_row = pd.DataFrame([{"timestamp": day_start_ts, "position": 0}])
+            chunks.append(pd.concat([reset_row, day_df[["timestamp", "position"]]], ignore_index=True))
+
+        return pd.concat(chunks, ignore_index=True).sort_values("timestamp", kind="stable")
+
     df["position"] = df["signed_qty"].cumsum()
     return df[["timestamp", "position"]]
 
@@ -500,7 +521,12 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
 
         # Fills: offset timestamps
         for f in fills:
-            all_fills.append({**f, "timestamp": f["timestamp"] + ts_offset})
+            all_fills.append({
+                **f,
+                "day": day["day"],
+                "day_start_timestamp": ts_offset,
+                "timestamp": f["timestamp"] + ts_offset,
+            })
 
         # Quotes: offset timestamps
         for q in quotes:
