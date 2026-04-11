@@ -58,7 +58,6 @@ python -m py_compile artifacts/submissions/champion_submission.py
 ```bash
 # Review official log with interactive dashboard + backtest result (choose the backtest result corresponding to the submission)
 python -m prosperity.tooling.dashboard  --log logs/AvSt-tibo/61307.json --backtest-json artifacts/backtest_results.json --data-dir data
-
 ```
 
 ---
