@@ -16,7 +16,7 @@ ne possède pas d'alpha
 Un market maker affiche en permanence un prix d'achat (bid) et un prix de vente (ask). Il gagne le spread entre les deux. Son ennemi numéro un : l'inventaire. S'il accumule trop d'un actif dans un sens, il est exposé au risque de prix.
 
 **La logique centrale :**
-Spread capturé = revenus. Position nette non nulle = risque. L'objectif est de capturer le spread en maintenant un inventaire aussi proche de zéro que possible.
+Spread capturé = revenus. Position nette non nulle = risque. L'objectif est de capturer le spread en maintenant un inventaire aussi proche de zéro que possible
 
 ---
 
