@@ -28,7 +28,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+import time
 from typing import Any, Dict, List, Tuple
 
 import dash
@@ -693,6 +695,71 @@ def empty_figure(theme: str, title: str = "No data") -> go.Figure:
     fig = go.Figure()
     fig.update_layout(title=title, height=320, **_layout_base(theme))
     return fig
+
+
+def _list_listening_pids_for_port(port: int) -> list[int]:
+    """Return PIDs currently listening on ``port`` on Windows.
+
+    We parse ``netstat -ano`` output rather than relying on optional third-party
+    packages so the cleanup logic works on a fresh repo checkout.
+    """
+    result = subprocess.run(
+        ["netstat", "-ano", "-p", "tcp"],
+        capture_output=True,
+        check=False,
+    )
+    pids: set[int] = set()
+    target = f":{port}"
+    stdout = result.stdout.decode(errors="ignore") if isinstance(result.stdout, (bytes, bytearray)) else (result.stdout or "")
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if target not in line:
+            continue
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        local_addr = parts[1]
+        state = parts[3].upper()
+        pid_text = parts[4]
+        if not local_addr.endswith(target):
+            continue
+        if state != "LISTENING":
+            continue
+        if pid_text.isdigit():
+            pids.add(int(pid_text))
+    return sorted(pids)
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Force-stop a process tree on Windows."""
+    subprocess.run(
+        ["taskkill", "/PID", str(pid), "/F", "/T"],
+        capture_output=True,
+        check=False,
+    )
+
+
+def _cleanup_dashboard_port(port: int, label: str) -> None:
+    """Kill old listeners on the dashboard port before starting a new server."""
+    current_pid = os.getpid()
+    stale_pids = [pid for pid in _list_listening_pids_for_port(port) if pid != current_pid]
+    if not stale_pids:
+        return
+
+    print(f"Cleaning up stale {label} listeners on port {port}: {', '.join(map(str, stale_pids))}")
+    for pid in stale_pids:
+        _kill_process_tree(pid)
+
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        remaining = [pid for pid in _list_listening_pids_for_port(port) if pid != current_pid]
+        if not remaining:
+            return
+        time.sleep(0.1)
+
+    remaining = [pid for pid in _list_listening_pids_for_port(port) if pid != current_pid]
+    if remaining:
+        print(f"Warning: port {port} still has listeners after cleanup: {', '.join(map(str, remaining))}")
 
 
 def load_data() -> Dict[str, Dict[str, object]]:
@@ -1595,6 +1662,7 @@ def run_research_dashboard_server() -> None:
     stopping the dashboard with ``Ctrl+C`` on Windows terminals.
     """
     host = "127.0.0.1"
+    _cleanup_dashboard_port(RESEARCH_DASHBOARD_PORT, "research dashboard")
     print(f"Starting research dashboard on http://{host}:{RESEARCH_DASHBOARD_PORT}")
     server = make_server(host, RESEARCH_DASHBOARD_PORT, app.server, threaded=False)
     try:
