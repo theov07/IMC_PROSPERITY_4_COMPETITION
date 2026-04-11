@@ -244,6 +244,26 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             ),
         },
     },
+    "leo_naive_v4": {
+        0: {
+            "EMERALDS": _override(
+                ROUND_0["EMERALDS"],
+                strategy="naive_tight_mm_v4",
+                tighten_ticks=1,
+                inv_skew_ticks=0,
+                log_flush_ts=1000,
+                total_ticks=200000,
+            ),
+            "TOMATOES": _override(
+                ROUND_0["TOMATOES"],
+                strategy="naive_tight_mm_v4",
+                tighten_ticks=1,
+                inv_skew_ticks=4,
+                log_flush_ts=1000,
+                total_ticks=200000,
+            ),
+        },
+    },
     "theo": {
         0: {
             "EMERALDS": _override(ROUND_0["EMERALDS"], take_edge=0.5, quote_half_spread=1, maker_size=14, inventory_aversion=1.6),

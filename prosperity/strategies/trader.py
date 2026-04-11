@@ -14,7 +14,7 @@ from prosperity.strategies.base import BaseStrategy
 
 # ── Change these two constants before each round submission ──────────
 CURRENT_ROUND = 0
-CURRENT_MEMBER = "leo_naive_v2"
+CURRENT_MEMBER = "leo_naive_v4"
 
 
 class Trader:

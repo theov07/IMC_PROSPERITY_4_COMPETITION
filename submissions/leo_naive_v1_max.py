@@ -1,8 +1,4 @@
-"""Backtester entrypoint — leo_naive_v1_max.
-
-Same as V1 (naive_tight_mm) but with maker_size=999 so it uses
-the full remaining capacity (position_limit - |position|) every tick.
-"""
+"""Backtester entrypoint — leo_naive_v1_max."""
 
 from prosperity.strategies.trader import CURRENT_ROUND
 from prosperity.config import get_round_config
