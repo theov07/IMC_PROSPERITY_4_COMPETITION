@@ -9,20 +9,16 @@
 ### Exploration
 ```bash
 # Launch interactive data explorer (before you start coding)
-python research/visualizer/main.py
+python research/visualizer/dashboard.py
 # → Opens http://localhost:8050
 ```
 
-### Backtesting
+### `Backtesting`
 ```bash
-# Test a single strategy variant on historical data
-python backtest.py --strategy champion --round 0 --days -2 -1
-
-# Verbose output for debugging
-python backtest.py --strategy champion --round 0 --days -2 -1 --verbose
+python -m prosperity.tooling.backtest --strategy tibo_AvSt --round 0 --data-dir data --json-out artifacts/backtest_results/new_AvSt.json 
 ```
 
-### Comparison & Ranking
+#### Comparison & Ranking
 ```bash
 # Compare multiple variants side-by-side
 python -m prosperity.tooling.compare \
@@ -49,12 +45,10 @@ python -m unittest tests/ -v
 python -m unittest tests.test_strategies -v
 ```
 
-### Export for IMC
+### `Export for IMC` & internal backtest
 ```bash
 # Generate single-file submission
-python scripts/export_submission.py \
-  --member champion --round 0 \
-  --output artifacts/submissions/champion_submission.py
+python scripts/export_submission.py --member tibo_AvSt --round 0
 
 # Compile-check the exported file
 python -m py_compile artifacts/submissions/champion_submission.py
@@ -62,12 +56,9 @@ python -m py_compile artifacts/submissions/champion_submission.py
 
 ### Post-Submission Analysis
 ```bash
-# Review official log with interactive dashboard
-python -m prosperity.tooling.dashboard --log examples/official_logs/16248.log
+# Review official log with interactive dashboard + backtest result (choose the backtest result corresponding to the submission)
+python -m prosperity.tooling.dashboard  --log logs/AvSt-tibo/61307.json --backtest-json artifacts/backtest_results.json --data-dir data
 
-# Export static HTML (no Dash server needed)
-python -m prosperity.tooling.dashboard --log examples/official_logs/16248.log --static \
-  --output artifacts/analysis/my_submission.html
 ```
 
 ---
