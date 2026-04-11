@@ -8,8 +8,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import unittest
+import pandas as pd
 
-from prosperity.tooling.logs import load_official_log
+from prosperity.tooling.logs import _parse_lambda_logs, load_official_log
 
 
 ACTIVITIES = (
@@ -167,6 +168,35 @@ class TestOfficialLogLoading(unittest.TestCase):
 
             self.assertEqual(official.analysis_group, "leo_round0_naive")
             self.assertIsNotNone(official.submission_source_path)
+
+    def test_parse_lambda_logs_supports_quote_first_and_reservation_formats(self):
+        runtime_logs = [
+            {
+                "timestamp": 900,
+                "sandboxLog": "",
+                "lambdaLog": (
+                    '{"product":"EMERALDS","chunk_end":900,"log":[[0,9993.5,9992,9995],'
+                    '[100,9994.0,9993,9996]]}'
+                    '{"product":"TOMATOES","chunk_end":900,"log":[[0,5004,5009,4,0],'
+                    '[100,5005,5010,3,0]]}'
+                ),
+            }
+        ]
+
+        parsed = _parse_lambda_logs(pd.DataFrame(runtime_logs))
+
+        self.assertEqual(len(parsed), 4)
+
+        emeralds = parsed[parsed["product"] == "EMERALDS"].sort_values("timestamp")
+        tomatoes = parsed[parsed["product"] == "TOMATOES"].sort_values("timestamp")
+
+        self.assertEqual(emeralds["bid_price"].tolist(), [9992, 9993])
+        self.assertEqual(emeralds["ask_price"].tolist(), [9995, 9996])
+        self.assertEqual(emeralds["reservation"].tolist(), [9993.5, 9994.0])
+
+        self.assertEqual(tomatoes["bid_price"].tolist(), [5004, 5005])
+        self.assertEqual(tomatoes["ask_price"].tolist(), [5009, 5010])
+        self.assertTrue(tomatoes["reservation"].isna().all())
 
 
 if __name__ == "__main__":
