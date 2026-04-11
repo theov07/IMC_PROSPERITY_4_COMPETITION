@@ -189,7 +189,12 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
     """Extract strategy log entries printed via json.dumps from lambdaLog fields.
 
     Each flush produces one JSON object per product per chunk:
-      {"product": "EMERALDS", "chunk_end": 49900, "log": [[ts, reservation, bid, ask], ...]}
+      {"product": "EMERALDS", "chunk_end": 49900, "log": [[...], ...]}
+
+    Supported per-tick formats currently seen in the repo:
+      [timestamp, bid, ask]
+      [timestamp, reservation, bid, ask]
+      [timestamp, bid, ask, extra_1, extra_2, ...]
 
     Multiple products printing at the same timestamp are concatenated by IMC
     into a single lambdaLog string (with or without newlines), so we use
@@ -197,6 +202,58 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
     """
     decoder = json.JSONDecoder()
     rows = []
+
+    def _append_quote_row(product: str, tick: list[object]) -> None:
+        if len(tick) < 3:
+            return
+
+        timestamp = int(tick[0])
+        reservation = None
+        bid_price = None
+        ask_price = None
+
+        if len(tick) == 3:
+            # Format: [timestamp, bid_price, ask_price]
+            bid_price = tick[1]
+            ask_price = tick[2]
+        else:
+            # Heuristic:
+            # - reservation-first format has reservation between bid and ask:
+            #   [timestamp, reservation, bid, ask]
+            # - quote-first format starts with the quoted bid/ask and may append
+            #   strategy-specific diagnostics such as tighten/skew/order_count:
+            #   [timestamp, bid, ask, ...]
+            try:
+                maybe_reservation = float(tick[1]) if tick[1] is not None else None
+                maybe_bid = float(tick[2]) if tick[2] is not None else None
+                maybe_ask = float(tick[3]) if tick[3] is not None else None
+            except (TypeError, ValueError):
+                maybe_reservation = maybe_bid = maybe_ask = None
+
+            if (
+                maybe_reservation is not None
+                and maybe_bid is not None
+                and maybe_ask is not None
+                and maybe_bid <= maybe_reservation <= maybe_ask
+            ):
+                reservation = maybe_reservation
+                bid_price = tick[2]
+                ask_price = tick[3]
+            else:
+                bid_price = tick[1]
+                ask_price = tick[2]
+
+        if bid_price is None or ask_price is None:
+            return
+
+        rows.append({
+            "timestamp": timestamp,
+            "product": product,
+            "reservation": float(reservation) if reservation is not None else None,
+            "bid_price": int(bid_price),
+            "ask_price": int(ask_price),
+        })
+
     for _, entry in runtime_logs.iterrows():
         text = str(entry.get("lambdaLog", "") or "").strip()
         if not text:
@@ -224,24 +281,7 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
             if not product:
                 continue
             for tick in obj.get("log", []):
-                if len(tick) == 3:
-                    # Format: [timestamp, bid_price, ask_price] (no reservation)
-                    rows.append({
-                        "timestamp": int(tick[0]),
-                        "product": product,
-                        "reservation": None,
-                        "bid_price": int(tick[1]),
-                        "ask_price": int(tick[2]),
-                    })
-                elif len(tick) >= 4:
-                    # Format: [timestamp, reservation, bid_price, ask_price]
-                    rows.append({
-                        "timestamp": int(tick[0]),
-                        "product": product,
-                        "reservation": float(tick[1]),
-                        "bid_price": int(tick[2]),
-                        "ask_price": int(tick[3]),
-                    })
+                _append_quote_row(product, tick)
     if not rows:
         return pd.DataFrame(columns=["timestamp", "product", "reservation", "bid_price", "ask_price"])
     return pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
