@@ -16,7 +16,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -50,10 +53,72 @@ C_PNL_TOTAL = "#f9e2af"  # yellow total line
 
 # Per-product color palette
 PRODUCT_COLORS = ["#89b4fa", "#f9e2af", "#a6e3a1", "#f38ba8", "#cba6f7", "#89dceb"]
+TOOLING_DASHBOARD_PORT = 8050
 
 
 def _product_color_map(symbols: list[str]) -> dict[str, str]:
     return {sym: PRODUCT_COLORS[i % len(PRODUCT_COLORS)] for i, sym in enumerate(sorted(symbols))}
+
+
+def _list_listening_pids_for_port(port: int) -> list[int]:
+    """Return PIDs currently listening on ``port`` on Windows."""
+    result = subprocess.run(
+        ["netstat", "-ano", "-p", "tcp"],
+        capture_output=True,
+        check=False,
+    )
+    stdout = result.stdout.decode(errors="ignore") if isinstance(result.stdout, (bytes, bytearray)) else (result.stdout or "")
+    pids: set[int] = set()
+    target = f":{port}"
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if target not in line:
+            continue
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        local_addr = parts[1]
+        state = parts[3].upper()
+        pid_text = parts[4]
+        if not local_addr.endswith(target):
+            continue
+        if state != "LISTENING":
+            continue
+        if pid_text.isdigit():
+            pids.add(int(pid_text))
+    return sorted(pids)
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Force-stop a process tree on Windows."""
+    subprocess.run(
+        ["taskkill", "/PID", str(pid), "/F", "/T"],
+        capture_output=True,
+        check=False,
+    )
+
+
+def _cleanup_dashboard_port(port: int, label: str) -> None:
+    """Kill old listeners on the dashboard port before starting a new server."""
+    current_pid = os.getpid()
+    stale_pids = [pid for pid in _list_listening_pids_for_port(port) if pid != current_pid]
+    if not stale_pids:
+        return
+
+    print(f"Cleaning up stale {label} listeners on port {port}: {', '.join(map(str, stale_pids))}")
+    for pid in stale_pids:
+        _kill_process_tree(pid)
+
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        remaining = [pid for pid in _list_listening_pids_for_port(port) if pid != current_pid]
+        if not remaining:
+            return
+        time.sleep(0.1)
+
+    remaining = [pid for pid in _list_listening_pids_for_port(port) if pid != current_pid]
+    if remaining:
+        print(f"Warning: port {port} still has listeners after cleanup: {', '.join(map(str, remaining))}")
 
 
 # ── Themes ─────────────────────────────────────────────────────────────────
@@ -660,7 +725,8 @@ def _toggle_btn_style(theme: str) -> dict:
     }
 
 
-def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None = None):
+def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None = None,
+             log_path: str | None = None, backtest_json_path: str | None = None):
     if not HAS_DASH:
         print("dash not installed. Run: pip install dash")
         return
@@ -696,12 +762,21 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
 
     # Subtitle lines
     parts = []
+    loaded_files = []
     if log:
         parts.append(f"IMC · {log.submission_id}  |  profit = {log.profit}")
     if backtest_data:
         total = sum(d["pnl"] for d in backtest_data["days"])
         days_str = ", ".join(str(d["day"]) for d in backtest_data["days"])
         parts.append(f"Backtest · {backtest_data.get('strategy', '')}  |  PnL = {total:+.2f}  (days {days_str})")
+    if log_path:
+        loaded_files.append(f"Log: {log_path}")
+    if backtest_json_path:
+        loaded_files.append(f"Backtest JSON: {backtest_json_path}")
+    if data_dir:
+        loaded_files.append(f"Market data: {data_dir}")
+    if loaded_files:
+        parts.append("Files: " + "  |  ".join(loaded_files))
 
     # ── Precompute expensive data merges once at startup ──
     bt_precomputed: tuple | None = None
@@ -919,8 +994,9 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         return children
 
     host = "127.0.0.1"
-    print(f"Starting tooling dashboard on http://{host}:8050")
-    server = make_server(host, 8050, app.server, threaded=False)
+    _cleanup_dashboard_port(TOOLING_DASHBOARD_PORT, "tooling dashboard")
+    print(f"Starting tooling dashboard on http://{host}:{TOOLING_DASHBOARD_PORT}")
+    server = make_server(host, TOOLING_DASHBOARD_PORT, app.server, threaded=False)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -956,7 +1032,8 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         print(f"Loaded backtest: strategy={backtest_data.get('strategy')}  "
               f"days={[d['day'] for d in backtest_data['days']]}  total_pnl={total:.2f}")
 
-    run_dash(log=log, backtest_data=backtest_data, data_dir=args.data_dir)
+    run_dash(log=log, backtest_data=backtest_data, data_dir=args.data_dir,
+             log_path=args.log, backtest_json_path=args.backtest_json)
     return 0
 
 

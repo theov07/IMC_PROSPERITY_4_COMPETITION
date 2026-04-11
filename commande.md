@@ -38,12 +38,19 @@ En pratique:
 .venv\Scripts\python research\visualizer\dashboard.py
 ```
 
+### Relancer proprement le dashboard de recherche
+
+```powershell
+.\restart_research_dashboard.ps1
+```
+
 Role:
 
 - dashboard de recherche pour explorer uniquement la `data/` brute
 - utile au debut d'un round, avant d'avoir une strategie
 - demarre sur `http://127.0.0.1:8051`
 - le titre de page est `Prosperity Round Data Explorer`
+- le script `restart_research_dashboard.ps1` tue les vieux serveurs sur `8051` puis relance le bon dashboard via `.venv`
 
 ### Generer des graphes dans `artifacts/visualizer_output/`
 
