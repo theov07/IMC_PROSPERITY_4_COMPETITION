@@ -14,6 +14,8 @@ V8 direction:
 -tester le penny jump
 -tester le top of the book + join the best si best à une petite quantité
 -> chercher à contourner le probleme de reset du FIFO à chaque nouveau OB 
+->faire un module de reverse engineering sur les logs d'une srtat qui achete 1 de chaque produit au début ? 
+->ajouter au dashboard de data exploratory davantage de donnée genre corrélation, copule, le spread entre produit 
 -> ajouter un mode mm turn off en cas de vol > seuil ? indice de toxicité ? genre carrément on débranche 
 ## Première stratégie
 
