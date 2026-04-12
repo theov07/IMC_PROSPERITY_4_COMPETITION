@@ -219,6 +219,9 @@ class NaiveTightMarketMakerV7Strategy(BaseStrategy):
         pj_size_frac = float(self.params.get("pj_size_frac", 1.0))
         pj_qty_threshold = int(self.params.get("pj_qty_threshold", 0))
         qty_join_threshold = int(self.params.get("qty_join_threshold", 0))
+        join_size_frac = float(self.params.get("join_size_frac", 1.0))
+        level2_ticks = int(self.params.get("level2_ticks", 0))
+        level2_frac = float(self.params.get("level2_frac", 0.0))
 
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
@@ -364,10 +367,47 @@ class NaiveTightMarketMakerV7Strategy(BaseStrategy):
                         buy_size = max(1, buy_size // 2)
 
         # ── Orders ──
-        if buy_size > 0:
-            orders.append(Order(self.product, bid_price, buy_size))
-        if sell_size > 0:
-            orders.append(Order(self.product, ask_price, -sell_size))
+        if join_size_frac < 1.0:
+            if not tighten_bid and buy_size > 0:
+                buy_size = max(1, int(buy_size * join_size_frac))
+            if not tighten_ask and sell_size > 0:
+                sell_size = max(1, int(sell_size * join_size_frac))
+
+        bid_orders: List[Tuple[int, int]] = []
+        ask_orders: List[Tuple[int, int]] = []
+
+        def _split_level_size(total: int) -> Tuple[int, int]:
+            if total <= 1 or level2_frac <= 0.0:
+                return total, 0
+            secondary = int(round(total * level2_frac))
+            secondary = max(0, min(secondary, total - 1))
+            return total - secondary, secondary
+
+        can_two_level = (
+            level2_frac > 0.0
+            and level2_ticks > tighten_ticks
+            and spread >= (2 * level2_ticks + 1)
+        )
+        level2_bid_price = min(real_best_bid + level2_ticks, real_best_ask - 1)
+        level2_ask_price = max(real_best_ask - level2_ticks, real_best_bid + 1)
+
+        primary_buy_size, secondary_buy_size = _split_level_size(buy_size) if (can_two_level and tighten_bid) else (buy_size, 0)
+        primary_sell_size, secondary_sell_size = _split_level_size(sell_size) if (can_two_level and tighten_ask) else (sell_size, 0)
+
+        if primary_buy_size > 0:
+            bid_orders.append((bid_price, primary_buy_size))
+        if secondary_buy_size > 0 and level2_bid_price > bid_price and level2_bid_price < ask_price:
+            bid_orders.append((level2_bid_price, secondary_buy_size))
+
+        if primary_sell_size > 0:
+            ask_orders.append((ask_price, primary_sell_size))
+        if secondary_sell_size > 0 and level2_ask_price < ask_price and level2_ask_price > bid_price:
+            ask_orders.append((level2_ask_price, secondary_sell_size))
+
+        for price, size in bid_orders:
+            orders.append(Order(self.product, price, size))
+        for price, size in ask_orders:
+            orders.append(Order(self.product, price, -size))
 
         # ── logging ──
         flush_ts = int(self.params.get("log_flush_ts", 10000))
