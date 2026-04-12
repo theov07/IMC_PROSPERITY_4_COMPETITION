@@ -186,5 +186,89 @@ class TestSignalTrader(unittest.TestCase):
         self.assertTrue(len(buy_orders) > 0)
 
 
+class TestNaiveTightMarketMakerV8(unittest.TestCase):
+
+    def test_directional_signal_skews_quotes_and_sizes(self):
+        strat = build_strategy("naive_tight_mm_v8", "TOMATOES", {
+            "position_limit": 50,
+            "maker_size": 10,
+            "tighten_ticks": 1,
+            "take_edge": 1.0,
+            "unwind_take_edge": 0.0,
+            "inventory_soft_ratio": 1.0,
+            "aggravate_min_frac": 1.0,
+            "unwind_boost_frac": 0.0,
+            "toxic_window": 0,
+            "toxic_threshold": 1.0,
+            "toxic_size_frac": 1.0,
+            "jump_size_frac": 1.0,
+            "directional_imbalance_weight": 1.0,
+            "directional_flow_weight": 0.0,
+            "directional_reversion_weight": 0.0,
+            "directional_take_shift": 0.0,
+            "directional_size_skew": 0.5,
+            "directional_max_quote_bias_ticks": 1,
+        })
+        state = _make_state(product="TOMATOES", buys={100: 20, 99: 5}, sells={104: -5, 105: -10})
+        orders, _ = strat.on_tick(state, {})
+
+        best_bid = max(o.price for o in orders if o.quantity > 0)
+        best_ask = min(o.price for o in orders if o.quantity < 0)
+        buy_size = sum(o.quantity for o in orders if o.quantity > 0)
+        sell_size = -sum(o.quantity for o in orders if o.quantity < 0)
+
+        self.assertEqual(best_bid, 102)
+        self.assertEqual(best_ask, 104)
+        self.assertGreater(buy_size, sell_size)
+
+
+class TestNaiveTightMarketMakerV9(unittest.TestCase):
+
+    def test_trend_signal_skews_up_after_confirmed_pressure(self):
+        params = {
+            "position_limit": 50,
+            "maker_size": 10,
+            "tighten_ticks": 1,
+            "take_edge": 1.0,
+            "unwind_take_edge": 0.0,
+            "inventory_soft_ratio": 1.0,
+            "aggravate_min_frac": 1.0,
+            "unwind_boost_frac": 0.0,
+            "toxic_window": 0,
+            "toxic_threshold": 1.0,
+            "toxic_size_frac": 1.0,
+            "jump_size_frac": 1.0,
+            "trend_micro_weight": 1.0,
+            "trend_imbalance_weight": 0.0,
+            "trend_flow_weight": 0.0,
+            "trend_microprice_scale": 0.5,
+            "trend_pressure_ema_alpha": 1.0,
+            "trend_current_weight": 1.0,
+            "trend_pressure_ema_weight": 1.0,
+            "trend_streak_weight": 1.0,
+            "trend_price_confirm_weight": 1.0,
+            "trend_streak_threshold": 0.05,
+            "trend_streak_cap": 2,
+            "trend_price_scale": 2.0,
+            "trend_signal_alpha": 1.0,
+            "directional_take_shift": 0.0,
+            "directional_size_skew": 0.0,
+            "directional_max_quote_bias_ticks": 1,
+        }
+        strat = build_strategy("naive_tight_mm_v9", "TOMATOES", params)
+        memory = {}
+
+        state1 = _make_state(product="TOMATOES", buys={100: 25, 99: 5}, sells={104: -5, 105: -10})
+        strat.on_tick(state1, memory)
+
+        state2 = _make_state(product="TOMATOES", buys={101: 25, 100: 5}, sells={105: -5, 106: -10})
+        orders, _ = strat.on_tick(state2, memory)
+
+        best_bid = max(o.price for o in orders if o.quantity > 0)
+        best_ask = min(o.price for o in orders if o.quantity < 0)
+        self.assertEqual(best_bid, 103)
+        self.assertEqual(best_ask, 105)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,30 +1,18 @@
-"""Naive passive market maker V8.
+"""Naive passive market maker V9.
 
-V8 keeps the V1/V6 top-of-book pricing logic and adds a few small layers:
+V9 keeps the V8 passive market making core, but changes the directional
+overlay for TOMATOES:
 
-1. Smart sizing:
-   - quote around the best bid / ask as usual
-   - cut size harder on the side that worsens inventory
-   - slightly boost size on the unwind side
+1. Smart sizing and selective taking from V8 stay intact.
+2. Toxicity filtering from V8 stays intact.
+3. The directional bias is now trend-following instead of mean reversion:
+   - current pressure from microprice / imbalance / inferred flow
+   - pressure EMA over previous ticks
+   - confirmation when the same pressure sign persists across ticks
+   - optional confirmation from recent price drift in the same direction
 
-2. Toxicity filter:
-   - infer aggressive flow from trade price vs previous best bid / ask
-   - reduce the adverse side when flow is strongly directional
-   - also reduce the adverse side after one-tick jumps at the best price
-
-3. Selective take:
-   - keep the V6 "take absurd orders" layer
-   - become slightly more willing to take when that trade reduces inventory
-
-4. Optional directional skew:
-   - blend top-of-book imbalance, trade-flow pressure, and short-term
-     mean reversion into a compact signal
-   - skew quotes and sizes slightly in that direction
-   - shift the selective take threshold without turning the strategy into a
-     pure taker
-
-The goal is to preserve queue priority while adding better sizing and risk
-control, instead of changing the core pricing rule.
+The goal is to follow persistent short-term buying/selling pressure without
+chasing every single one-tick move in the mid.
 """
 
 from __future__ import annotations
@@ -38,10 +26,18 @@ from prosperity.market import BookSnapshot
 from prosperity.strategies.base import BaseStrategy
 
 
-class NaiveTightMarketMakerV8Strategy(BaseStrategy):
+class NaiveTightMarketMakerV9Strategy(BaseStrategy):
     @staticmethod
     def _clip(value: float, low: float, high: float) -> float:
         return max(low, min(high, value))
+
+    @staticmethod
+    def _signal_sign(value: float, threshold: float) -> int:
+        if value > threshold:
+            return 1
+        if value < -threshold:
+            return -1
+        return 0
 
     def _inventory_pressure(self, position: int) -> float:
         limit = self.position_limit()
@@ -49,47 +45,103 @@ class NaiveTightMarketMakerV8Strategy(BaseStrategy):
             return 0.0
         return abs(position) / float(limit)
 
-    def _compute_directional_signal(
+    def _compute_trend_signal(
         self,
         book: BookSnapshot,
         mid: float,
         flow_score: float,
         memory: Dict[str, Any],
-    ) -> Tuple[float, float, float, float]:
-        imbalance_weight = float(self.params.get("directional_imbalance_weight", 0.0))
-        flow_weight = float(self.params.get("directional_flow_weight", 0.0))
-        reversion_weight = float(self.params.get("directional_reversion_weight", 0.0))
-        total_weight = abs(imbalance_weight) + abs(flow_weight) + abs(reversion_weight)
-        if total_weight <= 0.0:
-            return 0.0, 0.0, 0.0, 0.0
+    ) -> Tuple[float, float, float, float, float, float]:
+        micro_weight = float(self.params.get("trend_micro_weight", 0.0))
+        imbalance_weight = float(self.params.get("trend_imbalance_weight", 0.0))
+        flow_weight = float(self.params.get("trend_flow_weight", 0.0))
+        current_weight_sum = abs(micro_weight) + abs(imbalance_weight) + abs(flow_weight)
+
+        microprice = book.microprice if book.microprice is not None else mid
+        micro_scale = float(self.params.get("trend_microprice_scale", 1.0))
+        if micro_scale <= 0.0:
+            micro_edge = 0.0
+        else:
+            micro_edge = self._clip((microprice - mid) / micro_scale, -1.0, 1.0)
 
         imbalance = float(book.imbalance or 0.0)
+        clipped_flow = self._clip(flow_score, -1.0, 1.0)
+
+        current_pressure = 0.0
+        if current_weight_sum > 0.0:
+            current_pressure = (
+                micro_weight * micro_edge
+                + imbalance_weight * imbalance
+                + flow_weight * clipped_flow
+            ) / current_weight_sum
+
+        ema_alpha = self._clip(float(self.params.get("trend_pressure_ema_alpha", 0.4)), 0.0, 1.0)
+        prev_pressure_ema = float(memory.get("trend_pressure_ema", 0.0))
+        if ema_alpha <= 0.0:
+            pressure_ema = prev_pressure_ema
+        elif ema_alpha >= 1.0:
+            pressure_ema = current_pressure
+        else:
+            pressure_ema = ema_alpha * current_pressure + (1.0 - ema_alpha) * prev_pressure_ema
+
         prev_mid = memory.get("prev_mid")
-        last_mid_change = 0.0 if prev_mid is None else (mid - float(prev_mid))
-
-        reversion_scale = float(self.params.get("directional_reversion_scale", 2.0))
-        if reversion_scale <= 0:
-            reversion_signal = 0.0
+        price_scale = float(self.params.get("trend_price_scale", 2.0))
+        if prev_mid is None or price_scale <= 0.0:
+            price_trend = 0.0
         else:
-            reversion_signal = self._clip(-last_mid_change / reversion_scale, -1.0, 1.0)
+            price_trend = self._clip((mid - float(prev_mid)) / price_scale, -1.0, 1.0)
 
-        raw_signal = (
-            imbalance_weight * imbalance
-            + flow_weight * self._clip(flow_score, -1.0, 1.0)
-            + reversion_weight * reversion_signal
-        ) / total_weight
+        streak_threshold = float(self.params.get("trend_streak_threshold", 0.08))
+        current_sign = self._signal_sign(current_pressure, streak_threshold)
+        prev_sign = int(memory.get("trend_pressure_sign", 0))
+        prev_streak = int(memory.get("trend_pressure_streak", 0))
+        if current_sign == 0:
+            streak = 0
+        elif current_sign == prev_sign:
+            streak = prev_streak + 1
+        else:
+            streak = 1
 
-        signal_alpha = float(self.params.get("directional_signal_alpha", 1.0))
-        signal_alpha = self._clip(signal_alpha, 0.0, 1.0)
-        prev_signal = float(memory.get("directional_signal", 0.0))
+        streak_cap = max(1, int(self.params.get("trend_streak_cap", 4)))
+        streak_factor = min(1.0, streak / float(streak_cap))
+
+        ema_sign = self._signal_sign(pressure_ema, max(1e-9, streak_threshold * 0.5))
+        aligned = current_sign != 0 and current_sign == ema_sign
+        alignment_signal = current_sign * streak_factor if aligned else 0.0
+        price_confirm = price_trend if (current_sign != 0 and price_trend * current_sign > 0.0) else 0.0
+
+        current_weight = float(self.params.get("trend_current_weight", 0.7))
+        ema_weight = float(self.params.get("trend_pressure_ema_weight", 0.9))
+        streak_weight = float(self.params.get("trend_streak_weight", 0.5))
+        price_weight = float(self.params.get("trend_price_confirm_weight", 0.2))
+        total_weight = abs(current_weight) + abs(ema_weight) + abs(streak_weight) + abs(price_weight)
+        if total_weight <= 0.0:
+            raw_signal = pressure_ema
+        else:
+            raw_signal = (
+                current_weight * current_pressure
+                + ema_weight * pressure_ema
+                + streak_weight * alignment_signal
+                + price_weight * price_confirm
+            ) / total_weight
+
+        signal_alpha = self._clip(float(self.params.get("trend_signal_alpha", 0.5)), 0.0, 1.0)
+        prev_signal = float(memory.get("trend_signal", 0.0))
         if signal_alpha <= 0.0:
-            smoothed_signal = prev_signal
+            trend_signal = prev_signal
         elif signal_alpha >= 1.0:
-            smoothed_signal = raw_signal
+            trend_signal = raw_signal
         else:
-            smoothed_signal = signal_alpha * raw_signal + (1.0 - signal_alpha) * prev_signal
+            trend_signal = signal_alpha * raw_signal + (1.0 - signal_alpha) * prev_signal
 
-        return self._clip(smoothed_signal, -1.0, 1.0), raw_signal, imbalance, reversion_signal
+        return (
+            self._clip(trend_signal, -1.0, 1.0),
+            current_pressure,
+            pressure_ema,
+            float(streak),
+            micro_edge,
+            price_trend,
+        )
 
     def _take_selective_orders(
         self,
@@ -217,14 +269,14 @@ class NaiveTightMarketMakerV8Strategy(BaseStrategy):
             if total > 0:
                 flow_score = signed / total
 
-        directional_signal, raw_signal, imbalance, reversion_signal = self._compute_directional_signal(
+        trend_signal, current_pressure, pressure_ema, streak, micro_edge, price_trend = self._compute_trend_signal(
             book=book,
             mid=mid,
             flow_score=flow_score,
             memory=memory,
         )
         directional_take_shift = float(self.params.get("directional_take_shift", 0.0))
-        directional_mid = mid + directional_signal * directional_take_shift
+        directional_mid = mid + trend_signal * directional_take_shift
 
         take_orders, buy_cap, sell_cap, take_count = self._take_selective_orders(
             order_depth=order_depth,
@@ -281,9 +333,9 @@ class NaiveTightMarketMakerV8Strategy(BaseStrategy):
             buy_size = max(1, int(round(buy_size * jump_size_frac)))
 
         directional_size_skew = float(self.params.get("directional_size_skew", 0.0))
-        if directional_size_skew > 0.0 and abs(directional_signal) > 0.0:
-            skew = directional_size_skew * abs(directional_signal)
-            if directional_signal > 0:
+        if directional_size_skew > 0.0 and abs(trend_signal) > 0.0:
+            skew = directional_size_skew * abs(trend_signal)
+            if trend_signal > 0:
                 if buy_size > 0:
                     buy_size = min(buy_cap, max(1, int(round(buy_size * (1.0 + skew)))))
                 if sell_size > 0:
@@ -295,8 +347,8 @@ class NaiveTightMarketMakerV8Strategy(BaseStrategy):
                     buy_size = max(1, int(round(buy_size * (1.0 - skew))))
 
         max_quote_bias_ticks = int(self.params.get("directional_max_quote_bias_ticks", 0))
-        if max_quote_bias_ticks > 0 and abs(directional_signal) > 0.0:
-            quote_bias = int(round(directional_signal * max_quote_bias_ticks))
+        if max_quote_bias_ticks > 0 and abs(trend_signal) > 0.0:
+            quote_bias = int(round(trend_signal * max_quote_bias_ticks))
             if quote_bias > 0:
                 bid_price = min(bid_price + quote_bias, real_best_ask - 1)
                 ask_price = min(real_best_ask, ask_price + quote_bias)
@@ -319,12 +371,15 @@ class NaiveTightMarketMakerV8Strategy(BaseStrategy):
         memory["last_ask_price"] = ask_price
         memory["last_flow_score"] = flow_score
         memory["last_take_count"] = take_count
-        memory["directional_signal"] = directional_signal
-        memory["last_directional_signal"] = directional_signal
-        memory["last_directional_raw"] = raw_signal
+        memory["trend_pressure_ema"] = pressure_ema
+        memory["trend_pressure_sign"] = self._signal_sign(current_pressure, float(self.params.get("trend_streak_threshold", 0.08)))
+        memory["trend_pressure_streak"] = int(streak)
+        memory["trend_signal"] = trend_signal
+        memory["last_trend_signal"] = trend_signal
+        memory["last_trend_pressure"] = current_pressure
+        memory["last_trend_micro_edge"] = micro_edge
+        memory["last_trend_price_confirm"] = price_trend
         memory["last_directional_mid"] = directional_mid
-        memory["last_imbalance"] = imbalance
-        memory["last_reversion_signal"] = reversion_signal
 
         flush_ts = int(self.params.get("log_flush_ts", 0))
         last_tick_ts = int(self.params.get("total_ticks", 10_000_000)) - 100
@@ -340,7 +395,7 @@ class NaiveTightMarketMakerV8Strategy(BaseStrategy):
                 buy_size,
                 sell_size,
                 flow_score,
-                directional_signal,
+                trend_signal,
                 take_count,
             ])
 
@@ -356,7 +411,7 @@ class NaiveTightMarketMakerV8Strategy(BaseStrategy):
                     "buy_size",
                     "sell_size",
                     "flow_score",
-                    "directional_signal",
+                    "trend_signal",
                     "takes",
                 ],
                 "log": log,
