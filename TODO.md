@@ -5,8 +5,9 @@ Priority list for turning this repository from a solid framework into a competit
 ## Critical
 
 - ~~Make the submission exporter derive from a stricter canonical source to reduce drift between modular code and exported code.~~ (done: exporter now inlines actual strategy source files)
-- Build a local-vs-official reconciliation tool for fills, pnl, and positions.
+- Extend the local-vs-official reconciliation tool with richer diagnostics for fills, pnl, positions, and quote behavior.
 - Add an experiment registry: strategy, round, params, days tested, total pnl, per-product pnl, notes, submission id.
+- Add backtest-json pairing confidence and better auto-discovery explanations in the dashboard UI itself.
 -Notebook 
 -Vérifier que c'est LIFO et pas LIFO qui a été implémenté 
 ## High Value
@@ -14,11 +15,13 @@ Priority list for turning this repository from a solid framework into a competit
 - Make round activation faster: one place to fill products, limits, conversions, and strategy mappings when a new round opens.
 - Improve passive fill simulation with a one-iteration queue heuristic; exact LIFO is not recoverable from snapshot-only public data.
 - Add a tournament runner that compares all strategies and saves ranked outputs to `artifacts/`.
-- Add richer metrics to comparison output: turnover, max drawdown, inventory pressure, sharpe-like stability proxies.
+- ~~Add richer metrics to comparison output: turnover, max drawdown, inventory pressure, sharpe-like stability proxies.~~ (done: compare/grid-search now expose drawdown, fill efficiency, inventory pressure, passive adverse markout proxies)
 - Extend `research/analysis.py` with per-product microstructure reports and event detection.
 - Build a standard workflow to calibrate bot signals from official logs and raw trade CSVs.
 - Add proper handling and research utilities for `state.observations` and conversion data.
 - Add liquidation / unwind modules that can be reused across strategies.
+- Add per-side quote metrics: quote age, refresh rate, stale quote exposure, and quote-to-fill by side.
+- Add inventory episode metrics: unwind half-life, time-at-limit, time one-sided, and inventory sign flips.
 
 ## Synthetic Data And Stress Testing
 
@@ -93,6 +96,8 @@ Priority list for turning this repository from a solid framework into a competit
 - Surface submission metadata such as final profit, status, submission id, and loaded files directly in reports.
 - Add runtime log inspection when useful debug information is present.
 - Add richer HTML or dashboard summaries so post-submission review is faster.
+- Add official-vs-local reconcile widgets to the dashboard instead of terminal-only summaries.
+- Add markout curves after fills for horizons like `+1`, `+2`, `+5`, `+10` ticks / snapshots.
 
 ## Nice To Have
 

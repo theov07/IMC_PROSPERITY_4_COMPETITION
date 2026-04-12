@@ -188,22 +188,18 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["half_spread"] = half_spread
 
         # ── Per-tick log accumulation (live only, suppressed during internal backtest) ──
-        if not os.environ.get("INTERNAL_BACKTEST"):
-            flush_ts = int(self.params.get("log_flush_ts", 10000))
-            last_ts = int(self.params.get("last_ts_value", 199900))
-
-            log = memory.setdefault("_log", [])
-            log.append([state.timestamp, round(reservation, 2), bid_price, ask_price])
-
-            end_of_sim = state.timestamp >= last_ts
-            checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
-            if end_of_sim or checkpoint:
-                print(json.dumps({
-                    "product": self.product,
-                    "chunk_end": state.timestamp,
-                    "log": log,  # [[timestamp, reservation, bid, ask], ...]
-                }))
-                memory["_log"] = []
+        self.log_quote_snapshot(
+            state=state,
+            memory=memory,
+            bid_price=bid_price,
+            ask_price=ask_price,
+            extras={
+                "position": position,
+                "reservation": round(reservation, 2),
+                "sigma": round(sigma, 6),
+                "half_spread": round(half_spread, 6),
+            },
+        )
 
         return orders, 0
 

@@ -66,20 +66,11 @@ class NaiveTightMarketMakerStrategy(BaseStrategy):
         memory["last_spread"] = book.spread
 
         # ── Per-tick log accumulation ──
-        flush_ts = int(self.params.get("log_flush_ts", 10000))
-        last_ts = int(self.params.get("last_ts_value", 199900))
-
-        log = memory.setdefault("_log", [])
-        log.append([state.timestamp, bid_price, ask_price])
-
-        end_of_sim = state.timestamp >= last_ts
-        checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
-        if end_of_sim or checkpoint:
-            print(json.dumps({
-                "product": self.product,
-                "chunk_end": state.timestamp,
-                "log": log,  # [[timestamp, bid, ask], ...]
-            }))
-            memory["_log"] = []
+        self.log_quote_snapshot(
+            state=state,
+            memory=memory,
+            bid_price=bid_price,
+            ask_price=ask_price,
+        )
 
         return orders, 0
