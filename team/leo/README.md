@@ -6,6 +6,8 @@ Espace de travail pour les variantes Leo.
 -tester le penny jump
 -tester le top of the book + join the best si best à une petite quantité
 -> chercher à contourner le probleme de reset du FIFO à chaque nouveau OB 
+->faire un module de reverse engineering sur les logs d'une srtat qui achete 1 de chaque produit au début ? 
+->ajouter au dashboard de data exploratory davantage de donnée genre corrélation, copule, le spread entre produit 
 ## Première stratégie
 
 La première stratégie créée dans le nouveau framework est `naive`.
