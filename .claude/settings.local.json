@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python backtest.py --strategy leo_naive_v7 --round 0)"
+    ]
+  }
+}
