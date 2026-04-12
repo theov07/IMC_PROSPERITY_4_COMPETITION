@@ -98,10 +98,11 @@ def _extract(source: str) -> tuple[list[str], str]:
         for ln in range(node.lineno, node.end_lineno + 1):
             skip.add(ln)
 
-        # Keep external imports for the top-level block.
+        # Keep external imports for the top-level block (skip IMC-forbidden ones).
         if not is_internal and not is_future:
             chunk = "".join(src_lines[node.lineno - 1 : node.end_lineno]).rstrip()
-            external.append(chunk)
+            if chunk not in {"import os"}:
+                external.append(chunk)
 
     body_lines = [line for i, line in enumerate(src_lines, 1) if i not in skip]
     body_text = "".join(body_lines).strip()
@@ -171,6 +172,9 @@ def main() -> int:
     for rel_path in module_files:
         source = (ROOT / rel_path).read_text(encoding="utf-8")
         ext_imports, body = _extract(source)
+        # Replace env-var checks with False: os never imported in the submission,
+        # and live IMC never sets this var anyway (the if-blocks still execute).
+        body = body.replace('os.environ.get("INTERNAL_BACKTEST")', "False")
 
         for imp in ext_imports:
             if imp not in seen_imports:
