@@ -8,11 +8,11 @@ Priority list for turning this repository from a solid framework into a competit
 - Build a local-vs-official reconciliation tool for fills, pnl, and positions.
 - Add an experiment registry: strategy, round, params, days tested, total pnl, per-product pnl, notes, submission id.
 -Notebook 
-
+-Vérifier que c'est LIFO et pas LIFO qui a été implémenté 
 ## High Value
 
 - Make round activation faster: one place to fill products, limits, conversions, and strategy mappings when a new round opens.
-- Improve passive fill simulation with a one-iteration queue heuristic; exact FIFO is not recoverable from snapshot-only public data.
+- Improve passive fill simulation with a one-iteration queue heuristic; exact LIFO is not recoverable from snapshot-only public data.
 - Add a tournament runner that compares all strategies and saves ranked outputs to `artifacts/`.
 - Add richer metrics to comparison output: turnover, max drawdown, inventory pressure, sharpe-like stability proxies.
 - Extend `research/analysis.py` with per-product microstructure reports and event detection.
@@ -34,7 +34,7 @@ Priority list for turning this repository from a solid framework into a competit
 
 ## Expert Market Making Gaps
 
-- Build a more realistic queue and passive fill probability model, while treating exact FIFO reconstruction as impossible with current data.
+- Build a more realistic queue and passive fill probability model, while treating exact LIFO reconstruction as impossible with current data.
 - Add toxicity detection to reduce quoting during adverse flow.
 - Add advanced quote policy logic: when to join, improve, widen, or remove one side.
 - Add explicit soft liquidation and hard liquidation rules.
@@ -61,6 +61,8 @@ Priority list for turning this repository from a solid framework into a competit
 
 ## Strategy Work
 
+- Evaluate `naive_tight_mm_v8` in tiny manual batches before any broader sweep.
+- Focus V8 research on smart sizing, toxicity filtering, and selective taking while keeping top-of-book pricing unchanged.
 - Calibrate `avellaneda_stoikov` on real product data instead of leaving it as a generic implementation.
 - Prepare stat-arb templates for likely basket rounds.
 - Prepare options templates for likely voucher / derivative rounds.
