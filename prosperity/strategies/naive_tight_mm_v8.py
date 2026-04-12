@@ -230,30 +230,18 @@ class NaiveTightMarketMakerV8Strategy(BaseStrategy):
         memory["last_flow_score"] = flow_score
         memory["last_take_count"] = take_count
 
-        flush_ts = int(self.params.get("log_flush_ts", 0))
-        last_tick_ts = int(self.params.get("total_ticks", 10_000_000)) - 100
-        end_of_sim = state.timestamp >= last_tick_ts
-        checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
-        if flush_ts > 0 or end_of_sim:
-            log = memory.setdefault("_log", [])
-            log.append([state.timestamp, bid_price, ask_price, position, buy_size, sell_size, flow_score, take_count])
-
-        if end_of_sim or checkpoint:
-            print(json.dumps({
-                "product": self.product,
-                "chunk_end": state.timestamp,
-                "columns": [
-                    "timestamp",
-                    "bid",
-                    "ask",
-                    "position",
-                    "buy_size",
-                    "sell_size",
-                    "flow_score",
-                    "takes",
-                ],
-                "log": log,
-            }))
-            memory["_log"] = []
+        self.log_quote_snapshot(
+            state=state,
+            memory=memory,
+            bid_price=bid_price,
+            ask_price=ask_price,
+            extras={
+                "position": position,
+                "buy_size": buy_size,
+                "sell_size": sell_size,
+                "flow_score": flow_score,
+                "takes": take_count,
+            },
+        )
 
         return orders, 0

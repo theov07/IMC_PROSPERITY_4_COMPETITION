@@ -203,8 +203,37 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
     decoder = json.JSONDecoder()
     rows = []
 
-    def _append_quote_row(product: str, tick: list[object]) -> None:
+    def _append_quote_row(product: str, tick: list[object], columns: list[object] | None = None) -> None:
         if len(tick) < 3:
+            return
+
+        if columns:
+            normalized_columns = [str(column) for column in columns]
+            mapped = {
+                name: (tick[index] if index < len(tick) else None)
+                for index, name in enumerate(normalized_columns)
+            }
+
+            timestamp = mapped.get("timestamp")
+            bid_price = mapped.get("bid_price", mapped.get("bid"))
+            ask_price = mapped.get("ask_price", mapped.get("ask"))
+            reservation = mapped.get("reservation")
+
+            if timestamp is None or bid_price is None or ask_price is None:
+                return
+
+            row = {
+                "timestamp": int(float(timestamp)),
+                "product": product,
+                "reservation": float(reservation) if reservation is not None else None,
+                "bid_price": int(float(bid_price)),
+                "ask_price": int(float(ask_price)),
+            }
+            for key, value in mapped.items():
+                if key in {"timestamp", "bid", "ask", "bid_price", "ask_price", "reservation"}:
+                    continue
+                row[key] = value
+            rows.append(row)
             return
 
         timestamp = int(tick[0])
@@ -213,16 +242,9 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
         ask_price = None
 
         if len(tick) == 3:
-            # Format: [timestamp, bid_price, ask_price]
             bid_price = tick[1]
             ask_price = tick[2]
         else:
-            # Heuristic:
-            # - reservation-first format has reservation between bid and ask:
-            #   [timestamp, reservation, bid, ask]
-            # - quote-first format starts with the quoted bid/ask and may append
-            #   strategy-specific diagnostics such as tighten/skew/order_count:
-            #   [timestamp, bid, ask, ...]
             try:
                 maybe_reservation = float(tick[1]) if tick[1] is not None else None
                 maybe_bid = float(tick[2]) if tick[2] is not None else None
@@ -280,11 +302,15 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
             product = obj.get("product")
             if not product:
                 continue
+            columns = obj.get("columns")
             for tick in obj.get("log", []):
-                _append_quote_row(product, tick)
+                _append_quote_row(product, tick, columns if isinstance(columns, list) else None)
     if not rows:
         return pd.DataFrame(columns=["timestamp", "product", "reservation", "bid_price", "ask_price"])
-    return pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
+    frame = pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
+    base_columns = ["timestamp", "product", "reservation", "bid_price", "ask_price"]
+    extra_columns = [column for column in frame.columns if column not in base_columns]
+    return frame[base_columns + extra_columns]
 
 
 def _submission_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -435,6 +461,7 @@ def summarize_log(log: OfficialLog) -> str:
 def run_cli(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Analyze Prosperity official JSON / LOG files")
     parser.add_argument("--log", required=True, help="Path to an official JSON or LOG file")
+    parser.add_argument("--backtest-json", help="Optional local backtest JSON to auto-reconcile against (auto-discovery is attempted from artifacts/)")
     parser.add_argument("--symbol", action="append", help="Product symbol to plot, can be passed multiple times")
     parser.add_argument("--outdir", default="artifacts/analysis", help="Directory that will receive generated plots")
     parser.add_argument("--edge", type=float, default=1.0, help="Opportunity threshold around fair value")
@@ -444,6 +471,22 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     symbols = args.symbol or sorted(log.activities["product"].dropna().unique())
 
     print(summarize_log(log))
+    backtest_json_path = args.backtest_json
+    if backtest_json_path is None:
+        from prosperity.tooling.reconcile import discover_backtest_json
+
+        discovered = discover_backtest_json(log)
+        if discovered is not None:
+            backtest_json_path = str(discovered)
+            print(f"Auto-discovered backtest JSON: {backtest_json_path}")
+
+    if backtest_json_path:
+        from prosperity.tooling.reconcile import reconcile_backtest_to_official, summarize_reconcile_report
+
+        backtest_data = json.loads(Path(backtest_json_path).read_text(encoding="utf-8"))
+        report = reconcile_backtest_to_official(backtest_data, log)
+        print(summarize_reconcile_report(report))
+
     for symbol in symbols:
         output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge)
         print(f"saved {output_path}")

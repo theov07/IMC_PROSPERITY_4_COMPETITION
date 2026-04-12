@@ -30,7 +30,12 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from werkzeug.serving import make_server
+try:
+    from werkzeug.serving import make_server
+    HAS_WERKZEUG = True
+except ImportError:
+    make_server = None
+    HAS_WERKZEUG = False
 
 try:
     from dash import Dash, dcc, html, Input, Output
@@ -752,9 +757,13 @@ def _toggle_btn_style(theme: str) -> dict:
 
 
 def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None = None,
-             log_path: str | None = None, backtest_json_path: str | None = None):
+             log_path: str | None = None, backtest_json_path: str | None = None,
+             reconcile_report: dict | None = None):
     if not HAS_DASH:
         print("dash not installed. Run: pip install dash")
+        return
+    if not HAS_WERKZEUG:
+        print("werkzeug not installed. Run: pip install werkzeug")
         return
 
     from dash import State
@@ -1037,7 +1046,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
 def run_cli(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prosperity interactive dashboard")
     parser.add_argument("--log", help="Path to official IMC JSON or LOG file")
-    parser.add_argument("--backtest-json", help="Path to backtest JSON (from --json-out)")
+    parser.add_argument("--backtest-json", help="Path to backtest JSON (optional: auto-discovery is attempted from artifacts/)")
     parser.add_argument("--data-dir", default=None,
         help="Market data directory (enables price chart in backtest view)")
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -1052,14 +1061,33 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         print(f"Loaded IMC log: {log.submission_id}  profit={log.profit}")
 
     backtest_data = None
-    if args.backtest_json:
-        backtest_data = json.loads(Path(args.backtest_json).read_text(encoding="utf-8"))
+    backtest_json_path = args.backtest_json
+    if backtest_json_path is None and log is not None:
+        from prosperity.tooling.reconcile import discover_backtest_json
+
+        discovered = discover_backtest_json(log)
+        if discovered is not None:
+            backtest_json_path = str(discovered)
+            print(f"Auto-discovered backtest JSON: {backtest_json_path}")
+        else:
+            print("No confident backtest JSON auto-discovered. Pass --backtest-json to force reconciliation.")
+
+    if backtest_json_path:
+        backtest_data = json.loads(Path(backtest_json_path).read_text(encoding="utf-8"))
         total = sum(d["pnl"] for d in backtest_data["days"])
         print(f"Loaded backtest: strategy={backtest_data.get('strategy')}  "
               f"days={[d['day'] for d in backtest_data['days']]}  total_pnl={total:.2f}")
 
+    reconcile_report = None
+    if log is not None and backtest_data is not None:
+        from prosperity.tooling.reconcile import reconcile_backtest_to_official, summarize_reconcile_report
+
+        reconcile_report = reconcile_backtest_to_official(backtest_data, log)
+        print(summarize_reconcile_report(reconcile_report))
+
     run_dash(log=log, backtest_data=backtest_data, data_dir=args.data_dir,
-             log_path=args.log, backtest_json_path=args.backtest_json)
+             log_path=args.log, backtest_json_path=backtest_json_path,
+             reconcile_report=reconcile_report)
     return 0
 
 

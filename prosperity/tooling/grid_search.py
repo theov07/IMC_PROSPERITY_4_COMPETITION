@@ -13,7 +13,6 @@ Runs all combinations and produces a ranked table.
 from __future__ import annotations
 
 import argparse
-import copy
 import itertools
 import json
 import sys
@@ -22,13 +21,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
-# Ensure project root is on path
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from prosperity.config import ProductConfig, get_round_config, MEMBER_OVERRIDES
-from prosperity.tooling.backtest import BacktestEngine, TradeMatchingMode
+from prosperity.config import ProductConfig, MEMBER_OVERRIDES, get_round_config
+from prosperity.tooling.backtest import BacktestEngine, TradeMatchingMode, aggregate_day_summaries
 
 
 @dataclass
@@ -37,6 +35,7 @@ class SweepResult:
     total_pnl: float
     per_day: List[float]
     per_product: Dict[str, float]
+    robustness: Dict[str, Any]
 
 
 def _parse_param_spec(spec: str) -> Tuple[str, str, List[float]]:
@@ -51,16 +50,35 @@ def _parse_param_spec(spec: str) -> Tuple[str, str, List[float]]:
 
 
 def _apply_overrides(round_num: int, overrides: Dict[str, Dict[str, float]], member: str = "champion"):
-    """Temporarily patch ROUNDS config with overrides and return the modified round dict."""
+    """Temporarily patch round config with overrides and return the modified mapping."""
     base = get_round_config(round_num, member)
     patched: Dict[str, ProductConfig] = {}
     for sym, pc in base.items():
         if sym in overrides:
             new_params = {**pc.params, **overrides[sym]}
-            patched[sym] = ProductConfig(symbol=pc.symbol, strategy=pc.strategy, position_limit=pc.position_limit, params=new_params)
+            patched[sym] = ProductConfig(
+                symbol=pc.symbol,
+                strategy=pc.strategy,
+                position_limit=pc.position_limit,
+                params=new_params,
+            )
         else:
             patched[sym] = pc
     return patched
+
+
+def _result_sort_key(result: SweepResult, rank_by: str) -> tuple:
+    adverse = result.robustness.get("passive_adverse_rate")
+
+    if rank_by == "drawdown":
+        return (result.robustness.get("max_drawdown", float("inf")), -result.total_pnl)
+    if rank_by == "fill_efficiency":
+        return (-(result.robustness.get("fill_efficiency") or 0.0), -result.total_pnl)
+    if rank_by == "inventory_pressure":
+        return (result.robustness.get("avg_abs_position_ratio", float("inf")), -result.total_pnl)
+    if rank_by == "passive_adverse_rate":
+        return (adverse if adverse is not None else float("inf"), -result.total_pnl)
+    return (-result.total_pnl,)
 
 
 def run_grid_search(
@@ -73,9 +91,7 @@ def run_grid_search(
     mode: TradeMatchingMode = TradeMatchingMode.queue,
 ) -> List[SweepResult]:
     """Run all parameter combinations and return ranked results."""
-    parsed = [_parse_param_spec(s) for s in param_specs]
-
-    # Build cartesian product
+    parsed = [_parse_param_spec(spec) for spec in param_specs]
     param_names = [(sym, param) for sym, param, _ in parsed]
     value_lists = [values for _, _, values in parsed]
     combos = list(itertools.product(*value_lists))
@@ -83,16 +99,13 @@ def run_grid_search(
     print(f"Grid search: {len(combos)} combinations, {len(days)} day(s)")
     results: List[SweepResult] = []
 
-    for i, combo in enumerate(combos):
+    for index, combo in enumerate(combos):
         overrides: Dict[str, Dict[str, float]] = {}
         combo_desc: Dict[str, Any] = {}
-        for (sym, param), val in zip(param_names, combo):
-            overrides.setdefault(sym, {})[param] = val
-            combo_desc[f"{sym}.{param}"] = val
+        for (sym, param), value in zip(param_names, combo):
+            overrides.setdefault(sym, {})[param] = value
+            combo_desc[f"{sym}.{param}"] = value
 
-        # Patch MEMBER_OVERRIDES so get_round_config sees the combo params.
-        # Patching ROUNDS is insufficient: get_round_config applies member
-        # overrides on top of ROUNDS, which would silently undo any ROUNDS patch.
         patched = _apply_overrides(round_num, overrides, member)
         member_rounds = MEMBER_OVERRIDES.setdefault(member, {})
         original_member = member_rounds.get(round_num)
@@ -100,25 +113,32 @@ def run_grid_search(
 
         try:
             engine = BacktestEngine(data_dir, strategy, round_num=round_num)
+            summaries = []
             day_pnls = []
-            product_pnls: Dict[str, float] = {}
             for day in days:
                 summary = engine.run_day(day, mode=mode)
+                summaries.append(summary)
                 day_pnls.append(summary.pnl)
-                for sym, ps in summary.product_summaries.items():
-                    product_pnls[sym] = product_pnls.get(sym, 0.0) + ps.pnl
-            total = sum(day_pnls)
-            results.append(SweepResult(params=combo_desc, total_pnl=total, per_day=day_pnls, per_product=product_pnls))
+
+            aggregate = aggregate_day_summaries(summaries)
+            results.append(
+                SweepResult(
+                    params=combo_desc,
+                    total_pnl=aggregate["total_pnl"],
+                    per_day=day_pnls,
+                    per_product=aggregate["per_product_pnl"],
+                    robustness=aggregate["robustness"],
+                )
+            )
         finally:
             if original_member is None:
                 member_rounds.pop(round_num, None)
             else:
                 member_rounds[round_num] = original_member
 
-        if (i + 1) % 10 == 0 or i + 1 == len(combos):
-            print(f"  [{i + 1}/{len(combos)}] last_pnl={results[-1].total_pnl:.2f}")
+        if (index + 1) % 10 == 0 or index + 1 == len(combos):
+            print(f"  [{index + 1}/{len(combos)}] last_pnl={results[-1].total_pnl:.2f}")
 
-    results.sort(key=lambda r: r.total_pnl, reverse=True)
     return results
 
 
@@ -135,14 +155,21 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         "--match-trades",
         dest="execution_rule",
         default="queue",
-        choices=["queue", "all", "worse", "none"],
+        choices=["queue", "all", "worse", "none", "realistic"],
         help="Passive fill rule to use during the sweep.",
     )
     parser.add_argument("--top", type=int, default=10, help="Show top N results")
+    parser.add_argument(
+        "--rank-by",
+        default="pnl",
+        choices=["pnl", "drawdown", "fill_efficiency", "inventory_pressure", "passive_adverse_rate"],
+        help="Ranking metric for the sweep results.",
+    )
     parser.add_argument("--json-out", help="Save full results to JSON")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     from prosperity.tooling.data import MarketDataLoader
+
     loader = MarketDataLoader(args.data_dir)
     days = args.days or loader.available_days(args.round)
 
@@ -156,18 +183,34 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         member=args.strategy,
         mode=TradeMatchingMode(args.execution_rule),
     )
+    results.sort(key=lambda result: _result_sort_key(result, args.rank_by))
     elapsed = time.time() - t0
 
-    print(f"\n{'='*60}")
-    print(f"Grid search complete in {elapsed:.1f}s — top {args.top} results:")
-    print(f"{'='*60}")
-    for i, r in enumerate(results[:args.top]):
-        params_str = ", ".join(f"{k}={v}" for k, v in r.params.items())
-        products_str = ", ".join(f"{k}={v:.1f}" for k, v in r.per_product.items())
-        print(f"  #{i+1}: pnl={r.total_pnl:>10.2f}  [{products_str}]  {params_str}")
+    print(f"\n{'=' * 60}")
+    print(f"Grid search complete in {elapsed:.1f}s - top {args.top} results (rank_by={args.rank_by}):")
+    print(f"{'=' * 60}")
+    for index, result in enumerate(results[:args.top], start=1):
+        params_str = ", ".join(f"{key}={value}" for key, value in result.params.items())
+        products_str = ", ".join(f"{key}={value:.1f}" for key, value in result.per_product.items())
+        print(
+            f"  #{index}: pnl={result.total_pnl:>10.2f} "
+            f"dd={(result.robustness.get('max_drawdown') or 0.0):>8.2f} "
+            f"fill_eff={(result.robustness.get('fill_efficiency') or 0.0):>6.3f} "
+            f"inv={(result.robustness.get('avg_abs_position_ratio') or 0.0):>6.3f} "
+            f"[{products_str}]  {params_str}"
+        )
 
     if args.json_out:
-        payload = [{"params": r.params, "total_pnl": r.total_pnl, "per_day": r.per_day, "per_product": r.per_product} for r in results]
+        payload = [
+            {
+                "params": result.params,
+                "total_pnl": result.total_pnl,
+                "per_day": result.per_day,
+                "per_product": result.per_product,
+                "robustness": result.robustness,
+            }
+            for result in results
+        ]
         Path(args.json_out).write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(f"Saved to {args.json_out}")
 

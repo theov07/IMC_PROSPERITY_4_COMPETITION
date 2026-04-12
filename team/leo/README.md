@@ -10,6 +10,14 @@ V8 direction:
 - take selectif
 - petits batches de test seulement
 
+Framework quick state:
+
+- backtester: mode `realistic` propagé partout
+- backtester: métriques de robustesse ajoutées (`drawdown`, `fill_efficiency`, `inventory_pressure`, `passive_adverse_rate`)
+- compare / grid_search: classement possible par robustesse avec `--rank-by`
+- reconcile: disponible en CLI, lancé automatiquement par le dashboard et l'analyzer si un backtest local cohérent est trouvé
+- dashboard / analyzer: auto-discovery best-effort du `backtest_json` dans `artifacts/`
+
 -tester la strat top of the book avec deux levels
 -tester le penny jump
 -tester le top of the book + join the best si best à une petite quantité

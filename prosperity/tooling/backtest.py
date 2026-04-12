@@ -80,6 +80,28 @@ class ProductSummary:
     traded_volume: int
     turnover: float
     max_abs_position: int
+    robustness: "RobustnessSummary"
+
+
+@dataclass
+class RobustnessSummary:
+    submitted_volume: int
+    traded_volume: int
+    aggressive_qty: int
+    passive_qty: int
+    aggressive_trades: int
+    passive_trades: int
+    tick_count: int
+    avg_abs_position_ratio: float
+    near_limit_tick_count: int
+    near_limit_tick_ratio: float
+    fill_efficiency: float
+    aggressive_share: float
+    passive_eval_qty: int
+    passive_adverse_qty: int
+    passive_adverse_rate: float | None
+    passive_post_fill_edge: float | None
+    max_drawdown: float | None = None
 
 
 @dataclass
@@ -104,6 +126,7 @@ class DaySummary:
     fills: List[Fill]
     product_summaries: Dict[str, ProductSummary]
     equity_curve: List[Tuple[int, float]]
+    robustness: RobustnessSummary
     quotes: List[Quote] = field(default_factory=list)
     feature_ticks: List[FeatureTick] = field(default_factory=list)
 
@@ -421,6 +444,58 @@ class BacktestEngine:
             return any(trade.price < order.price for trade in current_market_trades)
         return any(trade.price > order.price for trade in current_market_trades)
 
+    @staticmethod
+    def _max_drawdown(equity_curve: List[Tuple[int, float]]) -> float:
+        peak: float | None = None
+        max_drawdown = 0.0
+        for _, value in equity_curve:
+            peak = value if peak is None else max(peak, value)
+            max_drawdown = max(max_drawdown, peak - value)
+        return max_drawdown
+
+    @staticmethod
+    def _build_robustness_summary(
+        *,
+        submitted_volume: int,
+        traded_volume: int,
+        aggressive_qty: int,
+        passive_qty: int,
+        aggressive_trades: int,
+        passive_trades: int,
+        tick_count: int,
+        position_ratio_sum: float,
+        near_limit_tick_count: int,
+        passive_eval_qty: int,
+        passive_adverse_qty: int,
+        passive_edge_sum: float,
+        max_drawdown: float | None = None,
+    ) -> RobustnessSummary:
+        avg_abs_position_ratio = (position_ratio_sum / tick_count) if tick_count else 0.0
+        near_limit_tick_ratio = (near_limit_tick_count / tick_count) if tick_count else 0.0
+        fill_efficiency = (traded_volume / submitted_volume) if submitted_volume else 0.0
+        aggressive_share = (aggressive_qty / traded_volume) if traded_volume else 0.0
+        passive_adverse_rate = (passive_adverse_qty / passive_eval_qty) if passive_eval_qty else None
+        passive_post_fill_edge = (passive_edge_sum / passive_eval_qty) if passive_eval_qty else None
+        return RobustnessSummary(
+            submitted_volume=submitted_volume,
+            traded_volume=traded_volume,
+            aggressive_qty=aggressive_qty,
+            passive_qty=passive_qty,
+            aggressive_trades=aggressive_trades,
+            passive_trades=passive_trades,
+            tick_count=tick_count,
+            avg_abs_position_ratio=avg_abs_position_ratio,
+            near_limit_tick_count=near_limit_tick_count,
+            near_limit_tick_ratio=near_limit_tick_ratio,
+            fill_efficiency=fill_efficiency,
+            aggressive_share=aggressive_share,
+            passive_eval_qty=passive_eval_qty,
+            passive_adverse_qty=passive_adverse_qty,
+            passive_adverse_rate=passive_adverse_rate,
+            passive_post_fill_edge=passive_post_fill_edge,
+            max_drawdown=max_drawdown,
+        )
+
     def run_day(self, day: str, mode: TradeMatchingMode = TradeMatchingMode.queue) -> DaySummary:
         price_file = f"prices_round_{self.round_num}_day_{day}.csv"
         trade_file = f"trades_round_{self.round_num}_day_{day}.csv"
@@ -439,6 +514,11 @@ class BacktestEngine:
         turnover_by_product = {product: 0.0 for product in products}
         positions = {product: 0 for product in products}
         max_abs_position = {product: 0 for product in products}
+        limits = self._get_position_limits()
+        submitted_volume_by_product = {product: 0 for product in products}
+        position_ratio_sum_by_product = {product: 0.0 for product in products}
+        near_limit_tick_count_by_product = {product: 0 for product in products}
+        tick_count_by_product = {product: 0 for product in products}
 
         recent_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
         all_fills: List[Fill] = []
@@ -475,10 +555,12 @@ class BacktestEngine:
 
                 next_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
 
-                # Record best bid/ask quotes submitted by the strategy
                 for product, orders in trader_result.items():
-                    buy_prices = [o.price for o in orders if o.quantity > 0]
-                    sell_prices = [o.price for o in orders if o.quantity < 0]
+                    safe_orders = self._respect_exchange_limits(product, positions.get(product, 0), orders)
+                    submitted_volume_by_product[product] += sum(abs(order.quantity) for order in safe_orders)
+
+                    buy_prices = [o.price for o in safe_orders if o.quantity > 0]
+                    sell_prices = [o.price for o in safe_orders if o.quantity < 0]
                     all_quotes.append(Quote(
                         timestamp=timestamp,
                         symbol=product,
@@ -486,8 +568,6 @@ class BacktestEngine:
                         ask=min(sell_prices) if sell_prices else None,
                     ))
 
-                for product, orders in trader_result.items():
-                    safe_orders = self._respect_exchange_limits(product, positions.get(product, 0), orders)
                     fills = self._simulate_fills(
                         order_depths.get(product, OrderDepth()),
                         safe_orders,
@@ -516,6 +596,12 @@ class BacktestEngine:
                 marked_equity = 0.0
                 for product in products:
                     marked_equity += cash_by_product[product]
+                    limit = limits.get(product, 0)
+                    position_ratio = (abs(positions[product]) / float(limit)) if limit else 0.0
+                    position_ratio_sum_by_product[product] += position_ratio
+                    tick_count_by_product[product] += 1
+                    if position_ratio >= 0.75:
+                        near_limit_tick_count_by_product[product] += 1
                     order_depth = order_depths.get(product)
                     if order_depth is not None:
                         marked_equity += positions[product] * self._mid_price(order_depth)
@@ -526,7 +612,47 @@ class BacktestEngine:
 
         product_summaries: Dict[str, ProductSummary] = {}
         total_pnl = 0.0
-        last_timestamp = sorted(order_history.keys())[-1]
+        last_timestamp = timestamps[-1]
+        next_timestamp_by_current = {
+            timestamps[index]: timestamps[index + 1]
+            for index in range(len(timestamps) - 1)
+        }
+        mid_by_product_and_timestamp = {
+            product: {
+                timestamp: self._mid_price(order_history[timestamp][product])
+                for timestamp in timestamps
+            }
+            for product in products
+        }
+
+        aggressive_qty_by_product = {product: 0 for product in products}
+        passive_qty_by_product = {product: 0 for product in products}
+        aggressive_trades_by_product = {product: 0 for product in products}
+        passive_trades_by_product = {product: 0 for product in products}
+        passive_eval_qty_by_product = {product: 0 for product in products}
+        passive_adverse_qty_by_product = {product: 0 for product in products}
+        passive_edge_sum_by_product = {product: 0.0 for product in products}
+
+        for fill in all_fills:
+            if fill.aggressive:
+                aggressive_qty_by_product[fill.symbol] += fill.quantity
+                aggressive_trades_by_product[fill.symbol] += 1
+            else:
+                passive_qty_by_product[fill.symbol] += fill.quantity
+                passive_trades_by_product[fill.symbol] += 1
+                next_timestamp = next_timestamp_by_current.get(fill.timestamp)
+                if next_timestamp is None:
+                    continue
+                next_mid = mid_by_product_and_timestamp.get(fill.symbol, {}).get(next_timestamp)
+                if next_mid is None:
+                    continue
+                signed_edge = (next_mid - fill.price) * (1 if fill.side == "BUY" else -1)
+                passive_eval_qty_by_product[fill.symbol] += fill.quantity
+                passive_edge_sum_by_product[fill.symbol] += signed_edge * fill.quantity
+                if signed_edge < 0:
+                    passive_adverse_qty_by_product[fill.symbol] += fill.quantity
+
+        day_drawdown = self._max_drawdown(equity_curve)
 
         for product in products:
             ending_cash = cash_by_product[product]
@@ -534,13 +660,53 @@ class BacktestEngine:
             pnl = ending_cash + positions[product] * final_mid
             total_pnl += pnl
             product_fills = [fill for fill in all_fills if fill.symbol == product]
+            robustness = self._build_robustness_summary(
+                submitted_volume=submitted_volume_by_product[product],
+                traded_volume=sum(fill.quantity for fill in product_fills),
+                aggressive_qty=aggressive_qty_by_product[product],
+                passive_qty=passive_qty_by_product[product],
+                aggressive_trades=aggressive_trades_by_product[product],
+                passive_trades=passive_trades_by_product[product],
+                tick_count=tick_count_by_product[product],
+                position_ratio_sum=position_ratio_sum_by_product[product],
+                near_limit_tick_count=near_limit_tick_count_by_product[product],
+                passive_eval_qty=passive_eval_qty_by_product[product],
+                passive_adverse_qty=passive_adverse_qty_by_product[product],
+                passive_edge_sum=passive_edge_sum_by_product[product],
+            )
             product_summaries[product] = ProductSummary(
                 symbol=product, pnl=pnl, ending_position=positions[product],
                 trades=len(product_fills), traded_volume=sum(fill.quantity for fill in product_fills),
                 turnover=turnover_by_product[product], max_abs_position=max_abs_position[product],
+                robustness=robustness,
             )
 
-        return DaySummary(day=day, pnl=total_pnl, fills=all_fills, product_summaries=product_summaries, equity_curve=equity_curve, quotes=all_quotes, feature_ticks=all_feature_ticks)
+        total_robustness = self._build_robustness_summary(
+            submitted_volume=sum(submitted_volume_by_product.values()),
+            traded_volume=sum(fill.quantity for fill in all_fills),
+            aggressive_qty=sum(aggressive_qty_by_product.values()),
+            passive_qty=sum(passive_qty_by_product.values()),
+            aggressive_trades=sum(aggressive_trades_by_product.values()),
+            passive_trades=sum(passive_trades_by_product.values()),
+            tick_count=sum(tick_count_by_product.values()),
+            position_ratio_sum=sum(position_ratio_sum_by_product.values()),
+            near_limit_tick_count=sum(near_limit_tick_count_by_product.values()),
+            passive_eval_qty=sum(passive_eval_qty_by_product.values()),
+            passive_adverse_qty=sum(passive_adverse_qty_by_product.values()),
+            passive_edge_sum=sum(passive_edge_sum_by_product.values()),
+            max_drawdown=day_drawdown,
+        )
+
+        return DaySummary(
+            day=day,
+            pnl=total_pnl,
+            fills=all_fills,
+            product_summaries=product_summaries,
+            equity_curve=equity_curve,
+            robustness=total_robustness,
+            quotes=all_quotes,
+            feature_ticks=all_feature_ticks,
+        )
 
 
 def _result_to_jsonable(summary: DaySummary) -> Dict[str, object]:
@@ -550,9 +716,122 @@ def _result_to_jsonable(summary: DaySummary) -> Dict[str, object]:
         "fills": [asdict(fill) for fill in summary.fills],
         "product_summaries": {product: asdict(ps) for product, ps in summary.product_summaries.items()},
         "equity_curve": summary.equity_curve,
+        "robustness": asdict(summary.robustness),
         "quotes": [asdict(q) for q in summary.quotes],
         "feature_ticks": [{"timestamp": ft.timestamp, "symbol": ft.symbol, **ft.features}
                           for ft in summary.feature_ticks],
+    }
+
+
+def _chain_equity_curves(summaries: List[DaySummary]) -> List[Tuple[int, float]]:
+    chained: List[Tuple[int, float]] = []
+    ts_offset = 0
+    pnl_carry = 0.0
+
+    for summary in summaries:
+        curve = summary.equity_curve
+        if curve:
+            for timestamp, value in curve:
+                chained.append((timestamp + ts_offset, value + pnl_carry))
+            tick = (curve[1][0] - curve[0][0]) if len(curve) >= 2 else 100
+            ts_offset += curve[-1][0] + tick
+        pnl_carry += summary.pnl
+
+    return chained
+
+
+def aggregate_day_summaries(summaries: List[DaySummary]) -> Dict[str, object]:
+    total_pnl = sum(summary.pnl for summary in summaries)
+    chained_equity = _chain_equity_curves(summaries)
+    total_drawdown = BacktestEngine._max_drawdown(chained_equity)
+
+    per_product_pnl: Dict[str, float] = {}
+    per_product_trades: Dict[str, int] = {}
+    per_product_max_pos: Dict[str, int] = {}
+    per_product_robustness: Dict[str, RobustnessSummary] = {}
+
+    for summary in summaries:
+        for symbol, product_summary in summary.product_summaries.items():
+            per_product_pnl[symbol] = per_product_pnl.get(symbol, 0.0) + product_summary.pnl
+            per_product_trades[symbol] = per_product_trades.get(symbol, 0) + product_summary.trades
+            per_product_max_pos[symbol] = max(per_product_max_pos.get(symbol, 0), product_summary.max_abs_position)
+
+            existing = per_product_robustness.get(symbol)
+            current = product_summary.robustness
+            if existing is None:
+                per_product_robustness[symbol] = RobustnessSummary(
+                    submitted_volume=current.submitted_volume,
+                    traded_volume=current.traded_volume,
+                    aggressive_qty=current.aggressive_qty,
+                    passive_qty=current.passive_qty,
+                    aggressive_trades=current.aggressive_trades,
+                    passive_trades=current.passive_trades,
+                    tick_count=current.tick_count,
+                    avg_abs_position_ratio=current.avg_abs_position_ratio,
+                    near_limit_tick_count=current.near_limit_tick_count,
+                    near_limit_tick_ratio=current.near_limit_tick_ratio,
+                    fill_efficiency=current.fill_efficiency,
+                    aggressive_share=current.aggressive_share,
+                    passive_eval_qty=current.passive_eval_qty,
+                    passive_adverse_qty=current.passive_adverse_qty,
+                    passive_adverse_rate=current.passive_adverse_rate,
+                    passive_post_fill_edge=current.passive_post_fill_edge,
+                    max_drawdown=None,
+                )
+                continue
+
+            merged = BacktestEngine._build_robustness_summary(
+                submitted_volume=existing.submitted_volume + current.submitted_volume,
+                traded_volume=existing.traded_volume + current.traded_volume,
+                aggressive_qty=existing.aggressive_qty + current.aggressive_qty,
+                passive_qty=existing.passive_qty + current.passive_qty,
+                aggressive_trades=existing.aggressive_trades + current.aggressive_trades,
+                passive_trades=existing.passive_trades + current.passive_trades,
+                tick_count=existing.tick_count + current.tick_count,
+                position_ratio_sum=(
+                    existing.avg_abs_position_ratio * existing.tick_count
+                    + current.avg_abs_position_ratio * current.tick_count
+                ),
+                near_limit_tick_count=existing.near_limit_tick_count + current.near_limit_tick_count,
+                passive_eval_qty=existing.passive_eval_qty + current.passive_eval_qty,
+                passive_adverse_qty=existing.passive_adverse_qty + current.passive_adverse_qty,
+                passive_edge_sum=(
+                    (existing.passive_post_fill_edge or 0.0) * existing.passive_eval_qty
+                    + (current.passive_post_fill_edge or 0.0) * current.passive_eval_qty
+                ),
+                max_drawdown=None,
+            )
+            per_product_robustness[symbol] = merged
+
+    total_robustness = BacktestEngine._build_robustness_summary(
+        submitted_volume=sum(summary.robustness.submitted_volume for summary in summaries),
+        traded_volume=sum(summary.robustness.traded_volume for summary in summaries),
+        aggressive_qty=sum(summary.robustness.aggressive_qty for summary in summaries),
+        passive_qty=sum(summary.robustness.passive_qty for summary in summaries),
+        aggressive_trades=sum(summary.robustness.aggressive_trades for summary in summaries),
+        passive_trades=sum(summary.robustness.passive_trades for summary in summaries),
+        tick_count=sum(summary.robustness.tick_count for summary in summaries),
+        position_ratio_sum=sum(
+            summary.robustness.avg_abs_position_ratio * summary.robustness.tick_count
+            for summary in summaries
+        ),
+        near_limit_tick_count=sum(summary.robustness.near_limit_tick_count for summary in summaries),
+        passive_eval_qty=sum(summary.robustness.passive_eval_qty for summary in summaries),
+        passive_adverse_qty=sum(summary.robustness.passive_adverse_qty for summary in summaries),
+        passive_edge_sum=sum(
+            (summary.robustness.passive_post_fill_edge or 0.0) * summary.robustness.passive_eval_qty
+            for summary in summaries
+        ),
+        max_drawdown=total_drawdown,
+    )
+
+    return {
+        "total_pnl": total_pnl,
+        "per_product_pnl": per_product_pnl,
+        "per_product_trades": per_product_trades,
+        "per_product_max_pos": per_product_max_pos,
+        "robustness": asdict(total_robustness),
+        "per_product_robustness": {symbol: asdict(metrics) for symbol, metrics in per_product_robustness.items()},
     }
 
 
@@ -588,17 +867,37 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
 
     summaries = [engine.run_day(day, mode=mode) for day in days]
 
-    grand_total = 0.0
     for summary in summaries:
-        grand_total += summary.pnl
-        print(f"day {summary.day}: pnl={summary.pnl:.2f}")
+        print(
+            f"day {summary.day}: pnl={summary.pnl:.2f} "
+            f"dd={summary.robustness.max_drawdown or 0.0:.2f} "
+            f"fill_eff={summary.robustness.fill_efficiency:.3f}"
+        )
         for ps in summary.product_summaries.values():
-            print(f"  {ps.symbol}: pnl={ps.pnl:.2f}, trades={ps.trades}, volume={ps.traded_volume}, max_pos={ps.max_abs_position}, end_pos={ps.ending_position}")
+            print(
+                f"  {ps.symbol}: pnl={ps.pnl:.2f}, trades={ps.trades}, volume={ps.traded_volume}, "
+                f"max_pos={ps.max_abs_position}, end_pos={ps.ending_position}, "
+                f"make={ps.robustness.passive_qty}, take={ps.robustness.aggressive_qty}, "
+                f"inv={ps.robustness.avg_abs_position_ratio:.3f}"
+            )
 
-    print(f"TOTAL pnl={grand_total:.2f} over {len(summaries)} day(s)")
+    aggregate = aggregate_day_summaries(summaries)
+    robustness = aggregate["robustness"]
+    print(
+        f"TOTAL pnl={aggregate['total_pnl']:.2f} over {len(summaries)} day(s) "
+        f"dd={robustness['max_drawdown'] or 0.0:.2f} "
+        f"fill_eff={robustness['fill_efficiency']:.3f} "
+        f"inv={robustness['avg_abs_position_ratio']:.3f}"
+    )
 
     if args.json_out:
-        payload = {"strategy": args.strategy, "round": args.round, "days": [_result_to_jsonable(s) for s in summaries]}
+        payload = {
+            "strategy": args.strategy,
+            "round": args.round,
+            "execution_rule": args.execution_rule,
+            "summary": aggregate,
+            "days": [_result_to_jsonable(s) for s in summaries],
+        }
         Path(args.json_out).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     return 0
