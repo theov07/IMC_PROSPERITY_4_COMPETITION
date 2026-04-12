@@ -1,3 +1,17 @@
+## IMC Queue / FIFO Reality
+
+- In live IMC, a passive quote that is not traded can remain visible during the iteration, but if no bot trades against it, it is cancelled at the end of the iteration.
+- That means being behind only 10 to 15 lots at best can still produce zero fills: the queue in front is small, but the quote lifetime is also short.
+- This is the likely explanation for V7: `qty_join_threshold=15` often joined the best price instead of improving by one tick, so we sat behind the displayed top size and were rarely reached before cancellation or book refresh.
+- Exact FIFO cannot be reconstructed from the public historical data we have. We only see aggregated book snapshots by price, not individual resting orders with arrival times.
+- The trade CSV also does not reveal the full matching path inside a tick, so we do not know which fraction of a same-price trade should be assigned to the queue ahead of us versus to us.
+- What we can implement is a conservative queue heuristic, not true FIFO:
+- If we improve inside the spread, assume queue ahead is zero at our price.
+- If we join an existing best level, initialize queue ahead with the displayed size already resting there.
+- Fill our passive order only after same-tick traded volume at that price exceeds that queue ahead, optionally with a safety margin.
+- Cancel any remaining passive quantity at the end of the iteration, to mirror IMC's documented quote lifetime.
+- Until this heuristic exists, `match-trades=none` is the safest lower bound and `match-trades=worse` is a more conservative middle ground than `all`.
+
 -essayer Monte Carlo
 -avoir à l'idée que tout est possible, par exemple IMC
 peut nous mettre une paire qui sert à rien et qui

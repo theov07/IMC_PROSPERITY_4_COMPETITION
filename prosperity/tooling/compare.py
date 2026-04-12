@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from prosperity.tooling.backtest import BacktestEngine, DaySummary
+from prosperity.tooling.backtest import BacktestEngine, DaySummary, TradeMatchingMode
 from prosperity.tooling.data import MarketDataLoader
 
 
@@ -27,6 +27,7 @@ def compare_strategies(
     round_num: int,
     data_dir: str,
     days: List[str],
+    mode: TradeMatchingMode = TradeMatchingMode.queue,
 ) -> Dict[str, Dict]:
     results: Dict[str, Dict] = {}
 
@@ -39,7 +40,7 @@ def compare_strategies(
         product_max_pos: Dict[str, int] = {}
 
         for day in days:
-            summary = engine.run_day(day)
+            summary = engine.run_day(day, mode=mode)
             total_pnl += summary.pnl
             day_pnls.append({"day": day, "pnl": summary.pnl})
             for sym, ps in summary.product_summaries.items():
@@ -97,13 +98,27 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--round", type=int, default=0)
     parser.add_argument("--days", nargs="*")
     parser.add_argument("--data-dir", default="data")
+    parser.add_argument(
+        "--execution-rule",
+        "--match-trades",
+        dest="execution_rule",
+        default="queue",
+        choices=["queue", "all", "worse", "none"],
+        help="Passive fill rule to use during comparison runs.",
+    )
     parser.add_argument("--json-out", help="Save results as JSON")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     loader = MarketDataLoader(args.data_dir)
     days = args.days or loader.available_days(args.round)
 
-    results = compare_strategies(args.strategies, args.round, args.data_dir, days)
+    results = compare_strategies(
+        args.strategies,
+        args.round,
+        args.data_dir,
+        days,
+        mode=TradeMatchingMode(args.execution_rule),
+    )
     _print_table(results)
 
     if args.json_out:
