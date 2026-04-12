@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from prosperity.tooling.backtest import BacktestEngine, DaySummary, TradeMatchingMode
+from prosperity.tooling.backtest import BacktestEngine, TradeMatchingMode, aggregate_day_summaries
 from prosperity.tooling.data import MarketDataLoader
 
 
@@ -33,58 +33,86 @@ def compare_strategies(
 
     for strat in strategies:
         engine = BacktestEngine(data_dir, strat, round_num=round_num)
-        total_pnl = 0.0
+        summaries = []
         day_pnls = []
-        product_pnls: Dict[str, float] = {}
-        product_trades: Dict[str, int] = {}
-        product_max_pos: Dict[str, int] = {}
 
         for day in days:
             summary = engine.run_day(day, mode=mode)
-            total_pnl += summary.pnl
+            summaries.append(summary)
             day_pnls.append({"day": day, "pnl": summary.pnl})
-            for sym, ps in summary.product_summaries.items():
-                product_pnls[sym] = product_pnls.get(sym, 0.0) + ps.pnl
-                product_trades[sym] = product_trades.get(sym, 0) + ps.trades
-                product_max_pos[sym] = max(product_max_pos.get(sym, 0), ps.max_abs_position)
+
+        aggregate = aggregate_day_summaries(summaries)
 
         results[strat] = {
-            "total_pnl": total_pnl,
             "days": day_pnls,
-            "per_product_pnl": product_pnls,
-            "per_product_trades": product_trades,
-            "per_product_max_pos": product_max_pos,
+            **aggregate,
         }
 
     return results
 
 
-def _print_table(results: Dict[str, Dict]):
+def _result_sort_key(result: Dict, rank_by: str) -> tuple:
+    robustness = result.get("robustness", {})
+    passive_adverse_rate = robustness.get("passive_adverse_rate")
+
+    if rank_by == "drawdown":
+        return (
+            robustness.get("max_drawdown", float("inf")),
+            -(result.get("total_pnl") or 0.0),
+        )
+    if rank_by == "fill_efficiency":
+        return (
+            -(robustness.get("fill_efficiency") or 0.0),
+            -(result.get("total_pnl") or 0.0),
+        )
+    if rank_by == "inventory_pressure":
+        return (
+            robustness.get("avg_abs_position_ratio", float("inf")),
+            -(result.get("total_pnl") or 0.0),
+        )
+    if rank_by == "passive_adverse_rate":
+        return (
+            passive_adverse_rate if passive_adverse_rate is not None else float("inf"),
+            -(result.get("total_pnl") or 0.0),
+        )
+    return (-(result.get("total_pnl") or 0.0),)
+
+
+def _print_table(results: Dict[str, Dict], rank_by: str):
     strategies = list(results.keys())
     all_products = sorted(set(p for r in results.values() for p in r["per_product_pnl"]))
 
-    # Header
-    col_w = 14
-    header = f"{'Strategy':<12}"
+    col_w = 12
+    header = (
+        f"{'Strategy':<12}"
+        f"  {'TOTAL':>{col_w}}"
+        f"  {'DD':>{col_w}}"
+        f"  {'FillEff':>{col_w}}"
+        f"  {'Inv':>{col_w}}"
+        f"  {'Adverse':>{col_w}}"
+    )
     for prod in all_products:
         header += f"  {prod:>{col_w}}"
-    header += f"  {'TOTAL':>{col_w}}"
     print(header)
     print("-" * len(header))
 
-    # Rows sorted by total PnL
-    ranked = sorted(strategies, key=lambda s: results[s]["total_pnl"], reverse=True)
+    ranked = sorted(strategies, key=lambda s: _result_sort_key(results[s], rank_by))
     for strat in ranked:
         r = results[strat]
+        robustness = r.get("robustness", {})
+        adverse = robustness.get("passive_adverse_rate")
         row = f"{strat:<12}"
+        row += f"  {r['total_pnl']:>{col_w}.2f}"
+        row += f"  {(robustness.get('max_drawdown') or 0.0):>{col_w}.2f}"
+        row += f"  {(robustness.get('fill_efficiency') or 0.0):>{col_w}.3f}"
+        row += f"  {(robustness.get('avg_abs_position_ratio') or 0.0):>{col_w}.3f}"
+        row += f"  {('n/a' if adverse is None else f'{adverse:.3f}'):>{col_w}}"
         for prod in all_products:
             pnl = r["per_product_pnl"].get(prod, 0.0)
             row += f"  {pnl:>{col_w}.2f}"
-        row += f"  {r['total_pnl']:>{col_w}.2f}"
         print(row)
 
     print()
-    # Trades row
     print(f"{'-- trades --':<12}", end="")
     for prod in all_products:
         trades = " / ".join(str(results[s]["per_product_trades"].get(prod, 0)) for s in ranked)
@@ -103,10 +131,16 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         "--match-trades",
         dest="execution_rule",
         default="queue",
-        choices=["queue", "all", "worse", "none"],
+        choices=["queue", "all", "worse", "none", "realistic"],
         help="Passive fill rule to use during comparison runs.",
     )
     parser.add_argument("--json-out", help="Save results as JSON")
+    parser.add_argument(
+        "--rank-by",
+        default="pnl",
+        choices=["pnl", "drawdown", "fill_efficiency", "inventory_pressure", "passive_adverse_rate"],
+        help="Ranking metric for the comparison table.",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     loader = MarketDataLoader(args.data_dir)
@@ -119,7 +153,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         days,
         mode=TradeMatchingMode(args.execution_rule),
     )
-    _print_table(results)
+    _print_table(results, args.rank_by)
 
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(results, indent=2), encoding="utf-8")

@@ -24,6 +24,13 @@ python -m prosperity.tooling.backtest --strategy tibo_AvSt --round 0 --data-dir 
 python -m prosperity.tooling.compare \
   --strategies champion leo theo \
   --round 0 --days -2 -1
+
+# Rank by robustness instead of raw pnl
+python -m prosperity.tooling.compare \
+  --strategies champion leo theo \
+  --round 0 --days -2 -1 \
+  --execution-rule realistic \
+  --rank-by drawdown
 ```
 
 ### Parameter Optimization
@@ -34,6 +41,13 @@ python -m prosperity.tooling.grid_search \
   --param "EMERALDS.ema_alpha=0.05,0.10,0.15,0.20" \
   --param "EMERALDS.quote_half_spread=1,2,3" \
   --param "TOMATOES.ema_alpha=0.16,0.18,0.20"
+
+# Or rank sweeps by a robustness metric
+python -m prosperity.tooling.grid_search \
+  --strategy champion --round 0 --days -2 -1 \
+  --execution-rule realistic \
+  --rank-by inventory_pressure \
+  --param "EMERALDS.ema_alpha=0.05,0.10,0.15,0.20"
 ```
 
 ### Testing
@@ -59,6 +73,8 @@ python -m py_compile artifacts/submissions/champion_submission.py
 # Review official log with interactive dashboard + backtest result (choose the backtest result corresponding to the submission)
 python -m prosperity.tooling.dashboard  --log logs/AvSt-tibo/61307.json --backtest-json artifacts/backtest_results.json --data-dir data
 ```
+
+If `--backtest-json` is omitted, the dashboard now tries a best-effort auto-discovery inside `artifacts/`. If no confident match is found, pass the path explicitly.
 
 ---
 

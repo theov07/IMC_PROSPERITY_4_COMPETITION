@@ -33,14 +33,17 @@ What is good enough to use now:
 - exporting and uploading a strategy to the IMC site
 - reviewing official logs after a run
 - comparing `champion`, `leo`, `theo`, and `pietro`
+- ranking local runs by both pnl and robustness proxies
+- auto-reconciling official logs against a local backtest when a matching artifact is found
 
 What is not fully production-grade yet:
 
 - local passive fill simulation is still heuristic
 - future rounds are scaffolded, but only round 0 is fully configured
 - no canonical experiment registry yet
-- no automated local-vs-official reconciliation report yet
+- local-vs-official reconciliation now exists, but still needs richer diagnostics
 - exporter is functional, but should be made more tightly coupled to the modular source of truth
+- dashboard and analyzer auto-discovery for backtest JSON is best-effort, not guaranteed
 
 ## Repository Layout
 
@@ -159,10 +162,22 @@ Compare multiple strategies:
 python -m prosperity.tooling.compare --strategies champion leo theo pietro --round 0 --days -2 -1 --execution-rule queue
 ```
 
+Rank by robustness instead of raw PnL:
+
+```powershell
+python -m prosperity.tooling.compare --strategies champion leo theo pietro --round 0 --days -2 -1 --execution-rule realistic --rank-by drawdown
+```
+
 Run a parameter sweep:
 
 ```powershell
 python -m prosperity.tooling.grid_search --strategy champion --round 0 --days -2 -1 --execution-rule queue --param "EMERALDS.ema_alpha=0.05,0.10,0.15" --param "TOMATOES.quote_half_spread=1,2,3"
+```
+
+Sweep with robustness-aware ranking:
+
+```powershell
+python -m prosperity.tooling.grid_search --strategy champion --round 0 --days -2 -1 --execution-rule realistic --rank-by inventory_pressure --param "EMERALDS.ema_alpha=0.05,0.10,0.15"
 ```
 
 Analyze raw round CSV data:
@@ -177,11 +192,27 @@ Review an official log with static plots:
 python scripts/analyze_log.py --log examples\official_logs\16248.log --outdir artifacts\analysis
 ```
 
+Review an official log and auto-reconcile against a local backtest JSON:
+
+```powershell
+python -m prosperity.tooling.logs --log logs\leo_round0_naiveV8\84616.json --backtest-json artifacts\backtest_results.json --symbol EMERALDS
+```
+
+If `--backtest-json` is omitted, the log analyzer now tries a best-effort auto-discovery inside `artifacts/` before falling back to log-only analysis.
+
+Reconcile a local backtest with an official submission:
+
+```powershell
+python -m prosperity.tooling.reconcile --log logs\leo_round0_naiveV8\84616.json --backtest-json artifacts\backtest_results.json
+```
+
 Launch the interactive dashboard:
 
 ```powershell
 python -m prosperity.tooling.dashboard --log examples\official_logs\16248.log
 ```
+
+When `--log` is provided, the dashboard now tries to auto-discover a matching local backtest JSON in `artifacts/`. If a confident match is found, it auto-runs reconciliation in the terminal before starting. If not, pass `--backtest-json` explicitly.
 
 Benchmark latency:
 

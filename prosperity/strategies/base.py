@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple
 
@@ -75,6 +77,76 @@ class BaseStrategy(ABC):
     # ------------------------------------------------------------------
     # Helpers available to all strategies
     # ------------------------------------------------------------------
+    def runtime_trace_enabled(self) -> bool:
+        enabled = self.params.get("runtime_trace_enabled")
+        if enabled is not None:
+            return bool(enabled)
+        return not bool(os.environ.get("INTERNAL_BACKTEST"))
+
+    def log_quote_snapshot(
+        self,
+        *,
+        state: TradingState,
+        memory: Dict[str, Any],
+        bid_price: int | float | None,
+        ask_price: int | float | None,
+        extras: Dict[str, Any] | None = None,
+    ) -> None:
+        """Accumulate and flush a lightweight quote trace for official IMC logs.
+
+        The trace format is intentionally small and common across quoting
+        strategies so the dashboard can render our own bid/ask from runtime logs:
+          {
+            "product": "...",
+            "trace": "quote_trace",
+            "chunk_end": 49900,
+            "columns": ["timestamp", "bid_price", "ask_price", ...],
+            "log": [[...], [...]]
+          }
+
+        Strategies may append extra per-tick diagnostics through ``extras`` as
+        long as they keep a stable schema across ticks.
+        """
+        if not self.runtime_trace_enabled():
+            return
+
+        row: Dict[str, Any] = {
+            "timestamp": int(state.timestamp),
+            "bid_price": bid_price,
+            "ask_price": ask_price,
+        }
+        if extras:
+            row.update(extras)
+
+        columns = memory.setdefault("_quote_trace_columns", list(row.keys()))
+        for key in row.keys():
+            if key not in columns:
+                columns.append(key)
+
+        rows = memory.setdefault("_quote_trace_rows", [])
+        rows.append(row)
+
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        last_tick_ts = self.params.get("last_ts_value")
+        if last_tick_ts is None:
+            last_tick_ts = int(self.params.get("total_ticks", 200000)) - 100
+        else:
+            last_tick_ts = int(last_tick_ts)
+
+        end_of_sim = int(state.timestamp) >= last_tick_ts
+        checkpoint = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
+        if not (end_of_sim or checkpoint):
+            return
+
+        print(json.dumps({
+            "product": self.product,
+            "trace": "quote_trace",
+            "chunk_end": int(state.timestamp),
+            "columns": columns,
+            "log": [[row.get(column) for column in columns] for row in rows],
+        }))
+        memory["_quote_trace_rows"] = []
+
     def position_limit(self) -> int:
         return self.params.get("position_limit", 20)
 
