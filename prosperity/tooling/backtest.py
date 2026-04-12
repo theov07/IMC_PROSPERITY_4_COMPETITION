@@ -23,6 +23,10 @@ STRATEGY_ALIASES = {name: f"submissions.{name}" for name in MEMBER_OVERRIDES}
 class TradeMatchingMode(str, Enum):
     """Controls how resting (passive) limit orders are matched against market trades.
 
+    queue — one-iteration queue heuristic. If you join an existing price, the displayed
+            resting size at that level is treated as queue ahead. Exact-price trades must
+            first clear that queue; any trade through your price implies your remaining
+            quantity at that level was reached during the iteration.
     all   — fill if the market trade price is <= buy order price (or >= sell order price).
             Optimistic: assumes you have queue priority at your exact price level.
     worse — fill only if the market trade price is strictly worse for the aggressor
@@ -30,6 +34,7 @@ class TradeMatchingMode(str, Enum):
             if someone traded through your price, not just at it.
     none  — no passive fills via market trades; only aggressive (book-crossing) fills fire.
     """
+    queue = "queue"
     all   = "all"
     worse = "worse"
     none  = "none"
@@ -51,6 +56,12 @@ class Fill:
     price: int
     quantity: int
     aggressive: bool
+
+
+@dataclass
+class _PendingPassiveOrder:
+    order: Order
+    remaining: int
 
 
 @dataclass
@@ -133,12 +144,12 @@ class BacktestEngine:
         orders: List[Order],
         current_market_trades: List[Trade],
         timestamp: int,
-        mode: TradeMatchingMode = TradeMatchingMode.all,
+        mode: TradeMatchingMode = TradeMatchingMode.queue,
     ) -> List[Fill]:
         fills: List[Fill] = []
         available_bids = [[price, volume] for price, volume in sorted(order_depth.buy_orders.items(), key=lambda item: item[0], reverse=True)]
         available_asks = [[price, -volume] for price, volume in sorted(order_depth.sell_orders.items(), key=lambda item: item[0])]
-        pending_passive: List[Tuple[Order, int]] = []
+        pending_passive: List[_PendingPassiveOrder] = []
 
         for order in orders:
             if order.quantity == 0:
@@ -157,7 +168,7 @@ class BacktestEngine:
                     level[1] -= traded
                     remaining -= traded
                 if remaining > 0:
-                    pending_passive.append((order, remaining))
+                    pending_passive.append(_PendingPassiveOrder(order=order, remaining=remaining))
             else:
                 for level in available_bids:
                     bid_price, bid_volume = level
@@ -170,26 +181,69 @@ class BacktestEngine:
                     level[1] -= traded
                     remaining -= traded
                 if remaining > 0:
-                    pending_passive.append((order, remaining))
+                    pending_passive.append(_PendingPassiveOrder(order=order, remaining=remaining))
 
         if mode == TradeMatchingMode.none or not pending_passive:
             return fills
 
-        # Build per-trade slots from same-tick market trades (full volume, no discount).
+        fills.extend(
+            BacktestEngine._simulate_passive_fills(
+                order_depth=order_depth,
+                pending_passive=pending_passive,
+                current_market_trades=current_market_trades,
+                timestamp=timestamp,
+                mode=mode,
+            )
+        )
+        return fills
+
+    @staticmethod
+    def _simulate_passive_fills(
+        order_depth: OrderDepth,
+        pending_passive: List[_PendingPassiveOrder],
+        current_market_trades: List[Trade],
+        timestamp: int,
+        mode: TradeMatchingMode,
+    ) -> List[Fill]:
+        if mode == TradeMatchingMode.queue:
+            return BacktestEngine._simulate_passive_fills_queue(
+                order_depth=order_depth,
+                pending_passive=pending_passive,
+                current_market_trades=current_market_trades,
+                timestamp=timestamp,
+            )
+        return BacktestEngine._simulate_passive_fills_price_match(
+            pending_passive=pending_passive,
+            current_market_trades=current_market_trades,
+            timestamp=timestamp,
+            strict_through=(mode == TradeMatchingMode.worse),
+        )
+
+    @staticmethod
+    def _simulate_passive_fills_price_match(
+        pending_passive: List[_PendingPassiveOrder],
+        current_market_trades: List[Trade],
+        timestamp: int,
+        strict_through: bool,
+    ) -> List[Fill]:
+        fills: List[Fill] = []
         slots: List[_MarketTradeSlot] = [
             _MarketTradeSlot(price=t.price, buy_avail=t.quantity, sell_avail=t.quantity)
             for t in current_market_trades
         ]
 
-        for order, remaining in pending_passive:
+        for pending in BacktestEngine._sorted_pending_passive_orders(pending_passive):
+            order = pending.order
+            remaining = pending.remaining
             if remaining <= 0:
                 continue
+
             is_buy = order.quantity > 0
             for slot in slots:
                 if remaining <= 0:
                     break
                 if is_buy:
-                    price_ok = (slot.price < order.price) if mode == TradeMatchingMode.worse else (slot.price <= order.price)
+                    price_ok = (slot.price < order.price) if strict_through else (slot.price <= order.price)
                     if not price_ok or slot.sell_avail <= 0:
                         continue
                     traded = min(remaining, slot.sell_avail)
@@ -197,7 +251,7 @@ class BacktestEngine:
                     slot.sell_avail -= traded
                     remaining -= traded
                 else:
-                    price_ok = (slot.price > order.price) if mode == TradeMatchingMode.worse else (slot.price >= order.price)
+                    price_ok = (slot.price > order.price) if strict_through else (slot.price >= order.price)
                     if not price_ok or slot.buy_avail <= 0:
                         continue
                     traded = min(remaining, slot.buy_avail)
@@ -207,7 +261,75 @@ class BacktestEngine:
 
         return fills
 
-    def run_day(self, day: str, mode: TradeMatchingMode = TradeMatchingMode.all) -> DaySummary:
+    @staticmethod
+    def _simulate_passive_fills_queue(
+        order_depth: OrderDepth,
+        pending_passive: List[_PendingPassiveOrder],
+        current_market_trades: List[Trade],
+        timestamp: int,
+    ) -> List[Fill]:
+        fills: List[Fill] = []
+        trade_volume_by_price: Dict[int, int] = {}
+        for trade in current_market_trades:
+            trade_volume_by_price[trade.price] = trade_volume_by_price.get(trade.price, 0) + trade.quantity
+
+        exact_fillable_by_key: Dict[Tuple[bool, int], int] = {}
+        through_by_key: Dict[Tuple[bool, int], bool] = {}
+
+        for pending in BacktestEngine._sorted_pending_passive_orders(pending_passive):
+            order = pending.order
+            remaining = pending.remaining
+            if remaining <= 0:
+                continue
+
+            is_buy = order.quantity > 0
+            key = (is_buy, order.price)
+            if key not in exact_fillable_by_key:
+                queue_ahead = BacktestEngine._queue_ahead_at_price(order_depth, order)
+                exact_fillable_by_key[key] = max(0, trade_volume_by_price.get(order.price, 0) - queue_ahead)
+                through_by_key[key] = BacktestEngine._trade_through_price(current_market_trades, order)
+
+            if through_by_key[key]:
+                traded = remaining
+            else:
+                traded = min(remaining, exact_fillable_by_key[key])
+                exact_fillable_by_key[key] -= traded
+
+            if traded <= 0:
+                continue
+
+            fills.append(
+                Fill(
+                    timestamp=timestamp,
+                    symbol=order.symbol,
+                    side="BUY" if is_buy else "SELL",
+                    price=order.price,
+                    quantity=traded,
+                    aggressive=False,
+                )
+            )
+
+        return fills
+
+    @staticmethod
+    def _sorted_pending_passive_orders(pending_passive: List[_PendingPassiveOrder]) -> List[_PendingPassiveOrder]:
+        buys = sorted((pending for pending in pending_passive if pending.order.quantity > 0), key=lambda pending: pending.order.price, reverse=True)
+        sells = sorted((pending for pending in pending_passive if pending.order.quantity < 0), key=lambda pending: pending.order.price)
+        return buys + sells
+
+    @staticmethod
+    def _queue_ahead_at_price(order_depth: OrderDepth, order: Order) -> int:
+        if order.quantity > 0:
+            return max(order_depth.buy_orders.get(order.price, 0), 0)
+        return max(-order_depth.sell_orders.get(order.price, 0), 0)
+
+    @staticmethod
+    def _trade_through_price(current_market_trades: List[Trade], order: Order) -> bool:
+        if order.quantity > 0:
+            return any(trade.price < order.price for trade in current_market_trades)
+        return any(trade.price > order.price for trade in current_market_trades)
+
+    def run_day(self, day: str, mode: TradeMatchingMode = TradeMatchingMode.queue) -> DaySummary:
         price_file = f"prices_round_{self.round_num}_day_{day}.csv"
         trade_file = f"trades_round_{self.round_num}_day_{day}.csv"
 
@@ -350,11 +472,14 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--data-dir", default="data", help="Directory with CSV files")
     parser.add_argument("--json-out", help="Optional JSON output file")
     parser.add_argument(
+        "--execution-rule",
         "--match-trades",
-        default="all",
-        choices=["all", "worse", "none"],
+        dest="execution_rule",
+        default="queue",
+        choices=["queue", "all", "worse", "none"],
         help=(
             "Passive fill mode against same-tick market trades. "
+            "queue=one-iteration queue heuristic using displayed size ahead at your price, "
             "all=fill at or better than your price (optimistic), "
             "worse=fill only if trade went strictly through your price (conservative), "
             "none=no passive fills at all."
@@ -362,7 +487,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    mode = TradeMatchingMode(args.match_trades)
+    mode = TradeMatchingMode(args.execution_rule)
     engine = BacktestEngine(args.data_dir, args.strategy, round_num=args.round)
     days = args.days or engine.loader.available_days(args.round)
     if not days:

@@ -28,7 +28,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from prosperity.config import ProductConfig, get_round_config, MEMBER_OVERRIDES
-from prosperity.tooling.backtest import BacktestEngine
+from prosperity.tooling.backtest import BacktestEngine, TradeMatchingMode
 
 
 @dataclass
@@ -70,6 +70,7 @@ def run_grid_search(
     days: List[str],
     param_specs: List[str],
     member: str = "champion",
+    mode: TradeMatchingMode = TradeMatchingMode.queue,
 ) -> List[SweepResult]:
     """Run all parameter combinations and return ranked results."""
     parsed = [_parse_param_spec(s) for s in param_specs]
@@ -102,7 +103,7 @@ def run_grid_search(
             day_pnls = []
             product_pnls: Dict[str, float] = {}
             for day in days:
-                summary = engine.run_day(day)
+                summary = engine.run_day(day, mode=mode)
                 day_pnls.append(summary.pnl)
                 for sym, ps in summary.product_summaries.items():
                     product_pnls[sym] = product_pnls.get(sym, 0.0) + ps.pnl
@@ -129,6 +130,14 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--days", nargs="*")
     parser.add_argument("--data-dir", default="data")
     parser.add_argument("--param", action="append", required=True, help="SYMBOL.param=v1,v2,v3")
+    parser.add_argument(
+        "--execution-rule",
+        "--match-trades",
+        dest="execution_rule",
+        default="queue",
+        choices=["queue", "all", "worse", "none"],
+        help="Passive fill rule to use during the sweep.",
+    )
     parser.add_argument("--top", type=int, default=10, help="Show top N results")
     parser.add_argument("--json-out", help="Save full results to JSON")
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -138,7 +147,15 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     days = args.days or loader.available_days(args.round)
 
     t0 = time.time()
-    results = run_grid_search(args.strategy, args.round, args.data_dir, days, args.param, member=args.strategy)
+    results = run_grid_search(
+        args.strategy,
+        args.round,
+        args.data_dir,
+        days,
+        args.param,
+        member=args.strategy,
+        mode=TradeMatchingMode(args.execution_rule),
+    )
     elapsed = time.time() - t0
 
     print(f"\n{'='*60}")

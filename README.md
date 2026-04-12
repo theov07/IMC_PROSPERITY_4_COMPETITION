@@ -150,19 +150,19 @@ python -m pip install -r requirements-optional.txt
 Backtest one strategy:
 
 ```powershell
-python backtest.py --strategy champion --round 0 --days -2 -1
+python backtest.py --strategy champion --round 0 --days -2 -1 --execution-rule queue
 ```
 
 Compare multiple strategies:
 
 ```powershell
-python -m prosperity.tooling.compare --strategies champion leo theo pietro --round 0 --days -2 -1
+python -m prosperity.tooling.compare --strategies champion leo theo pietro --round 0 --days -2 -1 --execution-rule queue
 ```
 
 Run a parameter sweep:
 
 ```powershell
-python -m prosperity.tooling.grid_search --strategy champion --round 0 --days -2 -1 --param "EMERALDS.ema_alpha=0.05,0.10,0.15" --param "TOMATOES.quote_half_spread=1,2,3"
+python -m prosperity.tooling.grid_search --strategy champion --round 0 --days -2 -1 --execution-rule queue --param "EMERALDS.ema_alpha=0.05,0.10,0.15" --param "TOMATOES.quote_half_spread=1,2,3"
 ```
 
 Analyze raw round CSV data:
@@ -268,7 +268,7 @@ The framework has already been exercised locally with:
 ## Known Limitations
 
 - The backtester does not reproduce true exchange queue priority.
-- Passive fills are modeled heuristically.
+- Passive fills are modeled heuristically; the default is now a one-iteration queue heuristic, not exact FIFO.
 - Round 1 to round 5 configs are mostly templates and need to be populated when products are revealed.
 - Some advanced strategies exist as modules but still need real round-specific calibration before they can be trusted competitively.
 - The exporter works today, but should eventually be generated from a stricter canonical source to reduce drift risk.
