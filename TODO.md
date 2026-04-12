@@ -12,7 +12,7 @@ Priority list for turning this repository from a solid framework into a competit
 ## High Value
 
 - Make round activation faster: one place to fill products, limits, conversions, and strategy mappings when a new round opens.
-- Improve passive fill simulation with better maker heuristics and queue assumptions.
+- Improve passive fill simulation with a one-iteration queue heuristic; exact FIFO is not recoverable from snapshot-only public data.
 - Add a tournament runner that compares all strategies and saves ranked outputs to `artifacts/`.
 - Add richer metrics to comparison output: turnover, max drawdown, inventory pressure, sharpe-like stability proxies.
 - Extend `research/analysis.py` with per-product microstructure reports and event detection.
@@ -34,7 +34,7 @@ Priority list for turning this repository from a solid framework into a competit
 
 ## Expert Market Making Gaps
 
-- Build a more realistic queue and passive fill probability model.
+- Build a more realistic queue and passive fill probability model, while treating exact FIFO reconstruction as impossible with current data.
 - Add toxicity detection to reduce quoting during adverse flow.
 - Add advanced quote policy logic: when to join, improve, widen, or remove one side.
 - Add explicit soft liquidation and hard liquidation rules.

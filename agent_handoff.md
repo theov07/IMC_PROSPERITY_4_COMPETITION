@@ -38,30 +38,114 @@ Example entry:
 
 - Main objective: improve `leo_naive` family of strategies for Round 0
 - Current branch: `Leo`
-- Latest strategy: `leo_naive_v5` (exported, ready for IMC upload)
-- Relevant files: `prosperity/strategies/naive_tight_mm_v{1..5}.py`, `prosperity/config.py`
+- Latest strategy: `leo_naive_v7` (exported, ready for IMC upload)
+- Relevant files: `prosperity/strategies/naive_tight_mm_v{1..7}.py`, `prosperity/config.py`
 
 ## Decisions
 
 - EMERALDS is stable around 10000 — inventory skew hurts, not helps
-- TOMATOES benefits from inventory skew (inv_skew_ticks=4)
+- TOMATOES benefits from inventory skew (inv_skew_ticks=4) — but superseded by V7
 - `spread_extra_threshold` and `size_reduce_ratio` don't help on either product
 - `import os` is banned by IMC sandbox — removed from naive_tight_mm.py
+- V6: top of book + sweep absurd orders — no gain (no absurd orders in backtest data)
+- `pj_detect=1` gives +1040 on TOMATOES in backtest — not yet tested live
+- `flow_window` (trade flow detection): data has no buyer/seller info — feature dead
+- `asym_strength`, `spread_min_frac`, `cooldown_ticks`: all neutral or harmful
+- **`qty_join_threshold` is a BACKTEST ARTIFACT — do NOT use**
+  - Backtest gave +4947 but live result was 0 profit
+  - Root cause: backtest fill model fills "join at best" orders as if they have queue priority
+  - In reality, joining = going behind existing orders in the queue → no fills
+  - The CORRECT logic is the opposite: tighten when wall is small (easy to jump), join only when wall is enormous (can't beat it anyway)
+  - V1's always-tighten is more robust live than join-based strategies
+
+## Best Params — V7 (leo_naive_v7)
+
+| Product | qty_join_threshold | All other features |
+|---------|-------------------|-------------------|
+| EMERALDS | 15 | off (0) |
+| TOMATOES | 15 | off (0) |
+
+## Backtest PnL Summary
+
+| Version | Backtest PnL | Live PnL | Notes |
+|---------|-------------|---------|-------|
+| V1 baseline | 29,496.50 | ~2517 | Solid live performer |
+| V4 (inv skew) | 29,868 | < V1 | Backtest overfit |
+| V5 (inv skew + imbalance) | 29,897.50 | unknown | |
+| V6 (sweep absurd) | 29,496.50 | ~2517 | = V1, no absurd orders in data |
+| V7 pj_detect=1 | 30,536.50 | unknown | +1040 backtest, not yet live tested |
+| **V7 qty_join_threshold=15** | **34,443.50** | **0 (BUGGED)** | **Backtest artifact — do not use** |
+
+## Key Lesson: Backtest Fill Model Is Broken For "Join" Strategies
+
+The backtester fills our passive orders at a price level as long as a market trade occurs at that price — it does NOT model queue position. So if we join at 9992 behind 15 existing units, the backtester fills us anyway. In reality, those 15 units have priority and absorb all incoming sells before our order is reached.
+
+**Rule going forward**: any strategy that "joins" at the best price will be rewarded by the backtester but will get 0 fills live. Only tightening (going 1 tick INSIDE the spread) guarantees queue priority and real fills.
 
 ## Open Points
 
-- V4 did LESS PnL on IMC live than in backtest — backtest is optimistic on passive fills
-- Need to standardise lambdaLog format across strategies (Codex flagged parsing bug)
-- Interday inventory carry: no evidence of carry in local IMC logs (all single-day runs)
+- `flow_window` feature is broken: trade CSV has buyer=None/seller=None everywhere — side inference via price-vs-book was implemented but still no useful signal (only 423 trades on TOMATOES, too sparse)
 
 ## Next Actions
 
-- Upload V5 to IMC and compare live PnL vs backtest
-- Analyse V5 IMC logs in dashboard
+- Round 1 is starting — need new products config
+- Decide whether to keep V7 base (with tighter-only) or go back to V1 as Round 1 baseline
 
 ---
 
 ## Log
+
+## 2026-04-12 (session 3) — Claude
+
+### V7 Live Post-Mortem
+
+- **Result**: profit = 0.0, position never moved, 0 own trades
+- **Root cause**: `qty_join_threshold=15` caused us to JOIN at best price (9992) instead of TIGHTEN (9993). We were behind 10-15 existing units in the queue — no fills ever.
+- **Backtest lie**: the backtest fill model doesn't model queue position. It fills our order at 9992 even when 15 units have priority. This produced a fake +4947 gain.
+- **Verification**: lambda logs confirm strategy ran correctly (buy_size=80 every tick) — the bug is purely fill-model optimism, not a code error.
+- **Takeaway**: `qty_join_threshold` must be treated as a backtest-only artifact. Discard the feature entirely.
+
+### What Actually Works Live (confirmed)
+
+| Strategy | Live PnL |
+|----------|---------|
+| V1 (always tighten 1 tick) | ~2517 |
+| V6 (V1 + sweep absurd) | ~2517 |
+| V7 qty_join=15 | **0** |
+
+### Correct Direction For Next Round
+
+- Always tighten (V1 style) is the baseline that works live
+- The only backtest gains that are likely real are those that come from **price improvement** (tighten more aggressively) or **taking mispriced orders** — not from queue management
+- `pj_detect=1` (+1040 backtest on TOMATOES) is worth testing live — it only changes the tighten amount, not whether we tighten, so it should survive the fill model
+
+---
+
+## 2026-04-12 (session 2) — Claude
+
+### Key Findings — V7
+
+**`qty_join_threshold` est la découverte majeure de cette session.**
+
+Logique : à chaque tick, regarder la qty au best bid/ask courant.
+- Petite qty (≤ threshold) → **join** : la petite quantité sera remplie vite, on sera next dans la queue
+- Grosse qty (> threshold) → **tighten** : passer devant le mur pour garantir la priorité d'exécution
+
+Résultats grid search :
+
+| Feature | Meilleur param | Δ TOMATOES | Δ EMERALDS |
+|---------|---------------|-----------|-----------|
+| `asym_strength` | 0.0 (off) | 0 | — |
+| `spread_min_frac` | 1.0 (off) | 0 | — |
+| `flow_window` | n/a (data morte) | 0 | — |
+| `cooldown_ticks` | 0 (off) | 0 | — |
+| `pj_detect` | 1 | +1040 | 0 |
+| **`qty_join_threshold`** | **15** | **+2817** | **+2130** |
+| Both combined | EMERALDS=15, TOMATOES=15 | — | **+4947 total** |
+
+Bug trouvé et corrigé : `flow_window` utilisait `t.buyer == ""` mais le loader retourne `None` → feature silencieusement morte. Réimplémenté via price-vs-book, mais signal trop faible (423 trades seulement).
+
+---
 
 ## 2026-04-12 — Claude
 
