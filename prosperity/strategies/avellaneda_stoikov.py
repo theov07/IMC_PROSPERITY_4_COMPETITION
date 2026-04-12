@@ -83,28 +83,32 @@ class AvellanedaStoikovStrategy(BaseStrategy):
     def _compute_as_quotes(
         self, mid: float, position: int, sigma: float, memory: Dict[str, Any],
     ) -> Tuple[float, float, float]:
-        gamma = float(self.params.get("gamma", 0.1))
-        kappa = float(self.params.get("kappa", 1.5))
-        ts_increment = int(self.params.get("ts_increment", 100))
+
+        # Not using tau for now since open position are still automatically liquidated at the end of the day using fair value
+        """ ts_increment = int(self.params.get("ts_increment", 100))
         last_ts_key = "bt_last_ts_value" if os.environ.get("INTERNAL_BACKTEST") else "last_ts_value"
         last_ts = int(self.params.get(last_ts_key, self.params.get("last_ts_value", 199900)))
+        memory["tick_count"] = tick_num + 1
         num_ticks = last_ts // ts_increment + 1
         tick_num = memory.get("tick_count", 0)
-        memory["tick_count"] = tick_num + 1
+        tau = max((num_ticks - tick_num) / num_ticks, 0.001) """
 
-        tau = max((num_ticks - tick_num) / num_ticks, 0.001)
+        
+        gamma = float(self.params.get("gamma", 0.1))
+        kappa = float(self.params.get("kappa", 1.5))
 
-        # Reservation price
-        reservation = mid - position * gamma * sigma * sigma * tau 
+        #  # Reservation price
+        reservation = mid - position * gamma * sigma * sigma # * tau 
 
         # Optimal half-spread
-        half_spread = (gamma * sigma * sigma * tau) / 2.0 + math.log(1.0 + gamma / kappa) / gamma
+        #half_spread = (gamma * sigma * sigma * tau) / 2.0 + math.log(1.0 + gamma / kappa) / gamma
+        half_spread = 5 * ((gamma * sigma * sigma) + math.log(1.0 + gamma / kappa) / gamma)
 
         # Apply min spread from params
         min_half_spread = float(self.params.get("min_half_spread", 1.0))
         half_spread = max(half_spread, min_half_spread)
 
-        return reservation, half_spread, tau
+        return reservation, half_spread
 
     # ── order construction ───────────────────────────────────────────
     def compute_orders(
@@ -120,8 +124,8 @@ class AvellanedaStoikovStrategy(BaseStrategy):
 
         mid = book.mid_price
         mid_smooth = self._smooth_mid(mid, memory)
-        sigma = self._update_volatility(mid_smooth, memory)
-        reservation, half_spread, _ = self._compute_as_quotes(mid_smooth, position, sigma, memory)
+        sigma = self._update_volatility(mid, memory)
+        reservation, half_spread = self._compute_as_quotes(mid_smooth, position, sigma, memory)
 
         bid_price = int(math.floor(reservation - half_spread))
         ask_price = int(math.ceil(reservation + half_spread))
@@ -167,7 +171,7 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         quote_buy = min(buy_cap, maker_size)
         quote_sell = min(sell_cap, maker_size)
 
-        # Reduce quoting when inventory is heavy
+        # Reduce quoting when inventory is heavy # TODO: wtf is that
         if inv_ratio >= 0.75:
             if position > 0:
                 quote_buy = 0
