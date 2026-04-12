@@ -1,5 +1,18 @@
 ## IMC Queue / FIFO Reality
 
+## V8 Direction
+
+- Keep the V1 / V6 top-of-book pricing rule and protect queue priority.
+- Build V8 around only three levers:
+- Smart sizing: cut the side that worsens inventory and slightly boost the unwind side.
+- Toxicity filter: use short-horizon flow and one-tick jumps to shrink the adverse side.
+- Selective take: keep the opportunistic take layer and lean a bit harder into takes that reduce inventory.
+- For research, prefer tiny manual batches and one-day checks before any wider sweep.
+- First V8 sanity check on day `-2`:
+- `queue`: `39766.0`
+- `worse`: `15018.5`
+- Interpretation: the first V8 draft is much more defensive than the current V7 config. It keeps the conservative score close to the current baseline, but loses too much volume / optimistic spread capture.
+
 - In live IMC, a passive quote that is not traded can remain visible during the iteration, but if no bot trades against it, it is cancelled at the end of the iteration.
 - That means being behind only 10 to 15 lots at best can still produce zero fills: the queue in front is small, but the quote lifetime is also short.
 - This is the likely explanation for V7: `qty_join_threshold=15` often joined the best price instead of improving by one tick, so we sat behind the displayed top size and were rarely reached before cancellation or book refresh.
@@ -18,7 +31,7 @@ peut nous mettre une paire qui sert à rien et qui
 ne possède pas d'alpha 
 -on peut avoir des positions négatives
 -le mid price est impacté par nos ordres ? Non 
--Est ce que inter day l'inventaire est remis à 0 ? J'ai vu dans le dashboard on a des positions qui passe > limit à cause de ça car on reset pas inter day (entre jour 1 et 2 par exemple)
+-Est ce que inter day l'inventaire est remis à 0 ? J'ai vu dans le dashboard on a des positions qui passe > limit à cause de ça car on reset pas inter day (entre jour 1 et 2 par exemple) -> problème reglé 
 # Market Making — Du fondamental au complexe
 ## Guide de préparation Prosperity IMC
 

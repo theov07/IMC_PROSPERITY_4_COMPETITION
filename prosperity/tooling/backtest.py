@@ -23,21 +23,28 @@ STRATEGY_ALIASES = {name: f"submissions.{name}" for name in MEMBER_OVERRIDES}
 class TradeMatchingMode(str, Enum):
     """Controls how resting (passive) limit orders are matched against market trades.
 
-    queue — one-iteration queue heuristic. If you join an existing price, the displayed
-            resting size at that level is treated as queue ahead. Exact-price trades must
-            first clear that queue; any trade through your price implies your remaining
-            quantity at that level was reached during the iteration.
-    all   — fill if the market trade price is <= buy order price (or >= sell order price).
-            Optimistic: assumes you have queue priority at your exact price level.
-    worse — fill only if the market trade price is strictly worse for the aggressor
-            (< buy order price, > sell order price). More conservative: only fills you
-            if someone traded through your price, not just at it.
-    none  — no passive fills via market trades; only aggressive (book-crossing) fills fire.
+    queue    — one-iteration queue heuristic. If you join an existing price, the displayed
+               resting size at that level is treated as queue ahead. Exact-price trades must
+               first clear that queue; any trade through your price implies your remaining
+               quantity at that level was reached during the iteration.
+    all      — fill if the market trade price is <= buy order price (or >= sell order price).
+               Optimistic: assumes you have queue priority at your exact price level.
+    worse    — fill only if the market trade price is strictly worse for the aggressor
+               (< buy order price, > sell order price). More conservative: only fills you
+               if someone traded through your price, not just at it.
+    none     — no passive fills via market trades; only aggressive (book-crossing) fills fire.
+    realistic — most accurate model:
+               - Exact-price trades: queue_ahead is subtracted first (same as queue mode).
+               - Through trades: fill min(remaining, trade.quantity) per trade, not the full
+                 remaining qty. Models the real sweep mechanics where each trade in the CSV
+                 is a single match event and its quantity bounds how much we can fill.
+               - Multiple through-trades in the same tick accumulate independently.
     """
-    queue = "queue"
-    all   = "all"
-    worse = "worse"
-    none  = "none"
+    queue    = "queue"
+    all      = "all"
+    worse    = "worse"
+    none     = "none"
+    realistic = "realistic"
 
 
 @dataclass
@@ -212,6 +219,13 @@ class BacktestEngine:
                 current_market_trades=current_market_trades,
                 timestamp=timestamp,
             )
+        if mode == TradeMatchingMode.realistic:
+            return BacktestEngine._simulate_passive_fills_realistic(
+                order_depth=order_depth,
+                pending_passive=pending_passive,
+                current_market_trades=current_market_trades,
+                timestamp=timestamp,
+            )
         return BacktestEngine._simulate_passive_fills_price_match(
             pending_passive=pending_passive,
             current_market_trades=current_market_trades,
@@ -308,6 +322,84 @@ class BacktestEngine:
                     aggressive=False,
                 )
             )
+
+        return fills
+
+    @staticmethod
+    def _simulate_passive_fills_realistic(
+        order_depth: OrderDepth,
+        pending_passive: List[_PendingPassiveOrder],
+        current_market_trades: List[Trade],
+        timestamp: int,
+    ) -> List[Fill]:
+        """Realistic fill model:
+        - Exact-price trades: deduct queue_ahead first, then fill min(remaining, leftover).
+        - Through trades: each trade contributes min(remaining, trade.quantity) — no free
+          full-remaining fill. Multiple through-trades accumulate independently.
+        Orders are processed best-price-first so the most aggressive passive orders get
+        first access to each trade's volume.
+        """
+        fills: List[Fill] = []
+
+        # Pre-compute queue ahead per (is_buy, price) key
+        queue_ahead_cache: Dict[Tuple[bool, int], int] = {}
+
+        # Track remaining volume per trade (indexed by position in list)
+        trade_remaining = [t.quantity for t in current_market_trades]
+
+        for pending in BacktestEngine._sorted_pending_passive_orders(pending_passive):
+            order = pending.order
+            remaining = pending.remaining
+            if remaining <= 0:
+                continue
+
+            is_buy = order.quantity > 0
+            key = (is_buy, order.price)
+
+            if key not in queue_ahead_cache:
+                queue_ahead_cache[key] = BacktestEngine._queue_ahead_at_price(order_depth, order)
+
+            queue_ahead = queue_ahead_cache[key]
+
+            for i, trade in enumerate(current_market_trades):
+                if remaining <= 0:
+                    break
+                if trade_remaining[i] <= 0:
+                    continue
+
+                if is_buy:
+                    if trade.price > order.price:
+                        continue
+                    at_price = (trade.price == order.price)
+                else:
+                    if trade.price < order.price:
+                        continue
+                    at_price = (trade.price == order.price)
+
+                if at_price:
+                    # Exact price: consume queue_ahead from this trade first
+                    consumed_by_queue = min(queue_ahead, trade_remaining[i])
+                    queue_ahead -= consumed_by_queue
+                    queue_ahead_cache[key] = queue_ahead
+                    avail = trade_remaining[i] - consumed_by_queue
+                    traded = min(remaining, avail)
+                else:
+                    # Through trade: fill proportional to trade volume, no free full fill
+                    traded = min(remaining, trade_remaining[i])
+
+                if traded <= 0:
+                    continue
+
+                trade_remaining[i] -= traded
+                remaining -= traded
+                fills.append(Fill(
+                    timestamp=timestamp,
+                    symbol=order.symbol,
+                    side="BUY" if is_buy else "SELL",
+                    price=order.price,
+                    quantity=traded,
+                    aggressive=False,
+                ))
 
         return fills
 
@@ -476,12 +568,13 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         "--match-trades",
         dest="execution_rule",
         default="queue",
-        choices=["queue", "all", "worse", "none"],
+        choices=["queue", "all", "worse", "none", "realistic"],
         help=(
             "Passive fill mode against same-tick market trades. "
             "queue=one-iteration queue heuristic using displayed size ahead at your price, "
             "all=fill at or better than your price (optimistic), "
             "worse=fill only if trade went strictly through your price (conservative), "
+            "realistic=most accurate: queue-ahead at exact price, proportional fill on through-trades, "
             "none=no passive fills at all."
         ),
     )

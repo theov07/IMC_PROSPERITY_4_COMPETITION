@@ -15,7 +15,10 @@ When you add a new strategy:
 
 import argparse
 import ast
+import importlib.util
 import sys
+import time
+import traceback
 from pathlib import Path
 from pprint import pformat
 from textwrap import dedent
@@ -38,6 +41,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "naive_tight_mm_v5":  ("prosperity/strategies/naive_tight_mm_v5.py",  "NaiveTightMarketMakerV5Strategy"),
     "naive_tight_mm_v6":  ("prosperity/strategies/naive_tight_mm_v6.py",  "NaiveTightMarketMakerV6Strategy"),
     "naive_tight_mm_v7":  ("prosperity/strategies/naive_tight_mm_v7.py",  "NaiveTightMarketMakerV7Strategy"),
+    "naive_tight_mm_v8":  ("prosperity/strategies/naive_tight_mm_v8.py",  "NaiveTightMarketMakerV8Strategy"),
     "avellaneda_stoikov": ("prosperity/strategies/avellaneda_stoikov.py", "AvellanedaStoikovStrategy"),
     "stat_arb":           ("prosperity/strategies/stat_arb.py",           "StatArbStrategy"),
     "black_scholes":      ("prosperity/strategies/black_scholes.py",      "BlackScholesStrategy"),
@@ -141,7 +145,139 @@ _TRADER_CLASS = dedent("""\
 """)
 
 
-# ── Main ───────────────────────────────────────────────────────────────────
+# ── Validation ────────────────────────────────────────────────────────────
+
+# Imports banned by the IMC sandbox
+_BANNED_IMPORTS = {"os", "sys", "subprocess", "socket", "pathlib", "shutil",
+                   "importlib", "ctypes", "multiprocessing", "threading"}
+
+# Hard time limit per tick (ms) — IMC cuts at 900ms, we warn well before
+_WARN_MS = 100
+_HARD_MS = 900
+_BENCH_TICKS = 200  # number of ticks used for the runtime benchmark
+
+
+def _build_test_state(products: dict, timestamp: int = 0, trader_data: str = ""):
+    """Build a minimal but realistic TradingState for validation."""
+    from datamodel import Listing, OrderDepth, TradingState
+
+    order_depths = {}
+    listings = {}
+    for symbol in products:
+        od = OrderDepth()
+        od.buy_orders  = {9992: 15, 9990: 30}  if "EMERALD" in symbol else {5000: 10, 4999: 20}
+        od.sell_orders = {10008: -15, 10010: -30} if "EMERALD" in symbol else {5013: -10, 5014: -20}
+        order_depths[symbol] = od
+        listings[symbol] = Listing(symbol, symbol, "XIRECS")
+
+    return TradingState(
+        traderData=trader_data,
+        timestamp=timestamp,
+        listings=listings,
+        order_depths=order_depths,
+        own_trades={},
+        market_trades={},
+        position={},
+        observations=None,
+    )
+
+
+def _validate(output_path: Path, products: dict) -> bool:
+    """Run all pre-flight checks on the exported file. Returns True if all pass."""
+    source = output_path.read_text(encoding="utf-8")
+    ok = True
+
+    print("\n-- Validation --------------------------------------------------")
+
+    # 1. Syntax check
+    try:
+        ast.parse(source)
+        print("  [OK] Syntax valid")
+    except SyntaxError as e:
+        print(f"  [FAIL] Syntax error: {e}")
+        return False  # no point continuing
+
+    # 2. Banned imports
+    tree = ast.parse(source)
+    banned_found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top = alias.name.split(".")[0]
+                if top in _BANNED_IMPORTS:
+                    banned_found.append(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                top = node.module.split(".")[0]
+                if top in _BANNED_IMPORTS:
+                    banned_found.append(node.module)
+    if banned_found:
+        print(f"  [FAIL] Banned imports found: {banned_found}")
+        ok = False
+    else:
+        print("  [OK] No banned imports")
+
+    # 3. Load module and instantiate Trader
+    try:
+        mod_name = f"_submission_validate_{output_path.stem}"
+        spec = importlib.util.spec_from_file_location(mod_name, output_path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = mod
+        spec.loader.exec_module(mod)
+        trader = mod.Trader()
+        print("  [OK] Trader.__init__() succeeded")
+    except Exception:
+        print("  [FAIL] Trader.__init__() crashed:")
+        traceback.print_exc(limit=5)
+        return False
+
+    # 4. Functional test — one tick
+    try:
+        state = _build_test_state(products, timestamp=0)
+        result = trader.run(state)
+        if not isinstance(result, tuple) or len(result) < 3:
+            raise ValueError(f"run() must return (orders, conversions, traderData), got: {result!r}")
+        orders_dict, _, _ = result[0], result[1], result[2]
+        total_orders = sum(len(v) for v in orders_dict.values())
+        print(f"  [OK] run() tick 0: {total_orders} order(s) across {list(orders_dict.keys())}")
+    except Exception:
+        print("  [FAIL] run() crashed on tick 0:")
+        traceback.print_exc(limit=5)
+        return False
+
+    # 5. Runtime benchmark over _BENCH_TICKS ticks
+    try:
+        trader_data = result[2]
+        durations = []
+        for i in range(_BENCH_TICKS):
+            state = _build_test_state(products, timestamp=i * 100, trader_data=trader_data)
+            t0 = time.perf_counter()
+            out = trader.run(state)
+            durations.append((time.perf_counter() - t0) * 1000)
+            trader_data = out[2]
+
+        avg_ms  = sum(durations) / len(durations)
+        max_ms  = max(durations)
+        p99_ms  = sorted(durations)[int(len(durations) * 0.99)]
+
+        status = "OK" if avg_ms < _WARN_MS else ("WARN" if avg_ms < _HARD_MS else "FAIL")
+        print(f"  [{status}] Runtime over {_BENCH_TICKS} ticks — "
+              f"avg={avg_ms:.2f}ms  p99={p99_ms:.2f}ms  max={max_ms:.2f}ms  "
+              f"(limit={_HARD_MS}ms)")
+        if status == "FAIL":
+            ok = False
+    except Exception:
+        print("  [FAIL] Runtime benchmark crashed:")
+        traceback.print_exc(limit=5)
+        ok = False
+
+    print("----------------------------------------------------------------")
+    print(f"  {'ALL CHECKS PASSED' if ok else 'SOME CHECKS FAILED — review before uploading'}")
+    print("----------------------------------------------------------------\n")
+    return ok
+
+
+# ── Main ----------------------------------------------------------------───
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export a single-file Prosperity submission")
@@ -225,6 +361,8 @@ def main() -> int:
     print(f"Wrote {output_path} ({len(output):,} bytes)")
     print(f"Inlined : {', '.join(module_files)}")
     print(f"Strategies: {', '.join(sorted(needed))}")
+
+    _validate(output_path, products)
 
     # Write the submissions/ wrapper so the backtester can import it directly.
     wrapper_path = ROOT / "submissions" / f"{args.member}.py"
