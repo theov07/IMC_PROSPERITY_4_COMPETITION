@@ -1,7 +1,7 @@
 import unittest
 
 from datamodel import Listing, Observation, Order, OrderDepth, Trade, TradingState
-from prosperity.tooling.backtest import BacktestEngine, TradeMatchingMode
+from prosperity.tooling.backtest import BacktestEngine, TradeMatchingMode, aggregate_day_summaries
 
 import main
 
@@ -35,6 +35,22 @@ class FrameworkSmokeTests(unittest.TestCase):
         summary = engine.run_day("-2")
         self.assertIsInstance(summary.pnl, float)
         self.assertTrue(summary.product_summaries)
+        self.assertIsNotNone(summary.robustness)
+        self.assertGreaterEqual(summary.robustness.fill_efficiency, 0.0)
+        self.assertGreaterEqual(summary.robustness.max_drawdown or 0.0, 0.0)
+        for product_summary in summary.product_summaries.values():
+            self.assertIsNotNone(product_summary.robustness)
+            self.assertGreaterEqual(product_summary.robustness.avg_abs_position_ratio, 0.0)
+
+    def test_aggregate_day_summaries_exposes_robustness(self):
+        engine = BacktestEngine("data", "champion")
+        summary = engine.run_day("-2")
+        aggregate = aggregate_day_summaries([summary])
+
+        self.assertIn("robustness", aggregate)
+        self.assertAlmostEqual(aggregate["total_pnl"], summary.pnl)
+        self.assertGreaterEqual(aggregate["robustness"]["max_drawdown"], 0.0)
+        self.assertIn("EMERALDS", aggregate["per_product_robustness"])
 
 
 class PassiveFillRuleTests(unittest.TestCase):

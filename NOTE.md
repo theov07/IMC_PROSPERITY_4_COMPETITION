@@ -13,6 +13,30 @@
 - `worse`: `15018.5`
 - Interpretation: the first V8 draft is much more defensive than the current V7 config. It keeps the conservative score close to the current baseline, but loses too much volume / optimistic spread capture.
 
+## Framework Status
+
+- Quote logging is now standardized for quoting strategies, so official logs can surface our own bid/ask in the dashboard when lambda logs are present.
+- The backtester now exports robustness metrics in JSON summaries:
+- `max_drawdown`
+- `fill_efficiency`
+- `avg_abs_position_ratio`
+- `near_limit_tick_ratio`
+- `aggressive_qty` vs `passive_qty`
+- `passive_adverse_rate`
+- `passive_post_fill_edge`
+- `compare` and `grid_search` can now rank by robustness, not only by pnl.
+- `dashboard` and `tooling.logs` now try a best-effort auto-discovery of a matching backtest JSON in `artifacts/`, then run reconciliation automatically if a confident match is found.
+
+## Missing Metrics / Next Gaps
+
+- We still do not compute quote age, quote refresh rate, or stale quote exposure.
+- We still do not compute per-side fill efficiency (`bid quote -> buy fill`, `ask quote -> sell fill`) or queue reach estimates.
+- We still do not attribute pnl into `spread capture`, `inventory drift`, `adverse selection`, and `take-vs-make` in a clean way.
+- We still do not compute inventory episode metrics such as time-to-unwind, inventory half-life, or time spent one-sided.
+- We still do not calibrate backtest markouts against official logs by product, side, and horizon.
+- We still do not expose participant-conditioned metrics from official logs (which bot traded with us, and what happened after).
+- We still do not expose `state.observations` / conversion diagnostics in the dashboard or summaries.
+
 - In live IMC, a passive quote that is not traded can remain visible during the iteration, but if no bot trades against it, it is cancelled at the end of the iteration.
 - That means being behind only 10 to 15 lots at best can still produce zero fills: the queue in front is small, but the quote lifetime is also short.
 - This is the likely explanation for V7: `qty_join_threshold=15` often joined the best price instead of improving by one tick, so we sat behind the displayed top size and were rarely reached before cancellation or book refresh.
