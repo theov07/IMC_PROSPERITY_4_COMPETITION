@@ -2,6 +2,10 @@
 
 Espace de travail pour les variantes Leo.
 
+-tester la strat top of the book avec deux levels
+-tester le penny jump
+-tester le top of the book + join the best si best à une petite quantité
+-> chercher à contourner le probleme de reset du FIFO à chaque nouveau OB 
 ## Première stratégie
 
 La première stratégie créée dans le nouveau framework est `naive`.
