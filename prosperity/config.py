@@ -117,39 +117,45 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             "EMERALDS": _override(
                 ROUND_0["EMERALDS"],
                 strategy="avellaneda_stoikov",
-                gamma=0.1,
+                gamma=0.05,
                 kappa=1.0,
+                maker_size_base_pct=0.5, # in pct of position limit, scales down as inventory increases
+                take_edge=5,
+                pct_kept_for_takers=0.25, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=25,
                 sigma_window=200,
                 sigma_default=1.0,
                 sigma_floor=0.5,
                 sigma_half_life=60,
-                min_half_spread=1.0,
+
                 ts_increment=100,
                 last_ts_value=199900,       # IMC live: last timestamp of the day
                 bt_last_ts_value=999900,    # internal backtest data: last timestamp of the day
-                maker_size=8,
-                take_edge=1.5,
-                mid_smooth_window=50, # mid_smooth_window=0 => disabled
-                mid_smooth_half_life=25,
                 log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
             ),
             "TOMATOES": _override(
                 ROUND_0["TOMATOES"],
                 strategy="avellaneda_stoikov",
-                gamma=0.2,
+                gamma=0.1,
                 kappa=1.0,
+                maker_size_base_pct=0.35, # in pct of position limit, scales down as inventory increases
+                take_edge=5,
+                pct_kept_for_takers=0.25, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=25,
                 sigma_window=200,
                 sigma_default=1.0,
                 sigma_floor=0.5,
                 sigma_half_life=60,
-                min_half_spread=1.0,
+
                 ts_increment=100,
                 last_ts_value=199900,
                 bt_last_ts_value=199900,
-                maker_size=8,
-                take_edge=0.5,
-                mid_smooth_window=50, # mid_smooth_window=0 => disabled
-                mid_smooth_half_life=25,
                 log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
             ),
         },
