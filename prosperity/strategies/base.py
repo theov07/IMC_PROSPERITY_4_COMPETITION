@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple
@@ -61,6 +62,44 @@ class BaseStrategy(ABC):
     ) -> Tuple[List[Order], int]:
         """Produce orders and conversion request for this product."""
         ...
+
+    # ------------------------------------------------------------------
+    # Shared volatility estimation (call from any strategy)
+    # ------------------------------------------------------------------
+    def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
+        """Estimate realised volatility from mid-price returns with EWMA smoothing.
+
+        Params read from self.params:
+          sigma_window   — rolling window size for returns (default 50)
+          sigma_default  — fallback when too few prices (default 1.0)
+          sigma_half_life — EWMA half-life for smoothing (default 60)
+          sigma_floor    — minimum returned value (default 0.5)
+
+        Stores in memory: ``mid_history``, ``sigma_smoothed``.
+        Returns the floored, smoothed sigma.
+        """
+        window = int(self.params.get("sigma_window", 50))
+        prices = memory.setdefault("mid_history", [])
+        prices.append(mid)
+        if len(prices) > window + 1:
+            prices[:] = prices[-(window + 1):]
+
+        if len(prices) < 3:
+            return float(self.params.get("sigma_default", 1.0))
+
+        returns = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+        n = len(returns)
+        mean_r = sum(returns) / n
+        var = sum((r - mean_r) ** 2 for r in returns) / max(n - 1, 1)
+        sigma_raw = math.sqrt(var) if var > 0 else float(self.params.get("sigma_default", 1.0))
+
+        half_life = float(self.params.get("sigma_half_life", 60))
+        alpha = 2.0 / (half_life + 1.0)
+        sigma_prev = memory.get("sigma_smoothed", sigma_raw)
+        sigma_smoothed = alpha * sigma_raw + (1.0 - alpha) * sigma_prev
+        memory["sigma_smoothed"] = sigma_smoothed
+
+        return max(sigma_smoothed, float(self.params.get("sigma_floor", 0.5)))
 
     # ------------------------------------------------------------------
     # Optional: expose named price features for the dashboard
@@ -146,6 +185,64 @@ class BaseStrategy(ABC):
             "log": [[row.get(column) for column in columns] for row in rows],
         }))
         memory["_quote_trace_rows"] = []
+
+    def log_taker_fill(
+        self,
+        *,
+        state: TradingState,
+        memory: Dict[str, Any],
+        side: str,
+        price: int,
+        quantity: int,
+    ) -> None:
+        """Accumulate a taker fill and flush when the buffer is full enough.
+
+        Flush conditions (in priority order):
+          1. Deferred flag was set last tick → flush now.
+          2. Timestamp is the second-to-last of the day → flush as end-of-day cleanup.
+          3. Buffer reached 20 fills AND we are NOT at a quote-flush timestamp → flush.
+          4. Buffer reached 20 fills AND we ARE at a quote-flush timestamp → set deferred
+             flag; the flush will fire on the very next tick instead.
+
+        Log format emitted to stdout:
+          {"product": "...", "trace": "taker_fills", "chunk_end": ts,
+           "log": [[ts, side, price, qty], ...]}
+        """
+        if not self.runtime_trace_enabled():
+            return
+
+        taker_log = memory.setdefault("_taker_log", [])
+        taker_log.append([int(state.timestamp), side, price, quantity])
+
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        ts_increment = int(self.params.get("ts_increment", 100))
+        last_ts = int(self.params.get("last_ts_value", 199900))
+        second_to_last = last_ts - ts_increment
+
+        is_quote_flush = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
+        deferred = memory.get("_taker_flush_deferred", False)
+
+        # If threshold hit exactly on a quote-flush ts, defer to the next tick.
+        if len(taker_log) >= 20 and is_quote_flush and not deferred:
+            memory["_taker_flush_deferred"] = True
+            return
+
+        should_flush = (
+            deferred
+            or int(state.timestamp) >= second_to_last
+            or (len(taker_log) >= 20 and not is_quote_flush)
+        )
+        if not should_flush:
+            return
+
+        print(json.dumps({
+            "product": self.product,
+            "trace": "taker_fills",
+            "chunk_end": int(state.timestamp),
+            "log": taker_log,
+        }))
+        memory["_taker_log"] = []
+        memory["_taker_flush_deferred"] = False
 
     def position_limit(self) -> int:
         return self.params.get("position_limit", 20)
