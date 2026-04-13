@@ -454,11 +454,30 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     lambda_df = _parse_lambda_logs(log.runtime_logs)
     lambda_sym = lambda_df[lambda_df["product"] == symbol] if not lambda_df.empty else pd.DataFrame()
 
+    # Detect vol-scale columns in lambda logs (e.g. "sigma", "half_spread")
+    _skip = {"timestamp", "product", "bid_price", "ask_price", "reservation", "position"}
+    _lambda_extra = [c for c in lambda_sym.columns if c not in _skip] if not lambda_sym.empty else []
+    _vol_cols = [c for c in _lambda_extra if "sigma" in c.lower() or "vol" in c.lower()]
+    has_vol = bool(_vol_cols)
+
+    if has_vol:
+        n_rows  = 5
+        heights = [0.36, 0.12, 0.14, 0.12, 0.26]
+        titles  = ["Price & Trades", "Spread", "Position & Imbalance", "Volatility (σ)", "PnL"]
+        vol_row = 4
+        pnl_row = 5
+    else:
+        n_rows  = 4
+        heights = [0.42, 0.14, 0.16, 0.28]
+        titles  = ["Price & Trades", "Spread", "Position & Imbalance", "PnL"]
+        vol_row = None
+        pnl_row = 4
+
     fig = make_subplots(
-        rows=4, cols=1, shared_xaxes=True,
-        row_heights=[0.42, 0.14, 0.16, 0.28],
-        subplot_titles=["Price & Trades", "Spread", "Position & Imbalance", "PnL"],
-        vertical_spacing=0.07,
+        rows=n_rows, cols=1, shared_xaxes=True,
+        row_heights=heights,
+        subplot_titles=titles,
+        vertical_spacing=0.05,
     )
 
     # Price (with optional EWMA smoothing)
@@ -473,17 +492,24 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         line=dict(color=C_FAIR, width=1.3, shape=line_shape)), row=1, col=1)
     _trade_markers(fig, sym_trades, row=1)
 
-    # Strategy lambda logs: reservation price + MM quotes
+    # Strategy lambda logs: reservation price + MM quotes (no smoothing on discrete prices)
     if not lambda_sym.empty:
-        fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["reservation"], smooth_n),
-            name="Reservation", mode=_mode, marker=dict(**_marker, color=C_FEATURE_PALETTE[0]),
-            line=dict(color=C_FEATURE_PALETTE[0], width=1.2, shape=line_shape)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["bid_price"], smooth_n),
-            name="MM Bid (log)", mode=_mode, marker=dict(**_marker, color=C_QUOTE_BID),
-            line=dict(color=C_QUOTE_BID, width=1, shape=line_shape)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=lambda_sym["timestamp"], y=_smooth(lambda_sym["ask_price"], smooth_n),
-            name="MM Ask (log)", mode=_mode, marker=dict(**_marker, color=C_QUOTE_ASK),
-            line=dict(color=C_QUOTE_ASK, width=1, shape=line_shape)), row=1, col=1)
+        if "reservation" in lambda_sym.columns:
+            res_data = lambda_sym.dropna(subset=["reservation"])
+            if not res_data.empty:
+                fig.add_trace(go.Scatter(x=res_data["timestamp"], y=_smooth(res_data["reservation"], smooth_n),
+                    name="Reservation", mode=_mode, marker=dict(**_marker, color=C_FEATURE_PALETTE[0]),
+                    line=dict(color=C_FEATURE_PALETTE[0], width=1.2, shape=line_shape)), row=1, col=1)
+        bid_data = lambda_sym.dropna(subset=["bid_price"])
+        ask_data = lambda_sym.dropna(subset=["ask_price"])
+        if not bid_data.empty:
+            fig.add_trace(go.Scatter(x=bid_data["timestamp"], y=bid_data["bid_price"],
+                name="MM Bid (log)", mode=_mode, marker=dict(**_marker, color=C_QUOTE_BID),
+                line=dict(color=C_QUOTE_BID, width=1, shape=line_shape)), row=1, col=1)
+        if not ask_data.empty:
+            fig.add_trace(go.Scatter(x=ask_data["timestamp"], y=ask_data["ask_price"],
+                name="MM Ask (log)", mode=_mode, marker=dict(**_marker, color=C_QUOTE_ASK),
+                line=dict(color=C_QUOTE_ASK, width=1, shape=line_shape)), row=1, col=1)
 
     # Spread
     fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",
@@ -504,13 +530,27 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         marker_color=[C_IMB_POS if v > 0 else C_IMB_NEG for v in imb],
         opacity=0.6, showlegend=False), row=3, col=1)
 
+    # Volatility subplot (sigma and other vol-scale lambda columns)
+    if vol_row is not None and not lambda_sym.empty:
+        for i, feat in enumerate(_vol_cols):
+            col_data = lambda_sym.dropna(subset=[feat])
+            if col_data.empty:
+                continue
+            color = C_FEATURE_PALETTE[i % len(C_FEATURE_PALETTE)]
+            fig.add_trace(go.Scatter(
+                x=col_data["timestamp"], y=_smooth(col_data[feat], smooth_n),
+                name=feat, mode=_mode, marker=dict(**_marker, color=color),
+                line=dict(color=color, width=1.3, shape=line_shape),
+            ), row=vol_row, col=1)
+
     # PnL — per-product areas + total line
     pnl_df = _imc_per_product_pnl(log)
     symbols = sorted(pnl_df["symbol"].unique())
     color_map = _product_color_map(symbols)
-    _add_pnl_traces(fig, pnl_df, color_map, row=4, total_df=log.graph if not log.graph.empty else None)
+    _add_pnl_traces(fig, pnl_df, color_map, row=pnl_row, total_df=log.graph if not log.graph.empty else None)
 
-    fig.update_layout(height=820, uirevision=f"imc-{symbol}", **_layout_base(theme))
+    height = 920 if has_vol else 820
+    fig.update_layout(height=height, uirevision=f"imc-{symbol}", **_layout_base(theme))
     fig.update_annotations(**_subplot_title_style(theme))
     return fig
 
