@@ -48,8 +48,10 @@ except ImportError:
 C_BID      = "#5b8fd4"   # darker blue for best bid
 C_ASK      = "#d9556e"   # darker red for best ask
 C_FAIR     = "#a6e3a1"   # green
-C_BUY      = "#a6e3a1"   # green triangles
-C_SELL     = "#f38ba8"   # coral triangles
+C_BUY      = "#a6e3a1"   # green triangles  (maker buy)
+C_SELL     = "#f38ba8"   # coral triangles  (maker sell)
+C_TAKER_BUY  = "#fab387"  # orange triangles  (taker buy)
+C_TAKER_SELL = "#89b4fa"  # blue triangles    (taker sell)
 C_SPREAD   = "#89dceb"   # sky cyan fill
 C_POSITION = "#cba6f7"   # mauve purple
 C_IMB_POS  = "#a6e3a1"   # green bars
@@ -210,30 +212,37 @@ def _smooth(series: "pd.Series", n: int) -> "pd.Series":
 # ── Shared helpers ─────────────────────────────────────────────────────────
 
 def _trade_markers(fig, df: pd.DataFrame, row: int, prefix: str = ""):
-    """Add buy/sell triangle markers to a subplot row."""
+    """Add buy/sell triangle markers to a subplot row.
+
+    When the DataFrame has an ``aggressive`` column (internal backtest fills),
+    taker fills use orange/blue triangles and maker fills use the standard
+    green/coral triangles.  Falls back to two traces when the column is absent.
+    """
     if df.empty:
         return
     mkw = dict(line=dict(width=0.6, color="#212529"))
-    buys = df[df["side"] == "BUY"]
-    sells = df[df["side"] == "SELL"]
-    if not buys.empty:
+    has_aggressive = "aggressive" in df.columns
+
+    def _scatter(subset, name, symbol, color):
+        if subset.empty:
+            return
         fig.add_trace(go.Scatter(
-            x=buys["timestamp"], y=buys["price"], mode="markers",
-            name=f"{prefix}Buy",
-            marker=dict(symbol="triangle-up", color=C_BUY,
-                        size=(buys["quantity"].clip(1, 20) * 1.8).astype(int), **mkw),
-            text=[f"qty={q}  px={p}" for q, p in zip(buys["quantity"], buys["price"])],
+            x=subset["timestamp"], y=subset["price"], mode="markers",
+            name=f"{prefix}{name}",
+            marker=dict(symbol=symbol, color=color,
+                        size=(subset["quantity"].clip(1, 20) * 0.5 + 5).astype(int), **mkw),
+            text=[f"qty={q}  px={p}" for q, p in zip(subset["quantity"], subset["price"])],
             hoverinfo="text+name",
         ), row=row, col=1)
-    if not sells.empty:
-        fig.add_trace(go.Scatter(
-            x=sells["timestamp"], y=sells["price"], mode="markers",
-            name=f"{prefix}Sell",
-            marker=dict(symbol="triangle-down", color=C_SELL,
-                        size=(sells["quantity"].clip(1, 20) * 1.8).astype(int), **mkw),
-            text=[f"qty={q}  px={p}" for q, p in zip(sells["quantity"], sells["price"])],
-            hoverinfo="text+name",
-        ), row=row, col=1)
+
+    if has_aggressive:
+        _scatter(df[(df["side"] == "BUY")  & (~df["aggressive"])], "Maker buy",  "triangle-up",   C_BUY)
+        _scatter(df[(df["side"] == "SELL") & (~df["aggressive"])], "Maker sell", "triangle-down", C_SELL)
+        _scatter(df[(df["side"] == "BUY")  &   df["aggressive"]],  "Taker buy",  "triangle-up",   C_TAKER_BUY)
+        _scatter(df[(df["side"] == "SELL") &   df["aggressive"]],  "Taker sell", "triangle-down", C_TAKER_SELL)
+    else:
+        _scatter(df[df["side"] == "BUY"],  "Buy",  "triangle-up",   C_BUY)
+        _scatter(df[df["side"] == "SELL"], "Sell", "triangle-down", C_SELL)
 
 
 def _position_series(fills: pd.DataFrame | list[dict], symbol: str | None = None) -> pd.DataFrame:
@@ -316,12 +325,17 @@ def _bt_per_product_pnl(backtest_data: dict, market_df_raw: pd.DataFrame | None)
 
         has_market = not day_mkt.empty and "product" in day_mkt.columns
 
-        if not fills_df.empty:
-            all_syms = sorted(fills_df["symbol"].unique())
-        elif has_market:
+        summary_syms = sorted(day.get("product_summaries", {}).keys())
+        if has_market:
             all_syms = sorted(day_mkt["product"].unique())
+        elif not fills_df.empty:
+            all_syms = sorted(fills_df["symbol"].unique())
+        elif summary_syms:
+            all_syms = summary_syms
         else:
             all_syms = []
+        # Include any product that has summary data even if not in market/fills
+        all_syms = sorted(set(all_syms) | set(summary_syms))
 
         for sym in all_syms:
             sym_fills = (fills_df[fills_df["symbol"] == sym].sort_values("timestamp").copy()
@@ -595,17 +609,36 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
         sym_features = features_df[features_df["symbol"] == symbol].sort_values("timestamp").copy()
 
     has_market = not market_df.empty
-    n_rows = 3 if has_market else 2
-    heights = [0.45, 0.20, 0.35] if has_market else [0.35, 0.65]
-    titles = (["Price & Fills", "Position", "Equity PnL"] if has_market
-              else ["Position", "Equity PnL"])
+
+    # Detect vol-scale features (sigma / vol) to route to a dedicated subplot.
+    _all_feat_cols = (
+        [c for c in sym_features.columns if c not in ("timestamp", "symbol")]
+        if not sym_features.empty else []
+    )
+    _vol_feat_cols  = [c for c in _all_feat_cols if "sigma" in c.lower() or "vol" in c.lower()]
+    _price_feat_cols = [c for c in _all_feat_cols if c not in _vol_feat_cols]
+    has_vol = has_market and bool(_vol_feat_cols)
+
+    if has_market and has_vol:
+        n_rows  = 4
+        heights = [0.40, 0.15, 0.12, 0.33]
+        titles  = ["Price & Fills", "Position", "Volatility (σ)", "Equity PnL"]
+    elif has_market:
+        n_rows  = 3
+        heights = [0.45, 0.20, 0.35]
+        titles  = ["Price & Fills", "Position", "Equity PnL"]
+    else:
+        n_rows  = 2
+        heights = [0.35, 0.65]
+        titles  = ["Position", "Equity PnL"]
 
     fig = make_subplots(rows=n_rows, cols=1, shared_xaxes=True,
         row_heights=heights, subplot_titles=titles, vertical_spacing=0.05)
 
     price_row = 1
     pos_row   = 2 if has_market else 1
-    pnl_row   = 3 if has_market else 2
+    vol_row   = 3 if has_vol else None
+    pnl_row   = (4 if has_vol else 3) if has_market else 2
 
     # Price + fills
     if has_market:
@@ -624,27 +657,26 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 name="Mid", mode=_mode, marker=dict(**_marker, color=C_FAIR),
                 line=dict(color=C_FAIR, width=1, shape=line_shape)), row=price_row, col=1)
 
-        # MM quotes overlay
+        # MM quotes overlay — never smooth (discrete integer prices; smoothing crosses bid/ask)
         if not sym_quotes.empty:
             bid_q = sym_quotes.dropna(subset=["bid"])
             ask_q = sym_quotes.dropna(subset=["ask"])
             if not bid_q.empty:
                 fig.add_trace(go.Scatter(
-                    x=bid_q["timestamp"], y=_smooth(bid_q["bid"], smooth_n),
+                    x=bid_q["timestamp"], y=bid_q["bid"],
                     name="MM Bid Quote", mode=_mode, marker=dict(**_marker, color=C_QUOTE_BID),
                     line=dict(color=C_QUOTE_BID, width=1, shape=line_shape),
                 ), row=price_row, col=1)
             if not ask_q.empty:
                 fig.add_trace(go.Scatter(
-                    x=ask_q["timestamp"], y=_smooth(ask_q["ask"], smooth_n),
+                    x=ask_q["timestamp"], y=ask_q["ask"],
                     name="MM Ask Quote", mode=_mode, marker=dict(**_marker, color=C_QUOTE_ASK),
                     line=dict(color=C_QUOTE_ASK, width=1, shape=line_shape),
                 ), row=price_row, col=1)
 
-        # Strategy feature price lines (e.g. reservation price)
+        # Strategy feature price lines (e.g. reservation price) on price chart
         if not sym_features.empty:
-            feature_cols = [c for c in sym_features.columns if c not in ("timestamp", "symbol")]
-            for i, feat in enumerate(feature_cols):
+            for i, feat in enumerate(_price_feat_cols):
                 col_data = sym_features.dropna(subset=[feat])
                 if col_data.empty:
                     continue
@@ -661,8 +693,21 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
     pos_df = _position_series(sym_fills)
     if not pos_df.empty:
         fig.add_trace(go.Scatter(x=pos_df["timestamp"], y=pos_df["position"], name="Position",
-            line=dict(color=C_POSITION, width=1.5), fill="tozeroy",
-            fillcolor="rgba(112,72,232,0.12)"), row=pos_row, col=1)
+            mode="lines", line=dict(color=C_POSITION, width=1.5, shape=line_shape),
+            fill="tozeroy", fillcolor="rgba(112,72,232,0.12)"), row=pos_row, col=1)
+
+    # Volatility (sigma and other vol-scale features) — backtest only
+    if vol_row is not None and not sym_features.empty:
+        for i, feat in enumerate(_vol_feat_cols):
+            col_data = sym_features.dropna(subset=[feat])
+            if col_data.empty:
+                continue
+            color = C_FEATURE_PALETTE[(len(_price_feat_cols) + i) % len(C_FEATURE_PALETTE)]
+            fig.add_trace(go.Scatter(
+                x=col_data["timestamp"], y=col_data[feat],
+                name=feat, mode=_mode, marker=dict(**_marker, color=color),
+                line=dict(color=color, width=1.3, shape=line_shape),
+            ), row=vol_row, col=1)
 
     # Equity PnL — per-product stacked areas + total line
     per_prod_pnl = _per_prod_pnl if _per_prod_pnl is not None else _bt_per_product_pnl(backtest_data, market_df_raw)
@@ -772,7 +817,9 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
     bt_symbols: list[str] = []
     if backtest_data:
         all_fills = [f for d in backtest_data["days"] for f in d["fills"]]
-        bt_symbols = sorted({f["symbol"] for f in all_fills})
+        fill_syms = {f["symbol"] for f in all_fills}
+        summary_syms = {sym for d in backtest_data["days"] for sym in d.get("product_summaries", {})}
+        bt_symbols = sorted(fill_syms | summary_syms)
 
     all_symbols = sorted(set(imc_symbols) | set(bt_symbols))
     if not all_symbols:
@@ -999,7 +1046,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         children = []
         if log:
             children += [
-                _section_header("IMC Official Results", theme),
+                _section_header("IMC Simulation Results", theme),
                 html.Div(
                     dcc.Graph(id="imc-chart",
                               figure=build_imc_figure(log, symbol, theme, smooth_n=smooth_n, line_shape=line_shape),

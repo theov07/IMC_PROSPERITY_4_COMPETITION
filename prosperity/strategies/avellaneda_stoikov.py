@@ -51,34 +51,6 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["mid_smoothed"] = smoothed
         return smoothed
 
-    # ── volatility estimation ────────────────────────────────────────
-    def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
-        window = int(self.params.get("sigma_window", 50))
-        prices = memory.setdefault("mid_history", [])
-        prices.append(mid)
-        if len(prices) > window + 1:
-            prices[:] = prices[-(window + 1):]
-
-        if len(prices) < 3:
-            return self.params.get("sigma_default", 1.0)
-
-        # Realized volatility from mid returns
-        returns = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
-        n = len(returns)
-        mean_r = sum(returns) / n
-        var = sum((r - mean_r) ** 2 for r in returns) / max(n - 1, 1)
-        sigma_raw = math.sqrt(var) if var > 0 else self.params.get("sigma_default", 1.0)
-
-        # Apply exponential smoothing with parametrizable half-life
-        half_life = float(self.params.get("sigma_half_life", 60))
-        alpha = 2.0 / (half_life + 1.0)
-        sigma_prev = memory.get("sigma_smoothed", sigma_raw)
-        sigma_smoothed = alpha * sigma_raw + (1.0 - alpha) * sigma_prev
-        memory["sigma_smoothed"] = sigma_smoothed
-
-        # Floor to prevent degenerate spreads
-        return max(sigma_smoothed, self.params.get("sigma_floor", 0.5))
-
     # ── core A-S computation ─────────────────────────────────────────
     def _compute_as_quotes(
         self, mid: float, position: int, sigma: float, memory: Dict[str, Any],
@@ -111,26 +83,24 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         return reservation, half_spread
 
     # ── order construction ───────────────────────────────────────────
-    def compute_orders(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
+    def compute_orders(self, state: TradingState, book: BookSnapshot, order_depth: OrderDepth, position: int, memory: Dict[str, Any]) -> Tuple[List[Order], int]:
+        
         if book.mid_price is None:
             return [], 0
 
         mid = book.mid_price
         mid_smooth = self._smooth_mid(mid, memory)
         sigma = self._update_volatility(mid, memory)
+
+
+        # ─-----------------------─ QUOTE PRICING -------------------------------
+
         reservation, half_spread = self._compute_as_quotes(mid_smooth, position, sigma, memory)
 
         bid_price = int(math.floor(reservation - half_spread))
         ask_price = int(math.ceil(reservation + half_spread))
 
-        # Ensure we don't cross the book
+        # Ensure we don't cross the book ---------- could be reviewed -----------
         if book.best_ask is not None:
             bid_price = min(bid_price, book.best_ask - 1)
         if book.best_bid is not None:
@@ -138,13 +108,18 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         if ask_price <= bid_price:
             ask_price = bid_price + 1
 
+        orders: List[Order] = []
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
 
-        maker_size = int(self.params.get("maker_size", 10))
-        orders: List[Order] = []
 
-        # ── Aggressive taking when edge is clear ──
+        # ─--------------─ Taker orders, when edge is clear ---------------------
+
+        # Track which prices we send as taker this tick so own_trades can be
+        # classified next tick (fills arrive one tick later via state.own_trades).
+        this_taker_buy_px: set = set()
+        this_taker_sell_px: set = set()
+
         take_edge = float(self.params.get("take_edge", 0.5))
         for ask_p in sorted(order_depth.sell_orders):
             available = -order_depth.sell_orders[ask_p]
@@ -153,6 +128,7 @@ class AvellanedaStoikovStrategy(BaseStrategy):
             qty = min(available, buy_cap)
             if qty > 0:
                 orders.append(Order(self.product, ask_p, qty))
+                this_taker_buy_px.add(ask_p)
                 buy_cap -= qty
 
         for bid_p in sorted(order_depth.buy_orders, reverse=True):
@@ -162,21 +138,32 @@ class AvellanedaStoikovStrategy(BaseStrategy):
             qty = min(volume, sell_cap)
             if qty > 0:
                 orders.append(Order(self.product, bid_p, -qty))
+                this_taker_sell_px.add(bid_p)
                 sell_cap -= qty
 
-        # ── Passive quoting ──
+
+        # ─--------------------─ Passive quoting ──------------------------------
+
+        #  ORDER SIZING
         limit = self.position_limit()
+
+        base_size = float(self.params.get("maker_size_base_pct", 0.2)) * limit
+        bid_size = base_size * (1 - position/limit)
+        ask_size = base_size * (1 + position/limit)
+
+        quote_buy = min(buy_cap, int(bid_size))
+        quote_sell = min(sell_cap, int(ask_size))
+
+        # ─-----------─ Reduce quote -> keep capacity for takers ---------------------
+
         inv_ratio = abs(position) / float(limit) if limit else 0.0
 
-        quote_buy = min(buy_cap, maker_size)
-        quote_sell = min(sell_cap, maker_size)
-
-        # Reduce quoting when inventory is heavy # TODO: wtf is that
-        if inv_ratio >= 0.75:
+        if inv_ratio >= 1 - float(self.params.get("pct_kept_for_takers", 0.2)):
             if position > 0:
                 quote_buy = 0
             elif position < 0:
                 quote_sell = 0
+
 
         if quote_buy > 0:
             orders.append(Order(self.product, bid_price, quote_buy))
@@ -187,7 +174,26 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["sigma"] = sigma
         memory["half_spread"] = half_spread
 
-        # ── Per-tick log accumulation (live only, suppressed during internal backtest) ──
+        # ── Taker-fill classification and logging ────────────────────────────────
+        # own_trades contains fills from LAST tick's orders; classify using the
+        # taker prices we stored at the end of last tick.
+        prev_taker_buy_px = set(memory.get("_taker_buy_px", []))
+        prev_taker_sell_px = set(memory.get("_taker_sell_px", []))
+        memory["_taker_buy_px"] = list(this_taker_buy_px)
+        memory["_taker_sell_px"] = list(this_taker_sell_px)
+
+        for trade in state.own_trades.get(self.product, []):
+            if trade.buyer == "SUBMISSION":
+                side, is_taker = "BUY", trade.price in prev_taker_buy_px
+            else:
+                side, is_taker = "SELL", trade.price in prev_taker_sell_px
+            if is_taker:
+                self.log_taker_fill(
+                    state=state, memory=memory,
+                    side=side, price=trade.price, quantity=trade.quantity,
+                )
+
+        # ── Quote snapshot (live only, suppressed during internal backtest) ──────
         self.log_quote_snapshot(
             state=state,
             memory=memory,
@@ -207,4 +213,6 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         out: Dict[str, float] = {}
         if (r := memory.get("reservation")) is not None:
             out["Reservation"] = r
+        if (s := memory.get("sigma")) is not None:
+            out["Sigma"] = s
         return out
