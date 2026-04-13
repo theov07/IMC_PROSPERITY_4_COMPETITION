@@ -439,6 +439,17 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
 
     act = _compute_activity_features(act)
     sym_trades = _imc_sym_trades(log.trades, symbol)
+
+    # Annotate trades with taker/maker using strategy-logged taker_fills trace
+    from prosperity.tooling.logs import _parse_taker_fills
+    taker_df = _parse_taker_fills(log.runtime_logs)
+    sym_takers = taker_df[taker_df["product"] == symbol] if not taker_df.empty else pd.DataFrame()
+    if not sym_trades.empty and not sym_takers.empty:
+        taker_price_side = set(zip(sym_takers["price"].astype(int), sym_takers["side"].str.upper()))
+        sym_trades["aggressive"] = sym_trades.apply(
+            lambda r: (int(r["price"]), str(r["side"]).upper()) in taker_price_side, axis=1,
+        )
+
     pos_df = _position_series(sym_trades)
     lambda_df = _parse_lambda_logs(log.runtime_logs)
     lambda_sym = lambda_df[lambda_df["product"] == symbol] if not lambda_df.empty else pd.DataFrame()
@@ -482,8 +493,8 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     # Position
     if not pos_df.empty:
         fig.add_trace(go.Scatter(x=pos_df["timestamp"], y=pos_df["position"], name="Position",
-            line=dict(color=C_POSITION, width=1.5), fill="tozeroy",
-            fillcolor="rgba(112,72,232,0.12)"), row=3, col=1)
+            mode="lines", line=dict(color=C_POSITION, width=1.5, shape=line_shape),
+            fill="tozeroy", fillcolor="rgba(112,72,232,0.12)"), row=3, col=1)
 
     # Imbalance
     bv = act["bid_volume_1"].clip(lower=1)
@@ -801,8 +812,9 @@ def _toggle_btn_style(theme: str) -> dict:
     }
 
 
-def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None = None,
-             log_path: str | None = None, backtest_json_path: str | None = None,
+def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: str | None = None,
+             log_path: str | None = None, log2_path: str | None = None,
+             backtest_json_path: str | None = None,
              reconcile_report: dict | None = None):
     if not HAS_DASH:
         print("dash not installed. Run: pip install dash")
@@ -814,6 +826,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
     from dash import State
 
     imc_symbols: list[str] = sorted(log.activities["product"].dropna().unique()) if log else []
+    imc2_symbols: list[str] = sorted(log2.activities["product"].dropna().unique()) if log2 else []
     bt_symbols: list[str] = []
     if backtest_data:
         all_fills = [f for d in backtest_data["days"] for f in d["fills"]]
@@ -821,7 +834,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
         summary_syms = {sym for d in backtest_data["days"] for sym in d.get("product_summaries", {})}
         bt_symbols = sorted(fill_syms | summary_syms)
 
-    all_symbols = sorted(set(imc_symbols) | set(bt_symbols))
+    all_symbols = sorted(set(imc_symbols) | set(imc2_symbols) | set(bt_symbols))
     if not all_symbols:
         print("No symbols found.")
         return
@@ -846,14 +859,18 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
     parts = []
     loaded_files = []
     if log:
-        parts.append(f"IMC · {log.submission_id}  |  profit = {log.profit}")
-    if backtest_data:
+        parts.append(f"IMC #1 · {log.submission_id}  |  profit = {log.profit}")
+    if log2:
+        parts.append(f"IMC #2 · {log2.submission_id}  |  profit = {log2.profit}")
+    if backtest_data and not log2:
         total = sum(d["pnl"] for d in backtest_data["days"])
         days_str = ", ".join(str(d["day"]) for d in backtest_data["days"])
         parts.append(f"Backtest · {backtest_data.get('strategy', '')}  |  PnL = {total:+.2f}  (days {days_str})")
     if log_path:
         loaded_files.append(f"Log: {log_path}")
-    if backtest_json_path:
+    if log2_path:
+        loaded_files.append(f"Log2: {log2_path}")
+    if backtest_json_path and not log2:
         loaded_files.append(f"Backtest JSON: {backtest_json_path}")
     if data_dir:
         loaded_files.append(f"Market data: {data_dir}")
@@ -874,7 +891,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
     chart_ids: list[str] = []
     if log:
         chart_ids.append("imc-chart")
-    if backtest_data:
+    if log2 or backtest_data:
         chart_ids.append("bt-chart")
 
     app.layout = html.Div(id="outer-wrapper", children=[
@@ -913,7 +930,7 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                         style={"marginLeft": "24px", "fontSize": "13px"},
                         inputStyle={"marginRight": "6px"},
                     )
-                ] if backtest_data else [html.Div(id="quotes-toggle")]),
+                ] if (backtest_data and not log2) else [html.Div(id="quotes-toggle")]),
                 dcc.Checklist(
                     id="step-toggle",
                     options=[{"label": " Step chart (hv)", "value": "hv"}],
@@ -1054,9 +1071,19 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
                     style=_card_style(theme),
                 ),
             ]
-        if log and backtest_data:
+        if log and (log2 or backtest_data):
             children.append(_divider(theme))
-        if backtest_data:
+        if log2:
+            children += [
+                _section_header(f"IMC Simulation #2 · {log2.submission_id}", theme),
+                html.Div(
+                    dcc.Graph(id="bt-chart",
+                              figure=build_imc_figure(log2, symbol, theme, smooth_n=smooth_n, line_shape=line_shape),
+                              config=_GRAPH_CONFIG),
+                    style=_card_style(theme),
+                ),
+            ]
+        elif backtest_data:
             children += [
                 _section_header("Internal Backtest", theme),
                 html.Div(
@@ -1093,13 +1120,14 @@ def run_dash(log=None, backtest_data: dict | None = None, data_dir: str | None =
 def run_cli(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prosperity interactive dashboard")
     parser.add_argument("--log", help="Path to official IMC JSON or LOG file")
+    parser.add_argument("--log2", help="Second IMC log for side-by-side comparison (replaces backtest panel)")
     parser.add_argument("--backtest-json", help="Path to backtest JSON (optional: auto-discovery is attempted from artifacts/)")
     parser.add_argument("--data-dir", default=None,
         help="Market data directory (enables price chart in backtest view)")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    if not args.log and not args.backtest_json:
-        parser.error("Provide at least one of --log or --backtest-json")
+    if not args.log and not args.backtest_json and not getattr(args, "log2", None):
+        parser.error("Provide at least one of --log, --log2, or --backtest-json")
 
     log = None
     if args.log:
@@ -1107,23 +1135,30 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         log = load_official_log(args.log)
         print(f"Loaded IMC log: {log.submission_id}  profit={log.profit}")
 
+    log2 = None
+    if getattr(args, "log2", None):
+        from prosperity.tooling.logs import load_official_log
+        log2 = load_official_log(args.log2)
+        print(f"Loaded IMC log2: {log2.submission_id}  profit={log2.profit}")
+
     backtest_data = None
     backtest_json_path = args.backtest_json
-    if backtest_json_path is None and log is not None:
-        from prosperity.tooling.reconcile import discover_backtest_json
+    if log2 is None:
+        if backtest_json_path is None and log is not None:
+            from prosperity.tooling.reconcile import discover_backtest_json
 
-        discovered = discover_backtest_json(log)
-        if discovered is not None:
-            backtest_json_path = str(discovered)
-            print(f"Auto-discovered backtest JSON: {backtest_json_path}")
-        else:
-            print("No confident backtest JSON auto-discovered. Pass --backtest-json to force reconciliation.")
+            discovered = discover_backtest_json(log)
+            if discovered is not None:
+                backtest_json_path = str(discovered)
+                print(f"Auto-discovered backtest JSON: {backtest_json_path}")
+            else:
+                print("No confident backtest JSON auto-discovered. Pass --backtest-json to force reconciliation.")
 
-    if backtest_json_path:
-        backtest_data = json.loads(Path(backtest_json_path).read_text(encoding="utf-8"))
-        total = sum(d["pnl"] for d in backtest_data["days"])
-        print(f"Loaded backtest: strategy={backtest_data.get('strategy')}  "
-              f"days={[d['day'] for d in backtest_data['days']]}  total_pnl={total:.2f}")
+        if backtest_json_path:
+            backtest_data = json.loads(Path(backtest_json_path).read_text(encoding="utf-8"))
+            total = sum(d["pnl"] for d in backtest_data["days"])
+            print(f"Loaded backtest: strategy={backtest_data.get('strategy')}  "
+                  f"days={[d['day'] for d in backtest_data['days']]}  total_pnl={total:.2f}")
 
     reconcile_report = None
     if log is not None and backtest_data is not None:
@@ -1132,8 +1167,9 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         reconcile_report = reconcile_backtest_to_official(backtest_data, log)
         print(summarize_reconcile_report(reconcile_report))
 
-    run_dash(log=log, backtest_data=backtest_data, data_dir=args.data_dir,
-             log_path=args.log, backtest_json_path=backtest_json_path,
+    run_dash(log=log, log2=log2, backtest_data=backtest_data, data_dir=args.data_dir,
+             log_path=args.log, log2_path=getattr(args, "log2", None),
+             backtest_json_path=backtest_json_path,
              reconcile_report=reconcile_report)
     return 0
 
