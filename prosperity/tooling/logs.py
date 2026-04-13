@@ -302,6 +302,9 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
             product = obj.get("product")
             if not product:
                 continue
+            trace = obj.get("trace")
+            if trace is not None and trace != "quote_trace":
+                continue
             columns = obj.get("columns")
             for tick in obj.get("log", []):
                 _append_quote_row(product, tick, columns if isinstance(columns, list) else None)
@@ -311,6 +314,56 @@ def _parse_lambda_logs(runtime_logs: pd.DataFrame) -> pd.DataFrame:
     base_columns = ["timestamp", "product", "reservation", "bid_price", "ask_price"]
     extra_columns = [column for column in frame.columns if column not in base_columns]
     return frame[base_columns + extra_columns]
+
+
+def _parse_taker_fills(runtime_logs: pd.DataFrame) -> pd.DataFrame:
+    """Extract taker fill entries logged by log_taker_fill (trace='taker_fills').
+
+    Returns DataFrame with columns: timestamp, product, side, price, quantity.
+    Note: timestamps here are the detection tick (T+1), not the execution tick (T).
+    """
+    decoder = json.JSONDecoder()
+    rows = []
+    for _, entry in runtime_logs.iterrows():
+        text = str(entry.get("lambdaLog", "") or "").strip()
+        if not text:
+            continue
+        pos = 0
+        while pos < len(text):
+            while pos < len(text) and text[pos] in " \t\r\n":
+                pos += 1
+            if pos >= len(text):
+                break
+            try:
+                obj, consumed = decoder.raw_decode(text, pos)
+                pos += consumed
+            except json.JSONDecodeError:
+                next_brace = text.find("{", pos + 1)
+                if next_brace == -1:
+                    break
+                pos = next_brace
+                continue
+            if not isinstance(obj, dict) or obj.get("trace") != "taker_fills":
+                continue
+            product = obj.get("product")
+            if not product:
+                continue
+            for tick in obj.get("log", []):
+                if len(tick) < 4:
+                    continue
+                try:
+                    rows.append({
+                        "timestamp": int(tick[0]),
+                        "product": product,
+                        "side": str(tick[1]).upper(),
+                        "price": int(tick[2]),
+                        "quantity": int(tick[3]),
+                    })
+                except (TypeError, ValueError):
+                    continue
+    if not rows:
+        return pd.DataFrame(columns=["timestamp", "product", "side", "price", "quantity"])
+    return pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
 
 
 def _submission_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
