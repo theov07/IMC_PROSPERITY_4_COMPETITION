@@ -35,7 +35,14 @@
       "Bash(python backtest.py --strategy leo_fusion_b_v2 --round 1 --days 0 --execution-rule realistic)",
       "Bash(python backtest.py --strategy leo_fusion_b_v2 --round 1 --days 0 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v2_day0.json)",
       "Bash(python -m prosperity.tooling.dashboard --help)",
-      "Bash(python backtest.py --strategy leo_fusion_b_v3 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v3.json)"
+      "Bash(python backtest.py --strategy leo_fusion_b_v3 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v3.json)",
+      "Bash(python backtest.py --strategy leo_fusion_b_v2 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v2.json)",
+      "Bash(python backtest.py --strategy leo_fusion_b_v3 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v3_edge2.json)",
+      "Bash(python backtest.py --strategy leo_fusion_b_v4 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v4.json)",
+      "Bash(python backtest.py --strategy leo_fusion_b_v5 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v5.json)",
+      "Bash(python backtest.py --strategy leo_fusion_b_v5 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v5_tuned.json)",
+      "Bash(python backtest.py --strategy leo_fusion_b_v5 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v5_tight.json)",
+      "Bash(python backtest.py --strategy leo_fusion_b_v5 --round 1 --execution-rule realistic --json-out artifacts/backtests/round_1/leo_fusion_b_v5_edge5.json)"
     ]
   }
 }
