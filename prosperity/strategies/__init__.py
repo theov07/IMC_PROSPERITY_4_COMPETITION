@@ -25,6 +25,8 @@ def _load_registry():
     from prosperity.strategies.naive_tight_mm_v8 import NaiveTightMarketMakerV8Strategy
     from prosperity.strategies.naive_tight_mm_v9 import NaiveTightMarketMakerV9Strategy
     from prosperity.strategies.avellaneda_stoikov import AvellanedaStoikovStrategy
+    from prosperity.strategies.mm_first import MMFirstStrategy
+    from prosperity.strategies.buy_and_hold import BuyAndHoldStrategy
     from prosperity.strategies.stat_arb import StatArbStrategy
     from prosperity.strategies.black_scholes import BlackScholesStrategy
     from prosperity.strategies.conversion_arb import ConversionArbStrategy
@@ -41,6 +43,8 @@ def _load_registry():
     _REGISTRY["naive_tight_mm_v8"] = NaiveTightMarketMakerV8Strategy
     _REGISTRY["naive_tight_mm_v9"] = NaiveTightMarketMakerV9Strategy
     _REGISTRY["avellaneda_stoikov"] = AvellanedaStoikovStrategy
+    _REGISTRY["mm_first"] = MMFirstStrategy
+    _REGISTRY["buy_and_hold"] = BuyAndHoldStrategy
     _REGISTRY["stat_arb"] = StatArbStrategy
     _REGISTRY["black_scholes"] = BlackScholesStrategy
     _REGISTRY["conversion_arb"] = ConversionArbStrategy
