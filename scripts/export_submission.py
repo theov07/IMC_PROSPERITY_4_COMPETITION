@@ -305,9 +305,22 @@ def main() -> int:
     parser.add_argument("--member", default="champion", choices=valid_members)
     parser.add_argument("--round", type=int, default=0)
     parser.add_argument("--output", default=None, help="Output file path")
+    parser.add_argument(
+        "--product",
+        nargs="*",
+        metavar="SYMBOL",
+        help="Only include these product(s), e.g. --product ASH_COATED_OSMIUM",
+    )
     args = parser.parse_args()
 
     config = get_round_config(args.round, args.member)
+    if args.product:
+        unknown_products = set(args.product) - set(config)
+        if unknown_products:
+            print(f"ERROR: unknown product(s): {sorted(unknown_products)}", file=sys.stderr)
+            print(f"Available: {sorted(config.keys())}", file=sys.stderr)
+            return 1
+        config = {k: v for k, v in config.items() if k in args.product}
 
     # Determine which strategy modules to inline.
     needed: set[str] = {pc.strategy for pc in config.values()}
