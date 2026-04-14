@@ -29,6 +29,8 @@ def _load_registry():
     from prosperity.strategies.round_1.regression_mm_v4 import Round1RegressionMMV4Strategy
     from prosperity.strategies.round_1.regression_mm_v5 import Round1RegressionMMV5Strategy
     from prosperity.strategies.avellaneda_stoikov import AvellanedaStoikovStrategy
+    from prosperity.strategies.mm_first import MMFirstStrategy
+    from prosperity.strategies.buy_and_hold import BuyAndHoldStrategy
     from prosperity.strategies.stat_arb import StatArbStrategy
     from prosperity.strategies.black_scholes import BlackScholesStrategy
     from prosperity.strategies.conversion_arb import ConversionArbStrategy
@@ -49,6 +51,8 @@ def _load_registry():
     _REGISTRY["round1_regression_mm_v4"] = Round1RegressionMMV4Strategy
     _REGISTRY["round1_regression_mm_v5"] = Round1RegressionMMV5Strategy
     _REGISTRY["avellaneda_stoikov"] = AvellanedaStoikovStrategy
+    _REGISTRY["mm_first"] = MMFirstStrategy
+    _REGISTRY["buy_and_hold"] = BuyAndHoldStrategy
     _REGISTRY["stat_arb"] = StatArbStrategy
     _REGISTRY["black_scholes"] = BlackScholesStrategy
     _REGISTRY["conversion_arb"] = ConversionArbStrategy
