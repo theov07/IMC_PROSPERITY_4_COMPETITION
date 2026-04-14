@@ -13,11 +13,9 @@ Philosophy:
 
 Key params (all configurable via config.py):
   inv_step_threshold        — fraction of limit at which bid/ask steps to L2 (default 0.8)
-  take_edge                 — min edge vs smoothed mid to trigger a taker order (default 1.0)
+  take_edge                 — min edge vs mid_smooth to trigger a taker order (default 1.0)
   maker_size_base_pct       — base passive quote size as % of position limit (default 0.2)
   pct_kept_for_takers       — fraction of remaining capacity reserved for takers (default 0.2)
-  mid_smooth_window         — rolling window for mid-price EMA smoothing (default 20, 0=off)
-  mid_smooth_half_life      — EMA half-life for mid smoothing (default window/2)
   gap_trigger_min           — min tick gap L1→L2 to enable gap exploit (default 10)
   gap_trigger_max_vol_pct   — max L1 volume as % of limit to consider "thin" (default 0.10)
   gap_trigger_confirm_ticks — consecutive ticks condition must hold before firing (default 1)
@@ -35,25 +33,6 @@ from prosperity.strategies.base import BaseStrategy
 
 class MMFirstStrategy(BaseStrategy):
 
-    # ── mid price smoothing ──────────────────────────────────────────
-    def _smooth_mid(self, mid: float, memory: Dict[str, Any]) -> float:
-        window = int(self.params.get("mid_smooth_window", 20))
-        if window <= 0:
-            return mid
-        half_life = float(self.params.get("mid_smooth_half_life", window / 2.0))
-        buf = memory.setdefault("mid_smooth_buf", [])
-        buf.append(mid)
-        if len(buf) > window:
-            buf[:] = buf[-window:]
-        if len(buf) < 2:
-            return mid
-        alpha = 1.0 - 2.0 ** (-1.0 / half_life) if half_life > 0 else 1.0
-        smoothed = buf[0]
-        for p in buf[1:]:
-            smoothed = alpha * p + (1.0 - alpha) * smoothed
-        memory["mid_smoothed"] = smoothed
-        return smoothed
-
     # ── order construction ───────────────────────────────────────────
     def compute_orders(
         self,
@@ -67,7 +46,7 @@ class MMFirstStrategy(BaseStrategy):
         if book.best_bid is None and book.best_ask is None:
             return [], 0
 
-        mid = book.mid_price or (book.best_bid or book.best_ask)
+        mid = book.mid_price or float(book.best_bid or book.best_ask or 0)
         mid_smooth = self._smooth_mid(mid, memory)
 
         limit = self.position_limit()
