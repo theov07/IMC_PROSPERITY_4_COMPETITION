@@ -26,6 +26,7 @@ Design principles of this file:
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -762,7 +763,7 @@ def _cleanup_dashboard_port(port: int, label: str) -> None:
         print(f"Warning: port {port} still has listeners after cleanup: {', '.join(map(str, remaining))}")
 
 
-def load_data() -> Dict[str, Dict[str, object]]:
+def load_data(data_dir: str | None = None) -> Dict[str, Dict[str, object]]:
     """Load and precompute all day/product research data once at startup.
 
     This function is the heart of the dashboard architecture. It scans the
@@ -779,7 +780,10 @@ def load_data() -> Dict[str, Dict[str, object]]:
     The goal is to keep callbacks focused on presentation rather than data
     preparation.
     """
-    data_dir = os.path.join(ROOT_DIR, "data")
+    if data_dir is None:
+        data_dir = os.path.join(ROOT_DIR, "data")
+    elif not os.path.isabs(data_dir):
+        data_dir = os.path.join(ROOT_DIR, data_dir)
     loader = DataLoader(data_dir)
     visualizer = MarketVisualizer()
 
@@ -831,7 +835,9 @@ def load_data() -> Dict[str, Dict[str, object]]:
     return data
 
 
-DATA_STORE = load_data()
+# Global data store and data directory (populated at runtime)
+_DATA_DIR: str | None = None
+DATA_STORE: Dict[str, Dict[str, object]] = {}
 
 app = dash.Dash(__name__, title="Prosperity Round Data Explorer")
 app.layout = html.Div(
@@ -904,13 +910,14 @@ app.layout = html.Div(
                                         html.Label("Day", style={"fontSize": "12px", "fontWeight": "700", "color": "var(--text-muted)", "marginBottom": "8px"}),
                                         dcc.Dropdown(
                                             id="day-dropdown",
-                                            options=[{"label": f"Day {day}", "value": day} for day in DATA_STORE.keys()],
-                                            value=next(iter(DATA_STORE.keys())) if DATA_STORE else None,
+                                            options=[],
+                                            value=None,
                                             clearable=False,
                                         ),
                                     ],
                                     style={"flex": "0 0 220px"},
                                 ),
+                                dcc.Store(id="data-store", data="initialized"),
                                 html.Div(
                                     [
                                         html.Label("Product", style={"fontSize": "12px", "fontWeight": "700", "color": "var(--text-muted)", "marginBottom": "8px"}),
@@ -1100,6 +1107,20 @@ def toggle_theme(_n_clicks: int | None, current_theme: str | None) -> str:
     if not _n_clicks:
         return current_theme or "light"
     return "dark" if (current_theme or "light") == "light" else "light"
+
+
+@app.callback(
+    [Output("day-dropdown", "options"), Output("day-dropdown", "value")],
+    [Input("data-store", "data")],
+)
+def populate_day_dropdown(_data_store_trigger: str) -> tuple[list, str | None]:
+    """Populate day dropdown from DATA_STORE (triggered when data-store changes)."""
+    if not DATA_STORE:
+        return [], None
+    days = sorted(DATA_STORE.keys())
+    options = [{"label": f"Day {day}", "value": day} for day in days]
+    first_day = days[0] if days else None
+    return options, first_day
 
 
 app.clientside_callback(
@@ -1655,14 +1676,22 @@ def update_graphs(
     return summary_panel, insight_panel, current_label, cross_asset_fig, candle_fig, price_fig, liquidity_fig, trade_fig, orderbook_fig
 
 
-def run_research_dashboard_server() -> None:
+def run_research_dashboard_server(data_dir: str | None = None) -> None:
     """Run the research dashboard with explicit shutdown semantics.
 
     Using Werkzeug's server directly avoids ambiguous teardown behavior when
     stopping the dashboard with ``Ctrl+C`` on Windows terminals.
     """
+    global _DATA_DIR, DATA_STORE
+    _DATA_DIR = data_dir
+    DATA_STORE.clear()
+    DATA_STORE.update(load_data(data_dir))
+    
     host = "127.0.0.1"
     _cleanup_dashboard_port(RESEARCH_DASHBOARD_PORT, "research dashboard")
+    if data_dir:
+        print(f"Loading data from: {data_dir}")
+    print(f"Loaded {len(DATA_STORE)} day(s) of data")
     print(f"Starting research dashboard on http://{host}:{RESEARCH_DASHBOARD_PORT}")
     server = make_server(host, RESEARCH_DASHBOARD_PORT, app.server, threaded=False)
     try:
@@ -1675,4 +1704,7 @@ def run_research_dashboard_server() -> None:
 
 
 if __name__ == "__main__":
-    run_research_dashboard_server()
+    parser = argparse.ArgumentParser(description="Prosperity research dashboard for raw round data exploration")
+    parser.add_argument("--data-dir", default=None, help="Path to data directory (default: data/)")
+    args = parser.parse_args()
+    run_research_dashboard_server(args.data_dir)
