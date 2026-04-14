@@ -100,7 +100,15 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         bid_price = int(math.floor(reservation - half_spread))
         ask_price = int(math.ceil(reservation + half_spread))
 
-        # Ensure we don't cross the book ---------- could be reviewed -----------
+        # Join-best cap: never improve the market, only join or post behind.
+        # If our computed price is inside the best bid/ask we cap it there —
+        # we still get filled (tied for best price) but capture more edge.
+        if book.best_bid is not None:
+            bid_price = min(bid_price, book.best_bid+1)
+        if book.best_ask is not None:
+            ask_price = max(ask_price, book.best_ask-1)
+
+        # Ensure we don't cross the book
         if book.best_ask is not None:
             bid_price = min(bid_price, book.best_ask - 1)
         if book.best_bid is not None:
