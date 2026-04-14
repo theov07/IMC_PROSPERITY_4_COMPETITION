@@ -28,12 +28,13 @@ def percentile(values: list[float], pct: float) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark Trader.run latency against historical snapshots")
     parser.add_argument("--strategy", required=True, help="Strategy alias/module, e.g. champion or main")
+    parser.add_argument("--round", type=int, default=0, help="Round number to benchmark")
     parser.add_argument("--day", default="-2", help="Round day to replay for timing")
-    parser.add_argument("--data-dir", default="data", help="Directory containing price and trade CSVs")
+    parser.add_argument("--data-dir", default="data", help="Data root or per-round directory containing price and trade CSVs")
     args = parser.parse_args()
 
     engine = BacktestEngine(args.data_dir, args.strategy)
-    prices_df = engine.loader.load_prices(f"prices_round_0_day_{args.day}.csv")
+    prices_df = engine.loader.load_prices(f"prices_round_{args.round}_day_{args.day}.csv")
     order_history = engine.loader.order_depth_history(prices_df)
     products = sorted(prices_df["product"].unique())
     listings = engine.loader.build_listings(products)
@@ -67,7 +68,7 @@ def main() -> int:
     p95_ms = percentile(timings_ms, 0.95)
     max_ms = max(timings_ms) if timings_ms else 0.0
 
-    print(f"strategy={args.strategy} day={args.day}")
+    print(f"strategy={args.strategy} round={args.round} day={args.day}")
     print(f"ticks={len(timings_ms)} mean_ms={mean_ms:.3f} median_ms={median_ms:.3f} p95_ms={p95_ms:.3f} max_ms={max_ms:.3f}")
     print("constraint_reference=Prosperity wiki says each run should return within 900ms and average <=100ms")
     return 0

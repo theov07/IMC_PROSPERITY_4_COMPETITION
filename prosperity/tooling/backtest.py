@@ -1383,7 +1383,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--strategy", required=True, help="Module or alias: champion/leo/theo/pietro")
     parser.add_argument("--round", type=int, default=0, help="Round number (default 0)")
     parser.add_argument("--days", nargs="*", help="Days to run, e.g. -2 -1")
-    parser.add_argument("--data-dir", default="data", help="Directory with CSV files")
+    parser.add_argument("--data-dir", default="data", help="Data root or per-round directory with CSV files")
     parser.add_argument("--json-out", help="Optional JSON output file")
     parser.add_argument(
         "--execution-rule",

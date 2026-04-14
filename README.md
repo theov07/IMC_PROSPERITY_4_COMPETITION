@@ -67,7 +67,7 @@ What is not fully production-grade yet:
 |-- submissions/               # member-facing entrypoints
 |-- scripts/                   # operational scripts
 |-- research/                  # exploratory analysis tools
-|-- data/                      # historical CSV inputs
+|-- data/                      # historical CSV inputs, grouped by round_0/, round_1/, ...
 |-- examples/                  # official sample logs
 |-- artifacts/                 # generated outputs
 |-- tests/                     # unit and smoke tests
@@ -187,6 +187,8 @@ Analyze raw round CSV data:
 ```powershell
 python research/analysis.py --data-dir data --round 0 --day -2
 ```
+
+`--data-dir data` remains the default even with the nested layout. The framework now resolves files automatically from `data/round_<n>/...`, so round 0 and round 1 can coexist cleanly under the same root.
 
 Review an official log with static plots:
 

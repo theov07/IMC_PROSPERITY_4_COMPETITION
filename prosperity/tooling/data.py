@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+import re
 from typing import Dict, Iterable, List
 
 import pandas as pd
@@ -10,6 +11,7 @@ from datamodel import ConversionObservation, Listing, Observation, OrderDepth, S
 
 
 class MarketDataLoader:
+    ROUND_FILE_RE = re.compile(r"^(prices|trades)_round_(?P<round>\d+)_day_.+\.csv$")
     STANDARD_PRICE_COLUMNS = {
         "day",
         "timestamp",
@@ -35,11 +37,30 @@ class MarketDataLoader:
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
 
+    def _resolve_file_path(self, file_name: str | Path) -> Path:
+        path = Path(file_name)
+        if path.is_absolute():
+            return path
+
+        root_candidate = self.data_dir / path
+        match = self.ROUND_FILE_RE.match(path.name)
+        if match:
+            round_dir_candidate = self.data_dir / f"round_{match.group('round')}" / path.name
+            if round_dir_candidate.exists():
+                return round_dir_candidate
+        if root_candidate.exists():
+            return root_candidate
+        return root_candidate
+
+    def _round_dir(self, round_num: int) -> Path:
+        round_dir = self.data_dir / f"round_{round_num}"
+        return round_dir if round_dir.exists() and round_dir.is_dir() else self.data_dir
+
     def load_prices(self, file_name: str) -> pd.DataFrame:
-        return pd.read_csv(self.data_dir / file_name, sep=";")
+        return pd.read_csv(self._resolve_file_path(file_name), sep=";")
 
     def load_trades(self, file_name: str) -> pd.DataFrame:
-        return pd.read_csv(self.data_dir / file_name, sep=";")
+        return pd.read_csv(self._resolve_file_path(file_name), sep=";")
 
     def load_trade_objects(self, file_name: str) -> List[Trade]:
         trades_df = self.load_trades(file_name)
@@ -184,7 +205,7 @@ class MarketDataLoader:
     def available_days(self, round_num: int = 0) -> List[str]:
         days = []
         prefix = f"prices_round_{round_num}_day_"
-        for file_path in self.data_dir.glob(f"{prefix}*.csv"):
+        for file_path in self._round_dir(round_num).glob(f"{prefix}*.csv"):
             days.append(file_path.stem.replace(prefix, ""))
         return sorted(days)
 

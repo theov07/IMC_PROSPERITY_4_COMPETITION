@@ -1197,7 +1197,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--log2", help="Second IMC log for side-by-side comparison (replaces backtest panel)")
     parser.add_argument("--backtest-json", help="Path to backtest JSON (optional: auto-discovery is attempted from artifacts/)")
     parser.add_argument("--data-dir", default=None,
-        help="Market data directory (enables price chart in backtest view)")
+        help="Market data root or per-round directory (enables price chart in backtest view)")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if not args.log and not args.backtest_json and not getattr(args, "log2", None):
