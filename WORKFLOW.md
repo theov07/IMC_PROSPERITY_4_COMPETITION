@@ -18,6 +18,8 @@ python research/visualizer/dashboard.py
 python -m prosperity.tooling.backtest --strategy tibo_AvSt --round 0 --data-dir data --json-out artifacts/backtest_results/new_AvSt.json 
 ```
 
+`--data-dir data` stays correct with the new layout: the framework now resolves round files automatically from `data/round_0/`, `data/round_1/`, etc.
+
 #### Comparison & Ranking
 ```bash
 # Compare multiple variants side-by-side
@@ -89,7 +91,7 @@ python research/visualizer/main.py
 ```
 
 **What this tool does:**
-- Loads CSV price and trade data from `/data/`
+- Loads CSV price and trade data from `/data/round_<n>/`
 - Provides interactive playback with play/pause controls
 - Shows multiple market analytics per product
 

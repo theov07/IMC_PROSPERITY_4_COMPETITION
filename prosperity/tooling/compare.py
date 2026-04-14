@@ -125,7 +125,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--strategies", nargs="+", required=True)
     parser.add_argument("--round", type=int, default=0)
     parser.add_argument("--days", nargs="*")
-    parser.add_argument("--data-dir", default="data")
+    parser.add_argument("--data-dir", default="data", help="Data root or per-round directory with CSV files")
     parser.add_argument(
         "--execution-rule",
         "--match-trades",

@@ -2,7 +2,7 @@
 
 ## Before a round opens
 
-- copy the new CSV files into `data/`
+- copy the new CSV files into `data/round_<n>/`
 - identify products, limits, conversions, and any special constraints
 - run the baseline backtests for `champion`, `leo`, `theo`, and `pietro`
 - produce a quick table with pnl, volume, max inventory, and strong or weak products
