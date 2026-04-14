@@ -516,6 +516,52 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             ),
         },
     },
+    "buy_and_hold": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="buy_and_hold",
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="buy_and_hold",
+            ),
+        },
+    },
+    "tibo_mm_first": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="mm_first",
+                inv_step_threshold=0.9,   # step to L2 (join) when |pos| >= 80% of limit
+                take_edge=1,            # take if ask <= mid_smooth - 1 (or bid >= mid_smooth + 1)
+                maker_size_base_pct=0.5,  # base passive size as % of position limit
+                
+                pct_kept_for_takers=0.1,  # capacity reserved for taker orders
+                mid_smooth_window=50,
+                mid_smooth_half_life=10,
+                taker_buy_threshold = 9_990,  # classify taker buys at >= this price
+                taker_sell_threshold= 10_025,
+
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="mm_first",
+                inv_step_threshold=0.8,
+                take_edge=1.0,
+                maker_size_base_pct=0.5,
+                pct_kept_for_takers=0.2,
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+        },
+    },
     "theo": {
         0: {
             "EMERALDS": _override(ROUND_0["EMERALDS"], take_edge=0.5, quote_half_spread=1, maker_size=14, inventory_aversion=1.6),
