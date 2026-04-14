@@ -143,4 +143,22 @@ class LeoFusionBStrategy(Round1RegressionMMV5Strategy):
         memory["last_ask_price"] = ask_price
         memory["inv_target"] = inv_target
         memory["bullish"] = int(bullish)
+
+        self.log_quote_snapshot(
+            state=state,
+            memory=memory,
+            bid_price=bid_price,
+            ask_price=ask_price,
+            extras={
+                "position": position,
+                "reg_slope": round(stats["slope"], 4),
+                "reg_r2": round(stats["r2"], 3),
+                "trend_ticks": round(trend_ticks, 2),
+                "residual_z": round(residual_z, 2),
+                "block_count": int(stats["block_count"]),
+                "fair_value": round(fv, 2),
+                "inv_target": inv_target,
+                "bullish": int(bullish),
+            },
+        )
         return orders, 0
