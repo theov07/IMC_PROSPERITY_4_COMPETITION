@@ -2235,7 +2235,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 opp_sell_min_position=80,
                 opp_sell_take_size=2,
                 opp_sell_cooldown_ticks=10,
-                log_flush_ts=0,
+                log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
             ),
@@ -2288,7 +2288,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 take_buy_edge_neut=2.0,
                 take_sell_edge_neut=2.0,
                 unwind_take_edge=10.0,
-                log_flush_ts=0,
+                log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
             ),
@@ -2332,7 +2332,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 # Fusion C take params
                 aggressive_take_edge=2.0,
                 aggressive_take_size=8,
-                log_flush_ts=0,
+                log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
             ),
@@ -2391,7 +2391,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 inventory_soft_ratio=0.40,
                 aggravate_min_frac=0.20,
                 unwind_boost_frac=0.40,
-                log_flush_ts=0,
+                log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
             ),
@@ -2414,6 +2414,22 @@ for _base in ("leo_fusion_a", "leo_fusion_b", "leo_fusion_c", "leo_fusion_d"):
             ),
         },
     }
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v3"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v3",
+            block_size=200,
+            v3_take_buy_edge=0.0,
+            v3_take_sell_edge=0.0,
+            v3_passive_spread=2.0,
+            v3_passive_size=80,
+        ),
+    },
+}
 
 
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
