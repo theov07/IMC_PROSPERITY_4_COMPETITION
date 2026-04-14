@@ -173,6 +173,97 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             ),
         },
     },
+    "tibo_mm": {
+        1: {  "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="avellaneda_stoikov",
+                gamma=0.001,
+                kappa=.8,
+                maker_size_base_pct=0.5, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
+                pct_kept_for_takers=0.15, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=25,
+                sigma_window=200,
+                sigma_floor=0.5,
+                sigma_half_life=60,
+
+                ts_increment=100,
+                last_ts_value=199900,       # IMC live: last timestamp of the day
+                bt_last_ts_value=999900,    # internal backtest data: last timestamp of the day
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
+            ),
+             "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="avellaneda_stoikov",
+                gamma=0.05, # grid searched
+                kappa=2.0,  # grid searched
+                maker_size_base_pct=0.3, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
+                pct_kept_for_takers=0.25, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # grid searched # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=8, # grid searched -> could be between 5 and 15
+                sigma_window=150, # grid searched
+                sigma_floor=0.5,
+                sigma_half_life=50, # grid searched
+
+                ts_increment=100,
+                last_ts_value=199900,
+                bt_last_ts_value=199900,
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
+            ),
+        },
+    },
+    "tibo_naive_mm": {
+        1: {  "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="naive_tight_mm",
+                gamma=0.001,
+                kappa=.8,
+                maker_size_base_pct=0.5, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
+                pct_kept_for_takers=0.15, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=25,
+                sigma_window=200,
+                sigma_floor=0.5,
+                sigma_half_life=60,
+
+                ts_increment=100,
+                last_ts_value=199900,       # IMC live: last timestamp of the day
+                bt_last_ts_value=999900,    # internal backtest data: last timestamp of the day
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
+            ),
+             "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="naive_tight_mm",
+                gamma=0.05, # grid searched
+                kappa=2.0,  # grid searched
+                maker_size_base_pct=0.3, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
+                pct_kept_for_takers=0.25, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # grid searched # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=8, # grid searched -> could be between 5 and 15
+                sigma_window=150, # grid searched
+                sigma_floor=0.5,
+                sigma_half_life=50, # grid searched
+
+                ts_increment=100,
+                last_ts_value=199900,
+                bt_last_ts_value=199900,
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
+            ),
+        },
+    },
+    
     "leo_naive": {
         0: {
             "EMERALDS": _override(
