@@ -413,47 +413,50 @@ class MMFirstStrategy(BaseStrategy):
         sell_cap = self.sell_capacity(position)
         orders: List[Order] = []
 
-        # ─────────────── TAKER ORDERS ─────────────────────────────────
-        # Take aggressively when someone posts at mid_smooth ± take_edge.
-        # Direction is inventory-gated: only take trades that reduce position
-        # (or both directions when flat) to avoid compounding inventory risk.
-        #   Long  → taker sells only (suppress taker buys)
-        #   Short → taker buys only  (suppress taker sells)
-        #   Flat  → both directions allowed
-
-        this_taker_buy_px: set = set()
-        this_taker_sell_px: set = set()
-
-        take_edge = float(self.params.get("take_edge", 1.0))
-        
-        if position <= 0: # allow_taker_buy
-            for ask_p in sorted(order_depth.sell_orders):
-                available = -order_depth.sell_orders[ask_p]
-                if ask_p > mid_smooth - take_edge or buy_cap <= 0:
-                    break
-                qty = min(available, buy_cap)
-                if qty > 0:
-                    orders.append(Order(self.product, ask_p, qty))
-                    this_taker_buy_px.add(ask_p)
-                    buy_cap -= qty
-
-        if position >= 0: # allow_taker_sell
-            for bid_p in sorted(order_depth.buy_orders, reverse=True):
-                volume = order_depth.buy_orders[bid_p]
-                if bid_p < mid_smooth + take_edge or sell_cap <= 0:
-                    break
-                qty = min(volume, sell_cap)
-                if qty > 0:
-                    orders.append(Order(self.product, bid_p, -qty))
-                    this_taker_sell_px.add(bid_p)
-                    sell_cap -= qty
-
-        # ─────────────── PASSIVE SIZING ───────────────────────────────
+        # ─────────────── DYNAMIC SIZING (shared by takers + passive) ──────────
         # Inventory-adaptive: scale bid size down when long, ask size down when short
 
         base_size = float(self.params.get("maker_size_base_pct", 0.2)) * limit
         bid_size = base_size * (1.0 - position / limit)
         ask_size = base_size * (1.0 + position / limit)
+
+        # ─────────────── TAKER ORDERS ─────────────────────────────────
+        # Two conditions (OR) trigger a taker order:
+        #   1. mid_smooth edge:  ask <= mid_smooth - take_edge  (or bid >= mid_smooth + take_edge)
+        #   2. absolute threshold (optional): ask <= taker_buy_threshold / bid >= taker_sell_threshold
+        # Either condition alone is sufficient.
+        # Size is capped to the same dynamic size as passive quotes (min of capacity and inv-scaled size).
+
+        this_taker_buy_px: set = set()
+        this_taker_sell_px: set = set()
+
+        take_edge           = float(self.params.get("take_edge", 1.0))
+        taker_buy_threshold  = self.params.get("taker_buy_threshold")   # None = disabled
+        taker_sell_threshold = self.params.get("taker_sell_threshold")  # None = disabled
+
+        for ask_p in sorted(order_depth.sell_orders):
+            available  = -order_depth.sell_orders[ask_p]
+            mid_signal = ask_p <= mid_smooth - take_edge
+            abs_signal = taker_buy_threshold is not None and ask_p <= taker_buy_threshold
+            if not (mid_signal or abs_signal) or buy_cap <= 0:
+                break
+            qty = min(buy_cap, int(bid_size*0.3))
+            if qty > 0:
+                orders.append(Order(self.product, ask_p, qty))
+                this_taker_buy_px.add(ask_p)
+                buy_cap -= qty
+
+        for bid_p in sorted(order_depth.buy_orders, reverse=True):
+            volume     = order_depth.buy_orders[bid_p]
+            mid_signal = bid_p >= mid_smooth + take_edge
+            abs_signal = taker_sell_threshold is not None and bid_p >= taker_sell_threshold
+            if not (mid_signal or abs_signal) or sell_cap <= 0:
+                break
+            qty = min(sell_cap, int(ask_size*0.3))
+            if qty > 0:
+                orders.append(Order(self.product, bid_p, -qty))
+                this_taker_sell_px.add(bid_p)
+                sell_cap -= qty
 
         quote_buy = min(buy_cap, int(bid_size))
         quote_sell = min(sell_cap, int(ask_size))
@@ -510,17 +513,19 @@ class MMFirstStrategy(BaseStrategy):
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-PRODUCTS = {'ASH_COATED_OSMIUM': {'inv_step_threshold': 0.8,
+PRODUCTS = {'ASH_COATED_OSMIUM': {'inv_step_threshold': 0.9,
                        'last_ts_value': 99900,
                        'log_flush_ts': 1000,
                        'maker_size': 20,
-                       'maker_size_base_pct': 0.6,
+                       'maker_size_base_pct': 0.5,
                        'mid_smooth_half_life': 10,
                        'mid_smooth_window': 50,
                        'pct_kept_for_takers': 0.1,
                        'position_limit': 80,
                        'strategy': 'mm_first',
                        'take_edge': 1,
+                       'taker_buy_threshold': 9990,
+                       'taker_sell_threshold': 10025,
                        'tighten_ticks': 1,
                        'ts_increment': 100},
  'INTARIAN_PEPPER_ROOT': {'inv_step_threshold': 0.8,

@@ -535,7 +535,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 strategy="mm_first",
                 inv_step_threshold=0.9,   # step to L2 (join) when |pos| >= 80% of limit
                 take_edge=1,            # take if ask <= mid_smooth - 1 (or bid >= mid_smooth + 1)
-                maker_size_base_pct=0.5,  # base passive size as % of position limit
+                maker_size_base_pct=0.75,  # base passive size as % of position limit
                 
                 pct_kept_for_takers=0.1,  # capacity reserved for taker orders
                 mid_smooth_window=50,
