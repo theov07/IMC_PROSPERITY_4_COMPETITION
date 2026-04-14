@@ -713,8 +713,15 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
         cash_delta = -sorted_trades["price"] * sorted_trades["signed_quantity"]
         cash_running = cash_delta.cumsum()
 
-        pos_ax.plot(sorted_trades["timestamp"], inventory, color="#1864ab", linewidth=1.4, drawstyle="steps-post")
-        pos_ax.fill_between(sorted_trades["timestamp"], 0, inventory, color="#1864ab", alpha=0.15, step="post")
+        # Extend steps to the end of the price panel so flat-position regions
+        # after the last trade stay visible.
+        end_ts = float(symbol_activities["timestamp"].max())
+        inv_ts = pd.concat([sorted_trades["timestamp"], pd.Series([end_ts])], ignore_index=True)
+        inv_vals = pd.concat([inventory, pd.Series([inventory.iloc[-1]])], ignore_index=True)
+        cash_vals = pd.concat([cash_running, pd.Series([cash_running.iloc[-1]])], ignore_index=True)
+
+        pos_ax.plot(inv_ts, inv_vals, color="#1864ab", linewidth=1.4, drawstyle="steps-post")
+        pos_ax.fill_between(inv_ts, 0, inv_vals, color="#1864ab", alpha=0.15, step="post")
         pos_ax.axhline(0, color="#adb5bd", linewidth=1)
         max_abs_pos = float(inventory.abs().max() or 1.0)
         pos_ax.text(
@@ -723,8 +730,8 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
             transform=pos_ax.transAxes, fontsize=9, color="#1864ab",
         )
 
-        cash_ax.plot(sorted_trades["timestamp"], cash_running, color="#e8590c", linewidth=1.4, drawstyle="steps-post")
-        cash_ax.fill_between(sorted_trades["timestamp"], 0, cash_running, color="#e8590c", alpha=0.12, step="post")
+        cash_ax.plot(inv_ts, cash_vals, color="#e8590c", linewidth=1.4, drawstyle="steps-post")
+        cash_ax.fill_between(inv_ts, 0, cash_vals, color="#e8590c", alpha=0.12, step="post")
         cash_ax.axhline(0, color="#adb5bd", linewidth=1)
         cash_ax.text(
             0.01, 0.92,
