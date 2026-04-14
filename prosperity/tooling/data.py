@@ -6,10 +6,32 @@ from typing import Dict, Iterable, List
 
 import pandas as pd
 
-from datamodel import Listing, Observation, OrderDepth, Symbol, Trade, TradingState
+from datamodel import ConversionObservation, Listing, Observation, OrderDepth, Symbol, Trade, TradingState
 
 
 class MarketDataLoader:
+    STANDARD_PRICE_COLUMNS = {
+        "day",
+        "timestamp",
+        "product",
+        "mid_price",
+        "profit_and_loss",
+        *(f"bid_price_{level}" for level in range(1, 4)),
+        *(f"bid_volume_{level}" for level in range(1, 4)),
+        *(f"ask_price_{level}" for level in range(1, 4)),
+        *(f"ask_volume_{level}" for level in range(1, 4)),
+    }
+
+    CONVERSION_FIELD_ALIASES = {
+        "bidPrice": ["bidPrice", "conversion_bid_price", "conversion_bidPrice", "observation_bid_price", "observation_bidPrice"],
+        "askPrice": ["askPrice", "conversion_ask_price", "conversion_askPrice", "observation_ask_price", "observation_askPrice"],
+        "transportFees": ["transportFees", "transport_fees", "conversion_transport_fees", "observation_transport_fees"],
+        "exportTariff": ["exportTariff", "export_tariff", "conversion_export_tariff", "observation_export_tariff"],
+        "importTariff": ["importTariff", "import_tariff", "conversion_import_tariff", "observation_import_tariff"],
+        "sunlight": ["sunlight", "sunlightIndex", "sunlight_index"],
+        "humidity": ["humidity", "humidityIndex", "humidity_index"],
+    }
+
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
 
@@ -66,6 +88,86 @@ class MarketDataLoader:
         return history
 
     @staticmethod
+    def _coerce_float(value) -> float | None:
+        if pd.isna(value):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _first_present_float(cls, row: pd.Series, aliases: List[str]) -> float | None:
+        for alias in aliases:
+            if alias in row.index:
+                value = cls._coerce_float(row[alias])
+                if value is not None:
+                    return value
+        return None
+
+    @classmethod
+    def row_to_observation_values(cls, row: pd.Series) -> Dict[str, float]:
+        values: Dict[str, float] = {}
+        for column, raw_value in row.items():
+            if column in cls.STANDARD_PRICE_COLUMNS:
+                continue
+            value = cls._coerce_float(raw_value)
+            if value is None:
+                continue
+            values[column] = value
+        return values
+
+    @classmethod
+    def row_to_conversion_observation(cls, row: pd.Series) -> ConversionObservation | None:
+        resolved = {
+            field: cls._first_present_float(row, aliases)
+            for field, aliases in cls.CONVERSION_FIELD_ALIASES.items()
+        }
+        mandatory = ["bidPrice", "askPrice", "transportFees", "exportTariff", "importTariff"]
+        if any(resolved[field] is None for field in mandatory):
+            return None
+
+        extra_kwargs = {}
+        alias_columns = {
+            alias
+            for aliases in cls.CONVERSION_FIELD_ALIASES.values()
+            for alias in aliases
+        }
+        for column, value in cls.row_to_observation_values(row).items():
+            if column in alias_columns:
+                continue
+            extra_kwargs[column] = value
+
+        return ConversionObservation(
+            bidPrice=resolved["bidPrice"],
+            askPrice=resolved["askPrice"],
+            transportFees=resolved["transportFees"],
+            exportTariff=resolved["exportTariff"],
+            importTariff=resolved["importTariff"],
+            sunlight=resolved["sunlight"] or 0.0,
+            humidity=resolved["humidity"] or 0.0,
+            **extra_kwargs,
+        )
+
+    def observation_history(self, prices_df: pd.DataFrame) -> Dict[int, Observation]:
+        history: Dict[int, Observation] = {}
+
+        for _, row in prices_df.iterrows():
+            timestamp = int(row["timestamp"])
+            product = str(row["product"])
+            observation = history.setdefault(timestamp, Observation(plainValueObservations={}, conversionObservations={}))
+
+            conversion_observation = self.row_to_conversion_observation(row)
+            if conversion_observation is not None:
+                observation.conversionObservations[product] = conversion_observation
+
+            plain_value = self._first_present_float(row, ["observation", "observation_value", "plain_value", "plainValue"])
+            if plain_value is not None:
+                observation.plainValueObservations[product] = int(plain_value)
+
+        return history
+
+    @staticmethod
     def build_listings(products: Iterable[str], denomination: str = "XIRECS") -> Dict[Symbol, Listing]:
         return {
             product: Listing(symbol=product, product=product, denomination=denomination)
@@ -95,4 +197,3 @@ def dataframe_from_semicolon_text(raw_text: str) -> pd.DataFrame:
     if not raw_text.strip():
         return pd.DataFrame()
     return pd.read_csv(StringIO(raw_text), sep=";")
-

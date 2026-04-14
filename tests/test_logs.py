@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 import unittest
 import pandas as pd
 
-from prosperity.tooling.logs import _parse_lambda_logs, load_official_log
+from prosperity.tooling.logs import _parse_lambda_logs, load_official_log, official_quote_summary, participant_aware_summary
 from prosperity.tooling.reconcile import discover_backtest_json, reconcile_backtest_to_official
 
 
@@ -324,6 +324,130 @@ class TestOfficialLogLoading(unittest.TestCase):
             self.assertEqual(report["per_product"]["EMERALDS"]["delta"]["trade_count"], 0)
             self.assertEqual(report["per_product"]["EMERALDS"]["delta"]["ending_position"], 2)
             self.assertEqual(report["per_product"]["TOMATOES"]["delta"]["sell_qty"], -2)
+
+    def test_participant_aware_summary_computes_markouts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            json_path = root / "43130.json"
+            log_path = root / "43130.log"
+
+            activities = (
+                "day;timestamp;product;bid_price_1;bid_volume_1;ask_price_1;ask_volume_1;profit_and_loss\n"
+                "-1;0;EMERALDS;9999;10;10001;10;0.0\n"
+                "-1;100;EMERALDS;10000;10;10002;10;1.0\n"
+                "-1;200;EMERALDS;10001;10;10003;10;2.0\n"
+            )
+
+            json_path.write_text(
+                json.dumps(
+                    {
+                        "round": "0",
+                        "status": "FINISHED",
+                        "profit": 2.0,
+                        "activitiesLog": activities,
+                        "graphLog": GRAPH,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            log_path.write_text(
+                json.dumps(
+                    {
+                        "submissionId": "participant-test",
+                        "activitiesLog": activities,
+                        "tradeHistory": [
+                            {
+                                "timestamp": 0,
+                                "buyer": "SUBMISSION",
+                                "seller": "BOT_A",
+                                "symbol": "EMERALDS",
+                                "currency": "XIRECS",
+                                "price": 10000.0,
+                                "quantity": 2,
+                            },
+                            {
+                                "timestamp": 100,
+                                "buyer": "BOT_B",
+                                "seller": "SUBMISSION",
+                                "symbol": "EMERALDS",
+                                "currency": "XIRECS",
+                                "price": 10002.0,
+                                "quantity": 1,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            official = load_official_log(json_path)
+            summary = participant_aware_summary(official, "EMERALDS")
+
+            self.assertEqual(summary["trade_count"], 2)
+            self.assertEqual(summary["traded_volume"], 3)
+            self.assertIn("1", summary["mean_markout_by_horizon"])
+            counterparties = [row["counterparty"] for row in summary["participants"]]
+            self.assertIn("BOT_A", counterparties)
+            self.assertIn("BOT_B", counterparties)
+
+    def test_official_quote_summary_uses_runtime_quotes_and_fills(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            json_path = root / "43130.json"
+            log_path = root / "43130.log"
+
+            json_path.write_text(
+                json.dumps(
+                    {
+                        "round": "0",
+                        "status": "FINISHED",
+                        "profit": 1.0,
+                        "activitiesLog": ACTIVITIES,
+                        "graphLog": GRAPH,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            log_path.write_text(
+                json.dumps(
+                    {
+                        "submissionId": "quote-summary",
+                        "activitiesLog": ACTIVITIES,
+                        "tradeHistory": [
+                            {
+                                "timestamp": 0,
+                                "buyer": "SUBMISSION",
+                                "seller": "BOT_A",
+                                "symbol": "EMERALDS",
+                                "currency": "XIRECS",
+                                "price": 10000.0,
+                                "quantity": 2,
+                            }
+                        ],
+                        "logs": [
+                            {
+                                "timestamp": 900,
+                                "sandboxLog": "",
+                                "lambdaLog": (
+                                    '{"product":"EMERALDS","columns":["timestamp","bid_price","ask_price"],'
+                                    '"log":[[0,9999,10001],[100,10000,10002]]}'
+                                ),
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            official = load_official_log(json_path)
+            summary = official_quote_summary(official, "EMERALDS")
+
+            self.assertEqual(summary["quoted_tick_count"], 2)
+            self.assertEqual(summary["bid_quote_ticks"], 2)
+            self.assertEqual(summary["ask_quote_ticks"], 2)
+            self.assertAlmostEqual(summary["avg_quoted_spread"], 2.0)
+            self.assertEqual(summary["buy_fill_count"], 1)
+            self.assertAlmostEqual(summary["buy_fill_rate_per_tick"], 0.5)
 
     def test_discover_backtest_json_matches_strategy_version(self):
         with tempfile.TemporaryDirectory() as tmp:
