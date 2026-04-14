@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python backtest.py --strategy leo_naive_v7 --round 0)"
+      "Bash(python backtest.py --strategy leo_naive_v7 --round 0)",
+      "Bash(python -m pytest tests/test_strategies.py -q)",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"from prosperity.tooling.dashboard import run_cli, build_imc_figure; from prosperity.tooling.logs import _parse_taker_fills, _parse_lambda_logs; print\\('OK'\\)\")"
     ]
   }
 }

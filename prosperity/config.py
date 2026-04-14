@@ -117,17 +117,16 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             "EMERALDS": _override(
                 ROUND_0["EMERALDS"],
                 strategy="avellaneda_stoikov",
-                gamma=0.05,
-                kappa=1.0,
+                gamma=0.001,
+                kappa=.8,
                 maker_size_base_pct=0.5, # in pct of position limit, scales down as inventory increases
-                take_edge=5,
-                pct_kept_for_takers=0.25, # capacity kept for aggressive takers
+                take_edge=2,
+                pct_kept_for_takers=0.15, # capacity kept for aggressive takers
                 
                 min_half_spread=1.0,
                 mid_smooth_window=50, # mid_smooth_window=0 => disabled
                 mid_smooth_half_life=25,
                 sigma_window=200,
-                sigma_default=1.0,
                 sigma_floor=0.5,
                 sigma_half_life=60,
 
@@ -139,19 +138,18 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             "TOMATOES": _override(
                 ROUND_0["TOMATOES"],
                 strategy="avellaneda_stoikov",
-                gamma=0.1,
-                kappa=1.0,
-                maker_size_base_pct=0.35, # in pct of position limit, scales down as inventory increases
-                take_edge=5,
+                gamma=0.05, # grid searched
+                kappa=2.0,  # grid searched
+                maker_size_base_pct=0.3, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
                 pct_kept_for_takers=0.25, # capacity kept for aggressive takers
                 
                 min_half_spread=1.0,
-                mid_smooth_window=50, # mid_smooth_window=0 => disabled
-                mid_smooth_half_life=25,
-                sigma_window=200,
-                sigma_default=1.0,
+                mid_smooth_window=50, # grid searched # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=8, # grid searched -> could be between 5 and 15
+                sigma_window=150, # grid searched
                 sigma_floor=0.5,
-                sigma_half_life=60,
+                sigma_half_life=50, # grid searched
 
                 ts_increment=100,
                 last_ts_value=199900,
