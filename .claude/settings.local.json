@@ -6,7 +6,15 @@
       "Bash(python -c ':*)",
       "Bash(python -c \"from prosperity.tooling.dashboard import run_cli, build_imc_figure; from prosperity.tooling.logs import _parse_taker_fills, _parse_lambda_logs; print\\('OK'\\)\")",
       "Bash(python -m prosperity.tooling.grid_search --strategy tibo_mm_first --round 1 --days -2 -1 0 --param ASH_COATED_OSMIUM.gap_trigger_min=8,10,12,14 --param ASH_COATED_OSMIUM.gap_trigger_max_vol_pct=0.10,0.15,0.20,0.25 --param ASH_COATED_OSMIUM.gap_trigger_confirm_ticks=1,2,3,4 --top 15 --rank-by pnl)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(ls submissions/theo_round1* submissions/leo_reg_lin_round1_v5*)",
+      "Bash(python backtest.py --strategy leo_fusion_a --round 1 --days -2)",
+      "Bash(python backtest.py --strategy leo --round 1 --days -2)",
+      "Bash(python backtest.py --strategy leo_fusion_b --round 1 --days -2)",
+      "Bash(python backtest.py --strategy leo_fusion_c --round 1 --days -2)",
+      "Bash(python backtest.py --strategy leo_fusion_d --round 1 --days -2)",
+      "Bash(python scripts/plot_ipr_regression_residuals.py)",
+      "Bash(python scripts/plot_ipr_block_ols.py)"
     ]
   }
 }
