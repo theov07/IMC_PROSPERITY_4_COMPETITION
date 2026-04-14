@@ -42,6 +42,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "naive_tight_mm_v6":  ("prosperity/strategies/naive_tight_mm_v6.py",  "NaiveTightMarketMakerV6Strategy"),
     "naive_tight_mm_v7":  ("prosperity/strategies/naive_tight_mm_v7.py",  "NaiveTightMarketMakerV7Strategy"),
     "naive_tight_mm_v8":  ("prosperity/strategies/naive_tight_mm_v8.py",  "NaiveTightMarketMakerV8Strategy"),
+    "naive_tight_mm_v9":  ("prosperity/strategies/naive_tight_mm_v9.py",  "NaiveTightMarketMakerV9Strategy"),
     "avellaneda_stoikov": ("prosperity/strategies/avellaneda_stoikov.py", "AvellanedaStoikovStrategy"),
     "stat_arb":           ("prosperity/strategies/stat_arb.py",           "StatArbStrategy"),
     "black_scholes":      ("prosperity/strategies/black_scholes.py",      "BlackScholesStrategy"),
