@@ -369,7 +369,6 @@ def main() -> int:
     wrapper = dedent(f'''\
         """Backtester entrypoint — {args.member}."""
 
-        from prosperity.strategies.trader import CURRENT_ROUND
         from prosperity.config import get_round_config
         from prosperity.persistence import dump_state, load_state
         from prosperity.strategies import build_strategy
@@ -381,7 +380,7 @@ def main() -> int:
 
         class Trader:
             def __init__(self):
-                config = get_round_config(CURRENT_ROUND, "{args.member}")
+                config = get_round_config({args.round}, "{args.member}")
                 self.strategies: Dict[str, BaseStrategy] = {{}}
                 for symbol, pc in config.items():
                     merged = {{"position_limit": pc.position_limit, **pc.params}}
