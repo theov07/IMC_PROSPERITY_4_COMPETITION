@@ -38,9 +38,15 @@ class FrameworkSmokeTests(unittest.TestCase):
         self.assertIsNotNone(summary.robustness)
         self.assertGreaterEqual(summary.robustness.fill_efficiency, 0.0)
         self.assertGreaterEqual(summary.robustness.max_drawdown or 0.0, 0.0)
+        self.assertIn("1", summary.robustness.markout_mean_by_horizon)
+        self.assertIn("avg_quote_age_ticks", summary.robustness.quote_metrics)
+        self.assertIn("inventory_drift", summary.robustness.pnl_attribution)
+        self.assertEqual(len(summary.conversion_ticks), len(summary.equity_curve))
         for product_summary in summary.product_summaries.values():
             self.assertIsNotNone(product_summary.robustness)
             self.assertGreaterEqual(product_summary.robustness.avg_abs_position_ratio, 0.0)
+            self.assertIn("one_sided_tick_ratio", product_summary.robustness.inventory_episode_metrics)
+            self.assertIn("bid_fill_efficiency", product_summary.robustness.__dict__)
 
     def test_aggregate_day_summaries_exposes_robustness(self):
         engine = BacktestEngine("data", "champion")
@@ -51,6 +57,8 @@ class FrameworkSmokeTests(unittest.TestCase):
         self.assertAlmostEqual(aggregate["total_pnl"], summary.pnl)
         self.assertGreaterEqual(aggregate["robustness"]["max_drawdown"], 0.0)
         self.assertIn("EMERALDS", aggregate["per_product_robustness"])
+        self.assertIn("markout_mean_by_horizon", aggregate["robustness"])
+        self.assertIn("quote_metrics", aggregate["per_product_robustness"]["EMERALDS"])
 
 
 class PassiveFillRuleTests(unittest.TestCase):

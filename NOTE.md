@@ -24,18 +24,31 @@
 - `aggressive_qty` vs `passive_qty`
 - `passive_adverse_rate`
 - `passive_post_fill_edge`
+- `bid_fill_efficiency` / `ask_fill_efficiency`
+- quote diagnostics: `avg_quote_age_ticks`, refresh count, stale quote exposure
+- inventory episode diagnostics: one-sided time, sign flips, unwind duration
+- markout means on `+1`, `+2`, `+5`, `+10` ticks for all/passive/aggressive fills
+- pnl attribution proxies: `spread_capture`, `inventory_drift`, `make_edge`, `take_edge`, `adverse_selection_1`
+- observation / conversion traces are now exported in backtest JSON when data exists
 - `compare` and `grid_search` can now rank by robustness, not only by pnl.
 - `dashboard` and `tooling.logs` now try a best-effort auto-discovery of a matching backtest JSON in `artifacts/`, then run reconciliation automatically if a confident match is found.
+- `tooling.logs` now computes participant-aware official summaries: counterparty volume and post-trade markout by horizon.
+- The dashboard now surfaces:
+- backtest diagnostics cards per symbol
+- IMC participant / markout diagnostics per symbol
+- live vs backtest headline comparisons per symbol (`fills`, side fill-rate proxy, quoted spread, markout)
+- live vs backtest overlay chart for `position`, cumulative fills, and quoted spread
+- IMC trade-flow panel with signed market flow vs our own signed submission flow
+- observation / conversion panels in backtest view when present
 
 ## Missing Metrics / Next Gaps
 
-- We still do not compute quote age, quote refresh rate, or stale quote exposure.
-- We still do not compute per-side fill efficiency (`bid quote -> buy fill`, `ask quote -> sell fill`) or queue reach estimates.
-- We still do not attribute pnl into `spread capture`, `inventory drift`, `adverse selection`, and `take-vs-make` in a clean way.
-- We still do not compute inventory episode metrics such as time-to-unwind, inventory half-life, or time spent one-sided.
 - We still do not calibrate backtest markouts against official logs by product, side, and horizon.
-- We still do not expose participant-conditioned metrics from official logs (which bot traded with us, and what happened after).
-- We still do not expose `state.observations` / conversion diagnostics in the dashboard or summaries.
+- We still do not estimate queue reach / fill probability from official logs, only heuristic age / stale diagnostics.
+- We still do not have a full additive pnl attribution with realized spread, carry, inventory drift, and conversion pnl separated perfectly.
+- We still do not visualize markout curves directly as dedicated dashboard plots; for now they are shown as summary metrics.
+- We still do not have round-aware observation loaders for every possible future CSV schema; current handling is generic / best-effort.
+- We still do not classify official fills into passive vs aggressive with certainty; the participant analysis is side-aware and markout-aware, not a perfect aggressor classifier.
 
 - In live IMC, a passive quote that is not traded can remain visible during the iteration, but if no bot trades against it, it is cancelled at the end of the iteration.
 - That means being behind only 10 to 15 lots at best can still produce zero fills: the queue in front is small, but the quote lifetime is also short.
