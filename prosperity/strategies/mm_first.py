@@ -166,6 +166,14 @@ class MMFirstStrategy(BaseStrategy):
         gap_confirm = int(self.params.get("gap_trigger_confirm_ticks", 1))
 
         if gap_min > 0 and gap_max_vol > 0:
+            # Track last known best bid/ask for use when the book is empty
+            if book.best_bid is not None:
+                memory["_last_best_bid"] = book.best_bid
+            if book.best_ask is not None:
+                memory["_last_best_ask"] = book.best_ask
+            last_best_bid = memory.get("_last_best_bid")
+            last_best_ask = memory.get("_last_best_ask")
+
             # Bid side: sell into thin best bid when gap to L2 is large
             bids = sorted(order_depth.buy_orders.keys(), reverse=True)
             bid_gap_ok = False
@@ -174,6 +182,7 @@ class MMFirstStrategy(BaseStrategy):
                 bid1, bid2 = bids[0], bids[1]
                 bid1_vol = order_depth.buy_orders[bid1]
                 bid_gap_ok = (bid1 - bid2) >= gap_min and bid1_vol <= gap_max_vol
+            # 1-level: no L2 to measure gap against → skip aggressive clearing
             bid_streak = memory.get("_gap_bid_streak", 0)
             bid_streak = bid_streak + 1 if bid_gap_ok else 0
             memory["_gap_bid_streak"] = bid_streak
@@ -182,7 +191,11 @@ class MMFirstStrategy(BaseStrategy):
                 if qty > 0:
                     orders.append(Order(self.product, bid1, -qty))
                     sell_cap -= qty
-                    bid_price = bid2 + 1  # re-anchor passive to new best after clearing L1
+                    # re-anchor passive: to L2+1 if two levels, else below cleared level
+                    bid_price = (bid2 + 1) if bid2 is not None else (bid1 - int(gap_min))
+            elif len(bids) == 0 and last_best_bid is not None:
+                # Empty bid book: position passive buy deep below last known bid
+                bid_price = last_best_bid - int(gap_min)
 
             # Ask side: buy into thin best ask when gap to L2 is large
             asks = sorted(order_depth.sell_orders.keys())
@@ -192,6 +205,7 @@ class MMFirstStrategy(BaseStrategy):
                 ask1, ask2 = asks[0], asks[1]
                 ask1_vol = -order_depth.sell_orders[ask1]
                 ask_gap_ok = (ask2 - ask1) >= gap_min and ask1_vol <= gap_max_vol
+            # 1-level: no L2 to measure gap against → skip aggressive clearing
             ask_streak = memory.get("_gap_ask_streak", 0)
             ask_streak = ask_streak + 1 if ask_gap_ok else 0
             memory["_gap_ask_streak"] = ask_streak
@@ -200,7 +214,11 @@ class MMFirstStrategy(BaseStrategy):
                 if qty > 0:
                     orders.append(Order(self.product, ask1, qty))
                     buy_cap -= qty
-                    ask_price = ask2 - 1  # re-anchor passive to new best after clearing L1
+                    # re-anchor passive: to L2-1 if two levels, else above cleared level
+                    ask_price = (ask2 - 1) if ask2 is not None else (ask1 + int(gap_min))
+            elif len(asks) == 0 and last_best_ask is not None:
+                # Empty ask book: position passive sell deep above last known ask
+                ask_price = last_best_ask + int(gap_min)
 
         quote_buy = min(buy_cap, int(bid_size))
         quote_sell = min(sell_cap, int(ask_size))
