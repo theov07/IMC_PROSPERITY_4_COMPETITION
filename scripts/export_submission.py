@@ -43,6 +43,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "naive_tight_mm_v7":  ("prosperity/strategies/naive_tight_mm_v7.py",  "NaiveTightMarketMakerV7Strategy"),
     "naive_tight_mm_v8":  ("prosperity/strategies/naive_tight_mm_v8.py",  "NaiveTightMarketMakerV8Strategy"),
     "naive_tight_mm_v9":  ("prosperity/strategies/naive_tight_mm_v9.py",  "NaiveTightMarketMakerV9Strategy"),
+    "round1_regression_top_book": ("prosperity/strategies/round_1/regression_top_book.py", "Round1RegressionTopBookStrategy"),
+    "round1_regression_mm_v3": ("prosperity/strategies/round_1/regression_mm_v3.py", "Round1RegressionMMV3Strategy"),
+    "round1_regression_mm_v4": ("prosperity/strategies/round_1/regression_mm_v4.py", "Round1RegressionMMV4Strategy"),
+    "round1_regression_mm_v5": ("prosperity/strategies/round_1/regression_mm_v5.py", "Round1RegressionMMV5Strategy"),
     "naive_tight_mm_v10": ("prosperity/strategies/naive_tight_mm_v10.py", "NaiveTightMarketMakerV10Strategy"),
     "naive_tight_mm_v11": ("prosperity/strategies/naive_tight_mm_v11.py", "NaiveTightMarketMakerV11Strategy"),
     "naive_tight_mm_v12": ("prosperity/strategies/naive_tight_mm_v12.py", "NaiveTightMarketMakerV12Strategy"),
@@ -61,6 +65,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "black_scholes":      ("prosperity/strategies/black_scholes.py",      "BlackScholesStrategy"),
     "conversion_arb":     ("prosperity/strategies/conversion_arb.py",     "ConversionArbStrategy"),
     "signal_trader":      ("prosperity/strategies/signal_trader.py",      "SignalTraderStrategy"),
+    "mm_first":           ("prosperity/strategies/mm_first.py",           "MMFirstStrategy"),
+    "buy_and_hold":       ("prosperity/strategies/buy_and_hold.py",       "BuyAndHoldStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).

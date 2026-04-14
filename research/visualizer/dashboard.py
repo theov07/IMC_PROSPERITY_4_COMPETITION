@@ -1,7 +1,8 @@
 """Interactive research dashboard for raw round data exploration.
 
 This dashboard is meant for the very start of a round, before a trading
-strategy exists. It loads the CSV files from ``data/`` and builds an
+strategy exists. It loads the CSV files from ``data/`` or ``data/round_<n>``
+and builds an
 overview-first interface that helps answer questions such as:
 
 - Is the product trending or ranging?
@@ -26,6 +27,8 @@ Design principles of this file:
 
 from __future__ import annotations
 
+import argparse
+import argparse
 import json
 import os
 import subprocess
@@ -120,6 +123,51 @@ SERIES_COLORS = {
     "depth_ask": "#dc2626",
     "cum_volume": "#0f766e",
 }
+
+
+def _parse_cli_args() -> argparse.Namespace:
+    """Parse dashboard CLI args while tolerating unrelated wrapper flags."""
+    parser = argparse.ArgumentParser(description="Interactive research dashboard for raw round data exploration.")
+    parser.add_argument(
+        "--data-dir",
+        default=os.path.join(ROOT_DIR, "data"),
+        help="Data root or per-round directory. Defaults to <repo>/data.",
+    )
+    parser.add_argument(
+        "--round",
+        type=int,
+        default=None,
+        help="Round number to load from data/round_<n>. Defaults to the latest available nested round, else flat data-dir.",
+    )
+    args, _ = parser.parse_known_args()
+    return args
+
+
+def _resolve_research_data_dir(data_dir: str, round_num: int | None) -> tuple[str, str]:
+    """Resolve a concrete directory containing prices/trades CSV files."""
+    if round_num is not None:
+        round_dir = os.path.join(data_dir, f"round_{round_num}")
+        if os.path.isdir(round_dir):
+            return round_dir, f"round_{round_num}"
+        if os.path.isdir(data_dir):
+            return data_dir, f"round_{round_num}"
+        raise FileNotFoundError(f"Could not find data directory for round {round_num}: {round_dir}")
+
+    if os.path.isdir(data_dir):
+        nested_rounds = sorted(
+            (
+                entry
+                for entry in os.listdir(data_dir)
+                if entry.startswith("round_") and os.path.isdir(os.path.join(data_dir, entry))
+            ),
+            key=lambda name: int(name.split("_", 1)[1]),
+        )
+        if nested_rounds:
+            chosen = nested_rounds[-1]
+            return os.path.join(data_dir, chosen), chosen
+        return data_dir, os.path.basename(data_dir.rstrip("\\/")) or "data"
+
+    raise FileNotFoundError(f"Data directory not found: {data_dir}")
 
 
 def _theme_outer_style(theme: str) -> dict[str, str]:
@@ -762,11 +810,12 @@ def _cleanup_dashboard_port(port: int, label: str) -> None:
         print(f"Warning: port {port} still has listeners after cleanup: {', '.join(map(str, remaining))}")
 
 
-def load_data() -> Dict[str, Dict[str, object]]:
+def load_data(data_dir: str | None = None) -> Dict[str, Dict[str, object]]:
+def load_data(data_dir: str) -> Dict[str, Dict[str, object]]:
     """Load and precompute all day/product research data once at startup.
 
     This function is the heart of the dashboard architecture. It scans the
-    ``data/`` directory, pairs price/trade files by day, and then precomputes
+    resolved round data directory, pairs price/trade files by day, and then precomputes
     the per-product tables required by the UI:
 
     - order-book time series
@@ -779,7 +828,10 @@ def load_data() -> Dict[str, Dict[str, object]]:
     The goal is to keep callbacks focused on presentation rather than data
     preparation.
     """
-    data_dir = os.path.join(ROOT_DIR, "data")
+    if data_dir is None:
+        data_dir = os.path.join(ROOT_DIR, "data")
+    elif not os.path.isabs(data_dir):
+        data_dir = os.path.join(ROOT_DIR, data_dir)
     loader = DataLoader(data_dir)
     visualizer = MarketVisualizer()
 
@@ -831,9 +883,14 @@ def load_data() -> Dict[str, Dict[str, object]]:
     return data
 
 
-DATA_STORE = load_data()
+# Global data store and data directory (populated at runtime)
+_DATA_DIR: str | None = None
+DATA_STORE: Dict[str, Dict[str, object]] = {}
+CLI_ARGS = _parse_cli_args()
+RESEARCH_DATA_DIR, RESEARCH_DATA_LABEL = _resolve_research_data_dir(CLI_ARGS.data_dir, CLI_ARGS.round)
+DATA_STORE = load_data(RESEARCH_DATA_DIR)
 
-app = dash.Dash(__name__, title="Prosperity Round Data Explorer")
+app = dash.Dash(__name__, title=f"Prosperity Data Explorer - {RESEARCH_DATA_LABEL}")
 app.layout = html.Div(
     id="outer-wrapper",
     className="research-shell",
@@ -860,12 +917,12 @@ app.layout = html.Div(
                         html.Div(
                             [
                                 html.H2(
-                                    "Prosperity Round Data Explorer",
+                                    f"Prosperity Data Explorer - {RESEARCH_DATA_LABEL}",
                                     id="title-h2",
                                     style={"margin": "0", "fontSize": "30px", "fontWeight": "800", "color": "var(--text-main)"},
                                 ),
                                 html.P(
-                                    "Research dashboard for raw market data: full-session structure, fast playback, smoother price reading, and microstructure hints for day-zero strategy design.",
+                                    f"Research dashboard for raw market data in {RESEARCH_DATA_LABEL}: full-session structure, fast playback, smoother price reading, and microstructure hints for day-zero strategy design.",
                                     id="subtitle-p",
                                     style={
                                         "margin": "10px 0 0",
@@ -904,13 +961,14 @@ app.layout = html.Div(
                                         html.Label("Day", style={"fontSize": "12px", "fontWeight": "700", "color": "var(--text-muted)", "marginBottom": "8px"}),
                                         dcc.Dropdown(
                                             id="day-dropdown",
-                                            options=[{"label": f"Day {day}", "value": day} for day in DATA_STORE.keys()],
-                                            value=next(iter(DATA_STORE.keys())) if DATA_STORE else None,
+                                            options=[],
+                                            value=None,
                                             clearable=False,
                                         ),
                                     ],
                                     style={"flex": "0 0 220px"},
                                 ),
+                                dcc.Store(id="data-store", data="initialized"),
                                 html.Div(
                                     [
                                         html.Label("Product", style={"fontSize": "12px", "fontWeight": "700", "color": "var(--text-muted)", "marginBottom": "8px"}),
@@ -1100,6 +1158,20 @@ def toggle_theme(_n_clicks: int | None, current_theme: str | None) -> str:
     if not _n_clicks:
         return current_theme or "light"
     return "dark" if (current_theme or "light") == "light" else "light"
+
+
+@app.callback(
+    [Output("day-dropdown", "options"), Output("day-dropdown", "value")],
+    [Input("data-store", "data")],
+)
+def populate_day_dropdown(_data_store_trigger: str) -> tuple[list, str | None]:
+    """Populate day dropdown from DATA_STORE (triggered when data-store changes)."""
+    if not DATA_STORE:
+        return [], None
+    days = sorted(DATA_STORE.keys())
+    options = [{"label": f"Day {day}", "value": day} for day in days]
+    first_day = days[0] if days else None
+    return options, first_day
 
 
 app.clientside_callback(
@@ -1655,14 +1727,22 @@ def update_graphs(
     return summary_panel, insight_panel, current_label, cross_asset_fig, candle_fig, price_fig, liquidity_fig, trade_fig, orderbook_fig
 
 
-def run_research_dashboard_server() -> None:
+def run_research_dashboard_server(data_dir: str | None = None) -> None:
     """Run the research dashboard with explicit shutdown semantics.
 
     Using Werkzeug's server directly avoids ambiguous teardown behavior when
     stopping the dashboard with ``Ctrl+C`` on Windows terminals.
     """
+    global _DATA_DIR, DATA_STORE
+    _DATA_DIR = data_dir
+    DATA_STORE.clear()
+    DATA_STORE.update(load_data(data_dir))
+    
     host = "127.0.0.1"
     _cleanup_dashboard_port(RESEARCH_DASHBOARD_PORT, "research dashboard")
+    if data_dir:
+        print(f"Loading data from: {data_dir}")
+    print(f"Loaded {len(DATA_STORE)} day(s) of data")
     print(f"Starting research dashboard on http://{host}:{RESEARCH_DASHBOARD_PORT}")
     server = make_server(host, RESEARCH_DASHBOARD_PORT, app.server, threaded=False)
     try:
@@ -1675,4 +1755,7 @@ def run_research_dashboard_server() -> None:
 
 
 if __name__ == "__main__":
-    run_research_dashboard_server()
+    parser = argparse.ArgumentParser(description="Prosperity research dashboard for raw round data exploration")
+    parser.add_argument("--data-dir", default=None, help="Path to data directory (default: data/)")
+    args = parser.parse_args()
+    run_research_dashboard_server(args.data_dir)

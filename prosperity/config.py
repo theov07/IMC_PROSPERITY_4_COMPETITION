@@ -119,7 +119,7 @@ def _override(base: ProductConfig, **kwargs) -> ProductConfig:
     )
 
 
-MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
+MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
     "champion": {},   # uses base configs as-is
     "leo": {
         0: {
@@ -173,6 +173,97 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             ),
         },
     },
+    "tibo_mm": {
+        1: {  "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="avellaneda_stoikov",
+                gamma=0.001,
+                kappa=.8,
+                maker_size_base_pct=0.5, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
+                pct_kept_for_takers=0.15, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=25,
+                sigma_window=200,
+                sigma_floor=0.5,
+                sigma_half_life=60,
+
+                ts_increment=100,
+                last_ts_value=199900,       # IMC live: last timestamp of the day
+                bt_last_ts_value=999900,    # internal backtest data: last timestamp of the day
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
+            ),
+             "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="avellaneda_stoikov",
+                gamma=0.05, # grid searched
+                kappa=2.0,  # grid searched
+                maker_size_base_pct=0.3, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
+                pct_kept_for_takers=0.25, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # grid searched # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=8, # grid searched -> could be between 5 and 15
+                sigma_window=150, # grid searched
+                sigma_floor=0.5,
+                sigma_half_life=50, # grid searched
+
+                ts_increment=100,
+                last_ts_value=199900,
+                bt_last_ts_value=199900,
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
+            ),
+        },
+    },
+    "tibo_naive_mm": {
+        1: {  "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="naive_tight_mm",
+                gamma=0.001,
+                kappa=.8,
+                maker_size_base_pct=0.5, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
+                pct_kept_for_takers=0.15, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=25,
+                sigma_window=200,
+                sigma_floor=0.5,
+                sigma_half_life=60,
+
+                ts_increment=100,
+                last_ts_value=199900,       # IMC live: last timestamp of the day
+                bt_last_ts_value=999900,    # internal backtest data: last timestamp of the day
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
+            ),
+             "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="naive_tight_mm",
+                gamma=0.05, # grid searched
+                kappa=2.0,  # grid searched
+                maker_size_base_pct=0.3, # in pct of position limit, scales down as inventory increases
+                take_edge=2,
+                pct_kept_for_takers=0.25, # capacity kept for aggressive takers
+                
+                min_half_spread=1.0,
+                mid_smooth_window=50, # grid searched # mid_smooth_window=0 => disabled
+                mid_smooth_half_life=8, # grid searched -> could be between 5 and 15
+                sigma_window=150, # grid searched
+                sigma_floor=0.5,
+                sigma_half_life=50, # grid searched
+
+                ts_increment=100,
+                last_ts_value=199900,
+                bt_last_ts_value=199900,
+                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
+            ),
+        },
+    },
+    
     "leo_naive": {
         0: {
             "EMERALDS": _override(
@@ -419,6 +510,392 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 strategy="naive_tight_mm",
                 maker_size=80,
                 tighten_ticks=1,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "buy_and_hold": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="buy_and_hold",
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="buy_and_hold",
+            ),
+        },
+    },
+    "tibo_mm_first": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="mm_first",
+                inv_step_threshold=0.9,   # step to L2 (join) when |pos| >= 80% of limit
+                take_edge=1,            # take if ask <= mid_smooth - 1 (or bid >= mid_smooth + 1)
+                maker_size_base_pct=0.75,  # base passive size as % of position limit
+
+                pct_kept_for_takers=0.1,  # capacity reserved for taker orders
+                mid_smooth_window=50,
+                mid_smooth_half_life=10,
+                taker_buy_threshold = 9_990,  # classify taker buys at >= this price
+                taker_sell_threshold= 10_025,
+
+                gap_trigger_min=10,           # min tick gap L1→L2 to fire gap exploit
+                gap_trigger_max_vol_pct=0.2, # L1 "thin" threshold: 10% of limit (=8 units)
+                gap_trigger_confirm_ticks=1,  # require 2 consecutive ticks to filter transient gaps
+
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="mm_first",
+                inv_step_threshold=0.8,
+                take_edge=1.0,
+                maker_size_base_pct=0.5,
+                pct_kept_for_takers=0.2,
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
+
+                gap_trigger_min=10,
+                gap_trigger_max_vol_pct=0.10,
+                gap_trigger_confirm_ticks=2,
+
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+        },
+    },
+    "leo_round1_naive_v7": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="naive_tight_mm_v7",
+                maker_size=80,
+                tighten_ticks=1,
+                take_edge=1.0,
+                asym_strength=0.0,
+                spread_min_frac=1.0,
+                flow_window=0,
+                cooldown_ticks=0,
+                pj_detect=0,
+                pj_size_frac=1.0,
+                pj_qty_threshold=0,
+                qty_join_threshold=0,
+                join_size_frac=1.0,
+                level2_ticks=0,
+                level2_frac=0.0,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="naive_tight_mm_v7",
+                maker_size=80,
+                tighten_ticks=1,
+                take_edge=1.0,
+                asym_strength=0.0,
+                spread_min_frac=1.0,
+                flow_window=0,
+                cooldown_ticks=0,
+                pj_detect=0,
+                pj_size_frac=1.0,
+                pj_qty_threshold=0,
+                qty_join_threshold=0,
+                join_size_frac=1.0,
+                level2_ticks=0,
+                level2_frac=0.0,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_round1_naive_v8": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="naive_tight_mm_v8",
+                maker_size=80,
+                tighten_ticks=1,
+                take_edge=1.0,
+                unwind_take_edge=0.5,
+                inventory_soft_ratio=0.60,
+                aggravate_min_frac=0.20,
+                unwind_boost_frac=0.30,
+                toxic_window=6,
+                toxic_threshold=0.60,
+                toxic_size_frac=0.75,
+                jump_size_frac=0.50,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="naive_tight_mm_v8",
+                maker_size=80,
+                tighten_ticks=1,
+                take_edge=1.0,
+                unwind_take_edge=0.5,
+                inventory_soft_ratio=0.55,
+                aggravate_min_frac=0.20,
+                unwind_boost_frac=0.30,
+                toxic_window=6,
+                toxic_threshold=0.60,
+                toxic_size_frac=0.75,
+                jump_size_frac=0.50,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_reg_lin_round1": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="round1_regression_top_book",
+                mode="toxic_mm",
+                maker_size=80,
+                tighten_ticks=1,
+                inventory_soft_ratio=0.55,
+                aggravate_min_frac=0.25,
+                unwind_boost_frac=0.25,
+                toxic_filter=True,
+                toxic_window=8,
+                toxic_threshold=0.60,
+                toxic_size_frac=0.60,
+                jump_size_frac=0.50,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="round1_regression_top_book",
+                mode="regression_mm",
+                maker_size=80,
+                tighten_ticks=1,
+                inventory_soft_ratio=0.50,
+                aggravate_min_frac=0.20,
+                unwind_boost_frac=0.35,
+                toxic_filter=False,
+                reg_window=80,
+                reg_min_points=40,
+                reg_horizon=20,
+                reg_signal_to_shift=0.50,
+                reg_max_price_shift=1,
+                reg_inventory_per_price=16.0,
+                reg_inventory_cap=40,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_reg_lin_round1_v2": {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="round1_regression_top_book",
+                mode="regression_mm",
+                maker_size=80,
+                tighten_ticks=1,
+                inventory_soft_ratio=0.50,
+                aggravate_min_frac=0.20,
+                unwind_boost_frac=0.35,
+                toxic_filter=False,
+                reg_window=80,
+                reg_min_points=40,
+                reg_horizon=20,
+                reg_signal_to_shift=0.50,
+                reg_max_price_shift=1,
+                reg_inventory_per_price=16.0,
+                reg_inventory_cap=40,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_reg_lin_round1_v3": {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="round1_regression_mm_v3",
+                maker_size=80,
+                tighten_ticks=1,
+                reg_window=120,
+                reg_min_points=60,
+                reg_horizon=25,
+                reg_r2_floor=0.30,
+                reg_r2_cap=0.80,
+                reg_rmse_floor=1.0,
+                reg_residual_reversion=0.35,
+                trend_inv_per_tick=24.0,
+                resid_inv_per_z=8.0,
+                trend_inventory_cap=72,
+                startup_target=36,
+                startup_end_ts=25000,
+                target_gap_scale=28.0,
+                trend_buy_boost_per_tick=0.22,
+                trend_sell_boost_per_tick=0.18,
+                cheap_buy_boost_per_z=0.15,
+                rich_sell_boost_per_z=0.15,
+                aggravate_cut=0.05,
+                one_sided_target_gap=26,
+                strong_trend_ticks=0.75,
+                cheap_residual_z=0.90,
+                rich_residual_z=0.90,
+                max_bid_extra_ticks=2,
+                max_ask_relax_ticks=2,
+                enable_selective_take=False,
+                take_edge=6.0,
+                max_take_size=8,
+                take_only_toward_target=True,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_reg_lin_round1_v4": {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="round1_regression_mm_v4",
+                maker_size=80,
+                tighten_ticks=1,
+                fixed_slope=0.1015,
+                residual_window=160,
+                reg_horizon=25,
+                reg_rmse_floor=1.0,
+                trend_confidence_floor=0.65,
+                trend_confidence_cap_rmse=4.0,
+                reg_residual_reversion=0.35,
+                trend_inv_per_tick=24.0,
+                resid_inv_per_z=8.0,
+                trend_inventory_cap=72,
+                startup_target=36,
+                startup_end_ts=25000,
+                target_gap_scale=28.0,
+                trend_buy_boost_per_tick=0.22,
+                trend_sell_boost_per_tick=0.18,
+                cheap_buy_boost_per_z=0.15,
+                rich_sell_boost_per_z=0.15,
+                aggravate_cut=0.05,
+                one_sided_target_gap=26,
+                strong_trend_ticks=0.75,
+                cheap_residual_z=0.90,
+                rich_residual_z=0.90,
+                max_bid_extra_ticks=2,
+                max_ask_relax_ticks=2,
+                enable_selective_take=False,
+                take_edge=6.0,
+                max_take_size=8,
+                take_only_toward_target=True,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_reg_lin_round1_v4_1": {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="round1_regression_mm_v4",
+                maker_size=80,
+                tighten_ticks=1,
+                fixed_slope=0.1015,
+                freeze_after_points=1000,
+                freeze_min_points=300,
+                freeze_r2_min=0.80,
+                residual_window=160,
+                reg_horizon=25,
+                reg_r2_floor=0.30,
+                reg_r2_cap=0.85,
+                reg_rmse_floor=1.0,
+                trend_confidence_floor=0.65,
+                trend_confidence_cap_rmse=4.0,
+                reg_residual_reversion=0.35,
+                trend_inv_per_tick=24.0,
+                resid_inv_per_z=8.0,
+                trend_inventory_cap=72,
+                startup_target=36,
+                startup_end_ts=25000,
+                target_gap_scale=28.0,
+                trend_buy_boost_per_tick=0.22,
+                trend_sell_boost_per_tick=0.18,
+                cheap_buy_boost_per_z=0.15,
+                rich_sell_boost_per_z=0.15,
+                aggravate_cut=0.05,
+                one_sided_target_gap=26,
+                strong_trend_ticks=0.75,
+                cheap_residual_z=0.90,
+                rich_residual_z=0.90,
+                max_bid_extra_ticks=2,
+                max_ask_relax_ticks=2,
+                enable_selective_take=False,
+                take_edge=6.0,
+                max_take_size=8,
+                take_only_toward_target=True,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_reg_lin_round1_v5": {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="round1_regression_mm_v5",
+                maker_size=80,
+                tighten_ticks=1,
+                seed_slope=0.1015,
+                block_size=100,
+                min_completed_blocks=5,
+                reg_horizon=25,
+                reg_r2_floor=0.85,
+                reg_r2_cap=0.98,
+                reg_rmse_floor=1.0,
+                reg_residual_reversion=0.25,
+                bootstrap_confidence=0.55,
+                trend_inv_per_tick=26.0,
+                resid_inv_per_z=7.0,
+                trend_inventory_cap=74,
+                startup_target=40,
+                startup_end_ts=30000,
+                target_gap_scale=26.0,
+                trend_buy_boost_per_tick=0.24,
+                trend_sell_boost_per_tick=0.20,
+                cheap_buy_boost_per_z=0.18,
+                rich_sell_boost_per_z=0.14,
+                aggravate_cut=0.04,
+                one_sided_target_gap=24,
+                strong_trend_ticks=1.1,
+                very_strong_trend_ticks=2.0,
+                cheap_residual_z=0.9,
+                rich_residual_z=1.0,
+                max_bid_extra_ticks=2,
+                max_ask_relax_ticks=2,
+                enable_selective_take=False,
+                take_edge=8.0,
+                max_take_size=8,
+                take_only_toward_target=True,
                 log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
@@ -1723,5 +2200,9 @@ def get_round_config(round_num: int, member: str = "champion") -> Dict[str, Prod
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
     overrides = MEMBER_OVERRIDES.get(member, {}).get(round_num, {})
-    base.update(overrides)
+    for symbol, cfg in overrides.items():
+        if cfg is None:
+            base.pop(symbol, None)
+        else:
+            base[symbol] = cfg
     return base
