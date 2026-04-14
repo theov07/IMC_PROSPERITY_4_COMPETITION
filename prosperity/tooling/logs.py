@@ -631,20 +631,38 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
     symbol_activities = _compute_activity_features(symbol_activities.sort_values("timestamp"))
     symbol_trades = _submission_trades(log.trades, symbol)
 
+    # Strategy-side features (fair_value, trend_ticks, residual_z, inv_target ...)
+    strategy_quotes = _parse_lambda_logs(log.runtime_logs)
+    strategy_quotes = strategy_quotes.loc[strategy_quotes["product"] == symbol].copy()
+
     buy_opportunities = symbol_activities["ask_price_1"] <= symbol_activities["fair"] - edge
     sell_opportunities = symbol_activities["bid_price_1"] >= symbol_activities["fair"] + edge
 
-    figure, (price_ax, exec_ax) = plt.subplots(
-        2,
+    figure, (price_ax, pos_ax, cash_ax, exec_ax) = plt.subplots(
+        4,
         1,
-        figsize=(16, 10),
+        figsize=(16, 14),
         sharex=True,
-        gridspec_kw={"height_ratios": [3, 1]},
+        gridspec_kw={"height_ratios": [3, 1, 1, 1]},
     )
 
     price_ax.plot(symbol_activities["timestamp"], symbol_activities["bid_price_1"], label="Best bid", color="#0b7285")
     price_ax.plot(symbol_activities["timestamp"], symbol_activities["ask_price_1"], label="Best ask", color="#c92a2a")
     price_ax.plot(symbol_activities["timestamp"], symbol_activities["fair"], label="Fair value (EWM microprice)", color="#2b8a3e")
+
+    # Overlay strategy's internal fair value (block-OLS regression) if logged.
+    if not strategy_quotes.empty and "fair_value" in strategy_quotes.columns:
+        reg_fv = pd.to_numeric(strategy_quotes["fair_value"], errors="coerce")
+        mask = reg_fv.notna()
+        if mask.any():
+            price_ax.plot(
+                strategy_quotes.loc[mask, "timestamp"],
+                reg_fv.loc[mask],
+                label="Strategy fair (block-OLS reg)",
+                color="#9c36b5",
+                linewidth=1.3,
+                linestyle="--",
+            )
 
     price_ax.scatter(
         symbol_activities.loc[buy_opportunities, "timestamp"],
@@ -689,6 +707,38 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
             linewidths=0.3,
         )
 
+        sorted_trades = symbol_trades.sort_values("timestamp").reset_index(drop=True)
+        inventory = sorted_trades["signed_quantity"].cumsum()
+        # Cash: SELL adds price*qty, BUY subtracts price*qty.
+        cash_delta = -sorted_trades["price"] * sorted_trades["signed_quantity"]
+        cash_running = cash_delta.cumsum()
+
+        # Extend steps to the end of the price panel so flat-position regions
+        # after the last trade stay visible.
+        end_ts = float(symbol_activities["timestamp"].max())
+        inv_ts = pd.concat([sorted_trades["timestamp"], pd.Series([end_ts])], ignore_index=True)
+        inv_vals = pd.concat([inventory, pd.Series([inventory.iloc[-1]])], ignore_index=True)
+        cash_vals = pd.concat([cash_running, pd.Series([cash_running.iloc[-1]])], ignore_index=True)
+
+        pos_ax.plot(inv_ts, inv_vals, color="#1864ab", linewidth=1.4, drawstyle="steps-post")
+        pos_ax.fill_between(inv_ts, 0, inv_vals, color="#1864ab", alpha=0.15, step="post")
+        pos_ax.axhline(0, color="#adb5bd", linewidth=1)
+        max_abs_pos = float(inventory.abs().max() or 1.0)
+        pos_ax.text(
+            0.01, 0.92,
+            f"end={int(inventory.iloc[-1])}  max|pos|={int(max_abs_pos)}",
+            transform=pos_ax.transAxes, fontsize=9, color="#1864ab",
+        )
+
+        cash_ax.plot(inv_ts, cash_vals, color="#e8590c", linewidth=1.4, drawstyle="steps-post")
+        cash_ax.fill_between(inv_ts, 0, cash_vals, color="#e8590c", alpha=0.12, step="post")
+        cash_ax.axhline(0, color="#adb5bd", linewidth=1)
+        cash_ax.text(
+            0.01, 0.92,
+            f"end_cash={cash_running.iloc[-1]:,.0f}",
+            transform=cash_ax.transAxes, fontsize=9, color="#e8590c",
+        )
+
         exec_colors = symbol_trades["side"].map({"BUY": "#2f9e44", "SELL": "#f03e3e"})
         exec_ax.bar(
             symbol_trades["timestamp"],
@@ -709,6 +759,12 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
     price_ax.set_ylabel("Price")
     price_ax.legend(loc="upper left", ncol=2)
     price_ax.grid(alpha=0.2)
+
+    pos_ax.set_ylabel("Inventory")
+    pos_ax.grid(alpha=0.15)
+
+    cash_ax.set_ylabel("Cash balance")
+    cash_ax.grid(alpha=0.15)
 
     exec_ax.axhline(0, color="#adb5bd", linewidth=1)
     exec_ax.set_ylabel("Signed qty")

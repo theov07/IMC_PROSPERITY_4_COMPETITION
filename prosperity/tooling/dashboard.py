@@ -278,7 +278,15 @@ def _position_series(fills: pd.DataFrame | list[dict], symbol: str | None = None
                 else int(day_df["timestamp"].iloc[0])
             )
             reset_row = pd.DataFrame([{"timestamp": day_start_ts, "position": 0}])
-            chunks.append(pd.concat([reset_row, day_df[["timestamp", "position"]]], ignore_index=True))
+            # Hold final position flat until end-of-day so the line does not
+            # visually disappear after the last fill.
+            day_end_ts = day_start_ts + 999_900
+            final_pos = int(day_df["position"].iloc[-1])
+            tail_row = pd.DataFrame([{"timestamp": day_end_ts, "position": final_pos}])
+            chunks.append(pd.concat(
+                [reset_row, day_df[["timestamp", "position"]], tail_row],
+                ignore_index=True,
+            ))
 
         return pd.concat(chunks, ignore_index=True).sort_values("timestamp", kind="stable")
 
