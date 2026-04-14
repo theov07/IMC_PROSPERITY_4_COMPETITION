@@ -35,6 +35,7 @@ What is good enough to use now:
 - comparing `champion`, `leo`, `theo`, and `pietro`
 - ranking local runs by both pnl and robustness proxies
 - auto-reconciling official logs against a local backtest when a matching artifact is found
+- reviewing per-symbol markouts, quote-age diagnostics, inventory episodes, and participant-aware official stats
 
 What is not fully production-grade yet:
 
@@ -44,6 +45,7 @@ What is not fully production-grade yet:
 - local-vs-official reconciliation now exists, but still needs richer diagnostics
 - exporter is functional, but should be made more tightly coupled to the modular source of truth
 - dashboard and analyzer auto-discovery for backtest JSON is best-effort, not guaranteed
+- observation schema support for future rounds is still generic / best-effort rather than fully round-aware
 
 ## Repository Layout
 
@@ -198,7 +200,7 @@ Review an official log and auto-reconcile against a local backtest JSON:
 python -m prosperity.tooling.logs --log logs\leo_round0_naiveV8\84616.json --backtest-json artifacts\backtest_results.json --symbol EMERALDS
 ```
 
-If `--backtest-json` is omitted, the log analyzer now tries a best-effort auto-discovery inside `artifacts/` before falling back to log-only analysis.
+If `--backtest-json` is omitted, the log analyzer now tries a best-effort auto-discovery inside `artifacts/` before falling back to log-only analysis. The analyzer also prints participant-aware summaries with post-trade markouts by horizon.
 
 Reconcile a local backtest with an official submission:
 
@@ -213,6 +215,15 @@ python -m prosperity.tooling.dashboard --log examples\official_logs\16248.log
 ```
 
 When `--log` is provided, the dashboard now tries to auto-discover a matching local backtest JSON in `artifacts/`. If a confident match is found, it auto-runs reconciliation in the terminal before starting. If not, pass `--backtest-json` explicitly.
+
+Current dashboard diagnostics now include:
+
+- backtest diagnostics cards per symbol: fill efficiency, per-side fill efficiency, quote age / refresh / stale exposure, inventory episodes, pnl attribution, and multi-horizon markouts
+- IMC diagnostics cards per symbol: participant-aware trade summaries and official post-trade markouts
+- live vs backtest comparison cards per symbol: fills, side fill-rate proxy, quoted spread, and headline markouts
+- live vs backtest overlay chart: position path, cumulative fills, and quoted spread
+- IMC trade-flow panel: signed trade flow vs our own signed submission flow
+- observation / conversion traces in backtest view when the underlying CSV data exposes them
 
 Benchmark latency:
 

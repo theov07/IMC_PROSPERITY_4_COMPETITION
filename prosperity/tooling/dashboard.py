@@ -431,7 +431,7 @@ def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
 def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, line_shape: str = "linear") -> go.Figure:
     _mode = "lines+markers" if line_shape == "hv" else "lines"
     _marker = dict(size=3) if line_shape == "hv" else {}
-    from prosperity.tooling.logs import _compute_activity_features, _parse_lambda_logs
+    from prosperity.tooling.logs import _compute_activity_features, _parse_lambda_logs, official_market_trade_flow
 
     act = log.activities[log.activities["product"] == symbol].copy().sort_values("timestamp")
     if act.empty:
@@ -451,6 +451,7 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         )
 
     pos_df = _position_series(sym_trades)
+    market_flow_df = official_market_trade_flow(log, symbol)
     lambda_df = _parse_lambda_logs(log.runtime_logs)
     lambda_sym = lambda_df[lambda_df["product"] == symbol] if not lambda_df.empty else pd.DataFrame()
 
@@ -461,23 +462,32 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     has_vol = bool(_vol_cols)
 
     if has_vol:
-        n_rows  = 5
-        heights = [0.36, 0.12, 0.14, 0.12, 0.26]
+        n_rows  = 6
+        heights = [0.32, 0.10, 0.12, 0.12, 0.10, 0.24]
         titles  = ["Price & Trades", "Spread", "Position & Imbalance", "Volatility (σ)", "PnL"]
         vol_row = 4
         pnl_row = 5
+        titles = ["Price & Trades", "Spread (Market vs Quote)", "Trade Flow", "Position & Imbalance", "Volatility (sigma)", "PnL"]
+        flow_row = 3
+        position_row = 4
+        vol_row = 5
+        pnl_row = 6
     else:
-        n_rows  = 4
-        heights = [0.42, 0.14, 0.16, 0.28]
+        n_rows  = 5
+        heights = [0.36, 0.12, 0.14, 0.14, 0.24]
         titles  = ["Price & Trades", "Spread", "Position & Imbalance", "PnL"]
         vol_row = None
         pnl_row = 4
+        titles = ["Price & Trades", "Spread (Market vs Quote)", "Trade Flow", "Position & Imbalance", "PnL"]
+        flow_row = 3
+        position_row = 4
+        pnl_row = 5
 
     fig = make_subplots(
         rows=n_rows, cols=1, shared_xaxes=True,
         row_heights=heights,
         subplot_titles=titles,
-        vertical_spacing=0.05,
+        vertical_spacing=0.07,
     )
 
     # Price (with optional EWMA smoothing)
@@ -515,12 +525,36 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",
         line=dict(color=C_SPREAD, width=1), fill="tozeroy",
         fillcolor="rgba(134,142,150,0.15)", showlegend=False), row=2, col=1)
+    if not lambda_sym.empty:
+        quote_spread = (lambda_sym["ask_price"] - lambda_sym["bid_price"]).dropna()
+        if not quote_spread.empty:
+            quote_spread_df = lambda_sym.loc[quote_spread.index, ["timestamp"]].copy()
+            quote_spread_df["spread"] = quote_spread.values
+            fig.add_trace(go.Scatter(
+                x=quote_spread_df["timestamp"], y=quote_spread_df["spread"],
+                name="Quoted Spread", mode=_mode, marker=dict(**_marker, color=C_FEATURE_PALETTE[1]),
+                line=dict(color=C_FEATURE_PALETTE[1], width=1.2, shape=line_shape)), row=2, col=1)
+
+    if not market_flow_df.empty:
+        flow_by_timestamp = market_flow_df.groupby("timestamp", as_index=False)["signed_quantity"].sum()
+        fig.add_trace(go.Bar(
+            x=flow_by_timestamp["timestamp"], y=flow_by_timestamp["signed_quantity"],
+            name="All Trade Flow",
+            marker_color=[C_IMB_POS if value > 0 else C_IMB_NEG for value in flow_by_timestamp["signed_quantity"]],
+            opacity=0.55), row=flow_row, col=1)
+    if not sym_trades.empty:
+        submission_flow = sym_trades.groupby("timestamp", as_index=False)["signed_qty"].sum()
+        fig.add_trace(go.Scatter(
+            x=submission_flow["timestamp"], y=submission_flow["signed_qty"],
+            name="Submission Flow", mode="lines+markers",
+            marker=dict(size=4, color=C_PNL_TOTAL),
+            line=dict(color=C_PNL_TOTAL, width=1.4, shape=line_shape)), row=flow_row, col=1)
 
     # Position
     if not pos_df.empty:
         fig.add_trace(go.Scatter(x=pos_df["timestamp"], y=pos_df["position"], name="Position",
             mode="lines", line=dict(color=C_POSITION, width=1.5, shape=line_shape),
-            fill="tozeroy", fillcolor="rgba(112,72,232,0.12)"), row=3, col=1)
+            fill="tozeroy", fillcolor="rgba(112,72,232,0.12)"), row=position_row, col=1)
 
     # Imbalance
     bv = act["bid_volume_1"].clip(lower=1)
@@ -528,7 +562,7 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     imb = (bv - av) / (bv + av)
     fig.add_trace(go.Bar(x=act["timestamp"], y=imb, name="Imbalance",
         marker_color=[C_IMB_POS if v > 0 else C_IMB_NEG for v in imb],
-        opacity=0.6, showlegend=False), row=3, col=1)
+        opacity=0.6, showlegend=False), row=position_row, col=1)
 
     # Volatility subplot (sigma and other vol-scale lambda columns)
     if vol_row is not None and not lambda_sym.empty:
@@ -549,7 +583,7 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     color_map = _product_color_map(symbols)
     _add_pnl_traces(fig, pnl_df, color_map, row=pnl_row, total_df=log.graph if not log.graph.empty else None)
 
-    height = 920 if has_vol else 820
+    height = 1040 if has_vol else 940
     fig.update_layout(height=height, uirevision=f"imc-{symbol}", **_layout_base(theme))
     fig.update_annotations(**_subplot_title_style(theme))
     return fig

@@ -18,10 +18,10 @@ Priority list for turning this repository from a solid framework into a competit
 - ~~Add richer metrics to comparison output: turnover, max drawdown, inventory pressure, sharpe-like stability proxies.~~ (done: compare/grid-search now expose drawdown, fill efficiency, inventory pressure, passive adverse markout proxies)
 - Extend `research/analysis.py` with per-product microstructure reports and event detection.
 - Build a standard workflow to calibrate bot signals from official logs and raw trade CSVs.
-- Add proper handling and research utilities for `state.observations` and conversion data.
+- ~~Add proper handling and research utilities for `state.observations` and conversion data.~~ (done: backtester now exports observation / conversion traces and forwards best-effort observation data to strategies when present)
 - Add liquidation / unwind modules that can be reused across strategies.
-- Add per-side quote metrics: quote age, refresh rate, stale quote exposure, and quote-to-fill by side.
-- Add inventory episode metrics: unwind half-life, time-at-limit, time one-sided, and inventory sign flips.
+- ~~Add per-side quote metrics: quote age, refresh rate, stale quote exposure, and quote-to-fill by side.~~ (done: backtester now exports quote age, refresh, stale exposure, and bid/ask fill efficiency)
+- ~~Add inventory episode metrics: unwind half-life, time-at-limit, time one-sided, and inventory sign flips.~~ (done: backtester now exports one-sided time, sign flips, unwind duration, and open-episode length)
 
 ## Synthetic Data And Stress Testing
 
@@ -42,11 +42,11 @@ Priority list for turning this repository from a solid framework into a competit
 - Add advanced quote policy logic: when to join, improve, widen, or remove one side.
 - Add explicit soft liquidation and hard liquidation rules.
 - Add regime detection for stable, trending, choppy, stressed, and low-liquidity markets.
-- Add pnl attribution separating spread capture, inventory drift, adverse selection, and take-vs-make effects.
+- ~~Add pnl attribution separating spread capture, inventory drift, adverse selection, and take-vs-make effects.~~ (done: backtester now exports spread / make / take / inventory drift / adverse-selection proxies)
 - Add multi-level fair value estimators such as wall-mid and liquidity-weighted fair value.
 - Add trade-flow and order-book pressure features on multiple horizons and levels.
 - Add a short-horizon predictor ensemble using microprice, imbalance, trade flow, spread state, and momentum features.
-- Add bot-conditioned alpha so identical trades are interpreted differently depending on the participant.
+- ~~Add bot-conditioned alpha so identical trades are interpreted differently depending on the participant.~~ (partial tooling done: official log analyzer now exposes participant-aware volume and post-trade markouts; strategy usage still to do)
 - Add an opportunity classifier for deciding when to take aggressively versus quote passively.
 - Add quote aging and quote refresh logic.
 - Add dynamic sizing based on spread, confidence, inventory, and product risk.
@@ -95,9 +95,9 @@ Priority list for turning this repository from a solid framework into a competit
 - Add position-over-time views to log analysis outputs.
 - Surface submission metadata such as final profit, status, submission id, and loaded files directly in reports.
 - Add runtime log inspection when useful debug information is present.
-- Add richer HTML or dashboard summaries so post-submission review is faster.
-- Add official-vs-local reconcile widgets to the dashboard instead of terminal-only summaries.
-- Add markout curves after fills for horizons like `+1`, `+2`, `+5`, `+10` ticks / snapshots.
+- ~~Add richer HTML or dashboard summaries so post-submission review is faster.~~ (done: dashboard now shows IMC / backtest diagnostics cards per symbol)
+- ~~Add official-vs-local reconcile widgets to the dashboard instead of terminal-only summaries.~~ (done: dashboard now surfaces per-symbol reconcile summary cards when a backtest match exists)
+- ~~Add markout curves after fills for horizons like `+1`, `+2`, `+5`, `+10` ticks / snapshots.~~ (done: backtester and official log analyzer now compute multi-horizon markout summaries)
 
 ## Nice To Have
 
