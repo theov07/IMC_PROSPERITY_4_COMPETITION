@@ -147,6 +147,44 @@ class BaseStrategy(ABC):
         ...
 
     # ------------------------------------------------------------------
+    # Shared volatility estimation (call from any strategy)
+    # ------------------------------------------------------------------
+    def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
+        """Estimate realised volatility from mid-price returns with EWMA smoothing.
+
+        Params read from self.params:
+          sigma_window   — rolling window size for returns (default 50)
+          sigma_default  — fallback when too few prices (default 1.0)
+          sigma_half_life — EWMA half-life for smoothing (default 60)
+          sigma_floor    — minimum returned value (default 0.5)
+
+        Stores in memory: ``mid_history``, ``sigma_smoothed``.
+        Returns the floored, smoothed sigma.
+        """
+        window = int(self.params.get("sigma_window", 50))
+        prices = memory.setdefault("mid_history", [])
+        prices.append(mid)
+        if len(prices) > window + 1:
+            prices[:] = prices[-(window + 1):]
+
+        if len(prices) < 3:
+            return float(self.params.get("sigma_default", 1.0))
+
+        returns = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+        n = len(returns)
+        mean_r = sum(returns) / n
+        var = sum((r - mean_r) ** 2 for r in returns) / max(n - 1, 1)
+        sigma_raw = math.sqrt(var) if var > 0 else float(self.params.get("sigma_default", 1.0))
+
+        half_life = float(self.params.get("sigma_half_life", 60))
+        alpha = 2.0 / (half_life + 1.0)
+        sigma_prev = memory.get("sigma_smoothed", sigma_raw)
+        sigma_smoothed = alpha * sigma_raw + (1.0 - alpha) * sigma_prev
+        memory["sigma_smoothed"] = sigma_smoothed
+
+        return max(sigma_smoothed, float(self.params.get("sigma_floor", 0.5)))
+
+    # ------------------------------------------------------------------
     # Optional: expose named price features for the dashboard
     # ------------------------------------------------------------------
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
@@ -161,6 +199,134 @@ class BaseStrategy(ABC):
     # ------------------------------------------------------------------
     # Helpers available to all strategies
     # ------------------------------------------------------------------
+    def runtime_trace_enabled(self) -> bool:
+        enabled = self.params.get("runtime_trace_enabled")
+        if enabled is not None:
+            return bool(enabled)
+        return not bool(False)
+
+    def log_quote_snapshot(
+        self,
+        *,
+        state: TradingState,
+        memory: Dict[str, Any],
+        bid_price: int | float | None,
+        ask_price: int | float | None,
+        extras: Dict[str, Any] | None = None,
+    ) -> None:
+        """Accumulate and flush a lightweight quote trace for official IMC logs.
+
+        The trace format is intentionally small and common across quoting
+        strategies so the dashboard can render our own bid/ask from runtime logs:
+          {
+            "product": "...",
+            "trace": "quote_trace",
+            "chunk_end": 49900,
+            "columns": ["timestamp", "bid_price", "ask_price", ...],
+            "log": [[...], [...]]
+          }
+
+        Strategies may append extra per-tick diagnostics through ``extras`` as
+        long as they keep a stable schema across ticks.
+        """
+        if not self.runtime_trace_enabled():
+            return
+
+        row: Dict[str, Any] = {
+            "timestamp": int(state.timestamp),
+            "bid_price": bid_price,
+            "ask_price": ask_price,
+        }
+        if extras:
+            row.update(extras)
+
+        columns = memory.setdefault("_quote_trace_columns", list(row.keys()))
+        for key in row.keys():
+            if key not in columns:
+                columns.append(key)
+
+        rows = memory.setdefault("_quote_trace_rows", [])
+        rows.append(row)
+
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        last_tick_ts = self.params.get("last_ts_value")
+        if last_tick_ts is None:
+            last_tick_ts = int(self.params.get("total_ticks", 200000)) - 100
+        else:
+            last_tick_ts = int(last_tick_ts)
+
+        end_of_sim = int(state.timestamp) >= last_tick_ts
+        checkpoint = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
+        if not (end_of_sim or checkpoint):
+            return
+
+        print(json.dumps({
+            "product": self.product,
+            "trace": "quote_trace",
+            "chunk_end": int(state.timestamp),
+            "columns": columns,
+            "log": [[row.get(column) for column in columns] for row in rows],
+        }))
+        memory["_quote_trace_rows"] = []
+
+    def log_taker_fill(
+        self,
+        *,
+        state: TradingState,
+        memory: Dict[str, Any],
+        side: str,
+        price: int,
+        quantity: int,
+    ) -> None:
+        """Accumulate a taker fill and flush when the buffer is full enough.
+
+        Flush conditions (in priority order):
+          1. Deferred flag was set last tick → flush now.
+          2. Timestamp is the second-to-last of the day → flush as end-of-day cleanup.
+          3. Buffer reached 20 fills AND we are NOT at a quote-flush timestamp → flush.
+          4. Buffer reached 20 fills AND we ARE at a quote-flush timestamp → set deferred
+             flag; the flush will fire on the very next tick instead.
+
+        Log format emitted to stdout:
+          {"product": "...", "trace": "taker_fills", "chunk_end": ts,
+           "log": [[ts, side, price, qty], ...]}
+        """
+        if not self.runtime_trace_enabled():
+            return
+
+        taker_log = memory.setdefault("_taker_log", [])
+        taker_log.append([int(state.timestamp), side, price, quantity])
+
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        ts_increment = int(self.params.get("ts_increment", 100))
+        last_ts = int(self.params.get("last_ts_value", 199900))
+        second_to_last = last_ts - ts_increment
+
+        is_quote_flush = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
+        deferred = memory.get("_taker_flush_deferred", False)
+
+        # If threshold hit exactly on a quote-flush ts, defer to the next tick.
+        if len(taker_log) >= 20 and is_quote_flush and not deferred:
+            memory["_taker_flush_deferred"] = True
+            return
+
+        should_flush = (
+            deferred
+            or int(state.timestamp) >= second_to_last
+            or (len(taker_log) >= 20 and not is_quote_flush)
+        )
+        if not should_flush:
+            return
+
+        print(json.dumps({
+            "product": self.product,
+            "trace": "taker_fills",
+            "chunk_end": int(state.timestamp),
+            "log": taker_log,
+        }))
+        memory["_taker_log"] = []
+        memory["_taker_flush_deferred"] = False
+
     def position_limit(self) -> int:
         return self.params.get("position_limit", 20)
 
@@ -194,34 +360,6 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["mid_smoothed"] = smoothed
         return smoothed
 
-    # ── volatility estimation ────────────────────────────────────────
-    def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
-        window = int(self.params.get("sigma_window", 50))
-        prices = memory.setdefault("mid_history", [])
-        prices.append(mid)
-        if len(prices) > window + 1:
-            prices[:] = prices[-(window + 1):]
-
-        if len(prices) < 3:
-            return self.params.get("sigma_default", 1.0)
-
-        # Realized volatility from mid returns
-        returns = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
-        n = len(returns)
-        mean_r = sum(returns) / n
-        var = sum((r - mean_r) ** 2 for r in returns) / max(n - 1, 1)
-        sigma_raw = math.sqrt(var) if var > 0 else self.params.get("sigma_default", 1.0)
-
-        # Apply exponential smoothing with parametrizable half-life
-        half_life = float(self.params.get("sigma_half_life", 60))
-        alpha = 2.0 / (half_life + 1.0)
-        sigma_prev = memory.get("sigma_smoothed", sigma_raw)
-        sigma_smoothed = alpha * sigma_raw + (1.0 - alpha) * sigma_prev
-        memory["sigma_smoothed"] = sigma_smoothed
-
-        # Floor to prevent degenerate spreads
-        return max(sigma_smoothed, self.params.get("sigma_floor", 0.5))
-
     # ── core A-S computation ─────────────────────────────────────────
     def _compute_as_quotes(
         self, mid: float, position: int, sigma: float, memory: Dict[str, Any],
@@ -254,40 +392,51 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         return reservation, half_spread
 
     # ── order construction ───────────────────────────────────────────
-    def compute_orders(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
+    def compute_orders(self, state: TradingState, book: BookSnapshot, order_depth: OrderDepth, position: int, memory: Dict[str, Any]) -> Tuple[List[Order], int]:
+        
         if book.mid_price is None:
             return [], 0
 
         mid = book.mid_price
         mid_smooth = self._smooth_mid(mid, memory)
         sigma = self._update_volatility(mid, memory)
+
+
+        # ─-----------------------─ QUOTE PRICING -------------------------------
+
         reservation, half_spread = self._compute_as_quotes(mid_smooth, position, sigma, memory)
 
         bid_price = int(math.floor(reservation - half_spread))
         ask_price = int(math.ceil(reservation + half_spread))
 
-        # Ensure we don't cross the book
-        if book.best_ask is not None:
-            bid_price = min(bid_price, book.best_ask - 1)
+        # Join-best cap: never improve the market, only join or post behind.
+        # If our computed price is inside the best bid/ask we cap it there —
+        # we still get filled (tied for best price) but capture more edge.
         if book.best_bid is not None:
-            ask_price = max(ask_price, book.best_bid + 1)
-        if ask_price <= bid_price:
-            ask_price = bid_price + 1
+            bid_price = min(bid_price, book.best_bid+1)
+        if book.best_ask is not None:
+            ask_price = max(ask_price, book.best_ask-1)
 
+        # Ensure we don't cross the book
+        # if book.best_ask is not None:
+        #     bid_price = min(bid_price, book.best_ask - 1)
+        # if book.best_bid is not None:
+        #     ask_price = max(ask_price, book.best_bid + 1)
+        # if ask_price <= bid_price:
+        #     ask_price = bid_price + 1
+
+        orders: List[Order] = []
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
 
-        maker_size = int(self.params.get("maker_size", 10))
-        orders: List[Order] = []
 
-        # ── Aggressive taking when edge is clear ──
+        # ─--------------─ Taker orders, when edge is clear ---------------------
+
+        # Track which prices we send as taker this tick so own_trades can be
+        # classified next tick (fills arrive one tick later via state.own_trades).
+        this_taker_buy_px: set = set()
+        this_taker_sell_px: set = set()
+
         take_edge = float(self.params.get("take_edge", 0.5))
         for ask_p in sorted(order_depth.sell_orders):
             available = -order_depth.sell_orders[ask_p]
@@ -296,6 +445,7 @@ class AvellanedaStoikovStrategy(BaseStrategy):
             qty = min(available, buy_cap)
             if qty > 0:
                 orders.append(Order(self.product, ask_p, qty))
+                this_taker_buy_px.add(ask_p)
                 buy_cap -= qty
 
         for bid_p in sorted(order_depth.buy_orders, reverse=True):
@@ -305,21 +455,32 @@ class AvellanedaStoikovStrategy(BaseStrategy):
             qty = min(volume, sell_cap)
             if qty > 0:
                 orders.append(Order(self.product, bid_p, -qty))
+                this_taker_sell_px.add(bid_p)
                 sell_cap -= qty
 
-        # ── Passive quoting ──
+
+        # ─--------------------─ Passive quoting ──------------------------------
+
+        #  ORDER SIZING
         limit = self.position_limit()
+
+        base_size = float(self.params.get("maker_size_base_pct", 0.2)) * limit
+        bid_size = base_size * (1 - position/limit)
+        ask_size = base_size * (1 + position/limit)
+
+        quote_buy = min(buy_cap, int(bid_size))
+        quote_sell = min(sell_cap, int(ask_size))
+
+        # ─-----------─ Reduce quote -> keep capacity for takers ---------------------
+
         inv_ratio = abs(position) / float(limit) if limit else 0.0
 
-        quote_buy = min(buy_cap, maker_size)
-        quote_sell = min(sell_cap, maker_size)
-
-        # Reduce quoting when inventory is heavy # TODO: wtf is that
-        if inv_ratio >= 0.75:
+        if inv_ratio >= 1 - float(self.params.get("pct_kept_for_takers", 0.2)):
             if position > 0:
                 quote_buy = 0
             elif position < 0:
                 quote_sell = 0
+
 
         if quote_buy > 0:
             orders.append(Order(self.product, bid_price, quote_buy))
@@ -330,23 +491,38 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         memory["sigma"] = sigma
         memory["half_spread"] = half_spread
 
-        # ── Per-tick log accumulation (live only, suppressed during internal backtest) ──
-        if not False:
-            flush_ts = int(self.params.get("log_flush_ts", 10000))
-            last_ts = int(self.params.get("last_ts_value", 199900))
+        # ── Taker-fill classification and logging ────────────────────────────────
+        # own_trades contains fills from LAST tick's orders; classify using the
+        # taker prices we stored at the end of last tick.
+        prev_taker_buy_px = set(memory.get("_taker_buy_px", []))
+        prev_taker_sell_px = set(memory.get("_taker_sell_px", []))
+        memory["_taker_buy_px"] = list(this_taker_buy_px)
+        memory["_taker_sell_px"] = list(this_taker_sell_px)
 
-            log = memory.setdefault("_log", [])
-            log.append([state.timestamp, round(reservation, 2), bid_price, ask_price])
+        for trade in state.own_trades.get(self.product, []):
+            if trade.buyer == "SUBMISSION":
+                side, is_taker = "BUY", trade.price in prev_taker_buy_px
+            else:
+                side, is_taker = "SELL", trade.price in prev_taker_sell_px
+            if is_taker:
+                self.log_taker_fill(
+                    state=state, memory=memory,
+                    side=side, price=trade.price, quantity=trade.quantity,
+                )
 
-            end_of_sim = state.timestamp >= last_ts
-            checkpoint = flush_ts > 0 and (state.timestamp % flush_ts) == (flush_ts - 100)
-            if end_of_sim or checkpoint:
-                print(json.dumps({
-                    "product": self.product,
-                    "chunk_end": state.timestamp,
-                    "log": log,  # [[timestamp, reservation, bid, ask], ...]
-                }))
-                memory["_log"] = []
+        # ── Quote snapshot (live only, suppressed during internal backtest) ──────
+        self.log_quote_snapshot(
+            state=state,
+            memory=memory,
+            bid_price=bid_price,
+            ask_price=ask_price,
+            extras={
+                "position": position,
+                "reservation": round(reservation, 2),
+                "sigma": round(sigma, 6),
+                "half_spread": round(half_spread, 6),
+            },
+        )
 
         return orders, 0
 
@@ -354,6 +530,8 @@ class AvellanedaStoikovStrategy(BaseStrategy):
         out: Dict[str, float] = {}
         if (r := memory.get("reservation")) is not None:
             out["Reservation"] = r
+        if (s := memory.get("sigma")) is not None:
+            out["Sigma"] = s
         return out
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -363,52 +541,54 @@ PRODUCTS = {'EMERALDS': {'anchor_price': 10000.0,
               'bt_last_ts_value': 999900,
               'ema_alpha': 0.08,
               'fair_mode': 'anchored_microprice',
-              'gamma': 0.1,
+              'gamma': 0.001,
               'improve_ticks': 1,
               'inventory_aversion': 1.2,
               'join_best': True,
-              'kappa': 1.0,
+              'kappa': 0.8,
               'last_ts_value': 199900,
               'log_flush_ts': 1000,
-              'maker_size': 8,
+              'maker_size': 16,
+              'maker_size_base_pct': 0.5,
               'max_inventory_bias_ticks': 4,
               'mid_smooth_half_life': 25,
               'mid_smooth_window': 50,
               'min_half_spread': 1.0,
+              'pct_kept_for_takers': 0.15,
               'position_limit': 80,
               'quote_half_spread': 2,
-              'sigma_default': 1.0,
               'sigma_floor': 0.5,
               'sigma_half_life': 60,
               'sigma_window': 200,
               'strategy': 'avellaneda_stoikov',
-              'take_edge': 1.5,
+              'take_edge': 2,
               'ts_increment': 100},
  'TOMATOES': {'anchor_price': None,
               'anchor_weight': 0.0,
               'bt_last_ts_value': 199900,
               'ema_alpha': 0.18,
               'fair_mode': 'microprice_ema',
-              'gamma': 0.2,
+              'gamma': 0.05,
               'improve_ticks': 1,
               'inventory_aversion': 1.5,
               'join_best': True,
-              'kappa': 1.0,
+              'kappa': 2.0,
               'last_ts_value': 199900,
               'log_flush_ts': 1000,
-              'maker_size': 8,
+              'maker_size': 14,
+              'maker_size_base_pct': 0.3,
               'max_inventory_bias_ticks': 5,
-              'mid_smooth_half_life': 25,
+              'mid_smooth_half_life': 8,
               'mid_smooth_window': 50,
               'min_half_spread': 1.0,
+              'pct_kept_for_takers': 0.25,
               'position_limit': 80,
               'quote_half_spread': 2,
-              'sigma_default': 1.0,
               'sigma_floor': 0.5,
-              'sigma_half_life': 60,
-              'sigma_window': 200,
+              'sigma_half_life': 50,
+              'sigma_window': 150,
               'strategy': 'avellaneda_stoikov',
-              'take_edge': 0.5,
+              'take_edge': 2,
               'ts_increment': 100}}
 
 STRATEGY_CLASSES = {"avellaneda_stoikov": AvellanedaStoikovStrategy}
