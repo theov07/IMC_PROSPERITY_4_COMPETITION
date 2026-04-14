@@ -34,11 +34,20 @@ Example entry:
 
 ---
 
-## Current Context
+## Current Context (2026-04-14)
+
+- Round 1 is live. Products: `ASH_COATED_OSMIUM`, `INTARIAN_PEPPER_ROOT`.
+- Léo's round-0 naive family has extended to `leo_naive_v8`; also working on round-1 regression quoters (`leo_reg_lin_round1_v{1..5}`, plus `v4_1`) and `leo_round1_naive_v{7,8}`.
+- Théo's round-1 branch has iterated V8 → V24 with official submissions logged in `artifacts/analysis/round_1/theo/README.md`. Current best live: `V11` on run `110477` (`9542.5`). `V24` is the latest experimental candidate (inventory bands).
+- Tibo variants in play: `tibo_AvSt`, `tibo_mm`, `tibo_mm_first`, `tibo_naive_mm`.
+- Framework adds since the V7 block below: robustness metrics (`max_drawdown`, `fill_efficiency`, `inventory_pressure`, `passive_adverse_rate`), `--execution-rule realistic`, reconcile CLI + auto-discovery, dashboard diagnostics cards, participant-aware official summaries, markouts `+1/+2/+5/+10`, pnl attribution proxies.
+- `prosperity/strategies/trader.py` `CURRENT_MEMBER = "leo_naive_v6"` at time of writing.
+
+## Historical Context (Round 0, leo_naive V1–V7)
 
 - Main objective: improve `leo_naive` family of strategies for Round 0
-- Current branch: `Leo`
-- Latest strategy: `leo_naive_v7` (exported, ready for IMC upload)
+- Branch: `Leo`
+- Latest strategy at the time of this block: `leo_naive_v7` (exported)
 - Relevant files: `prosperity/strategies/naive_tight_mm_v{1..7}.py`, `prosperity/config.py`
 
 ## Decisions
