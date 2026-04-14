@@ -45,6 +45,8 @@ def _load_registry():
     from prosperity.strategies.round_1.leo_fusion_b_v3 import LeoFusionBV3Strategy
     from prosperity.strategies.round_1.leo_fusion_b_v4 import LeoFusionBV4Strategy
     from prosperity.strategies.round_1.leo_fusion_b_v5 import LeoFusionBV5Strategy
+    from prosperity.strategies.round_1.leo_fusion_b_v6 import LeoFusionBV6Strategy
+    from prosperity.strategies.round_1.leo_fusion_b_v7 import LeoFusionBV7Strategy
     from prosperity.strategies.round_1.leo_fusion_c import LeoFusionCStrategy
     from prosperity.strategies.round_1.leo_fusion_d import LeoFusionDStrategy
     from prosperity.strategies.avellaneda_stoikov import AvellanedaStoikovStrategy
@@ -87,6 +89,8 @@ def _load_registry():
     _REGISTRY["leo_fusion_b_v3"] = LeoFusionBV3Strategy
     _REGISTRY["leo_fusion_b_v4"] = LeoFusionBV4Strategy
     _REGISTRY["leo_fusion_b_v5"] = LeoFusionBV5Strategy
+    _REGISTRY["leo_fusion_b_v6"] = LeoFusionBV6Strategy
+    _REGISTRY["leo_fusion_b_v7"] = LeoFusionBV7Strategy
     _REGISTRY["leo_fusion_c"] = LeoFusionCStrategy
     _REGISTRY["leo_fusion_d"] = LeoFusionDStrategy
     _REGISTRY["avellaneda_stoikov"] = AvellanedaStoikovStrategy

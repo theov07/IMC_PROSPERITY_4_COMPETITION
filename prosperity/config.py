@@ -2457,10 +2457,41 @@ MEMBER_OVERRIDES["leo_fusion_b_v5"] = {
             strategy="leo_fusion_b_v5",
             v5_core_target=80,
             v5_scalp_range=10,
-            v5_scalp_edge=5.0,
-            v5_scalp_spread=5.0,
+            v5_scalp_edge=20.0,
+            v5_scalp_spread=20.0,
             v5_accum_take_edge=0.0,
             v5_passive_size=20,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v6"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v6",
+            v6_core_target=80,
+            v6_scalp_range=10,
+            v6_scalp_edge=6.0,
+            v6_scalp_size=10,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v7"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v7",
+            v7_core_target=80,
+            v7_scalp_range=10,
+            v7_sell_offset=15.0,
+            v7_rebuy_margin=3.0,
+            v7_scalp_size=5,
         ),
     },
 }
