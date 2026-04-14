@@ -431,6 +431,54 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
             "TOMATOES": _override(ROUND_0["TOMATOES"], ema_alpha=0.22, take_edge=0.5, quote_half_spread=1, maker_size=16, inventory_aversion=1.8, max_inventory_bias_ticks=6),
         },
     },
+    "theo_round1": {
+        1: {
+            # ASH_COATED_OSMIUM: mean-reverting, pure V9 (trend disabled = V8 behaviour)
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="naive_tight_mm_v9",
+                maker_size=80,
+                tighten_ticks=1,
+                take_edge=1.0,
+                unwind_take_edge=0.5,
+                inventory_soft_ratio=0.60,
+                aggravate_min_frac=0.20,
+                unwind_boost_frac=0.30,
+                toxic_window=6,
+                toxic_threshold=0.60,
+                toxic_size_frac=0.75,
+                jump_size_frac=0.50,
+                # trend disabled
+                trend_alpha=0.0,
+                log_flush_ts=0,
+                total_ticks=10000000,
+            ),
+            # INTARIAN_PEPPER_ROOT: strong uptrend, V9 trend-following enabled
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="naive_tight_mm_v9",
+                maker_size=80,
+                tighten_ticks=1,
+                take_edge=1.0,
+                unwind_take_edge=0.5,
+                inventory_soft_ratio=0.60,
+                aggravate_min_frac=0.20,
+                unwind_boost_frac=0.30,
+                toxic_window=6,
+                toxic_threshold=0.60,
+                toxic_size_frac=0.75,
+                jump_size_frac=0.50,
+                # trend-following: slow EMA, target long ~30 units in strong uptrend
+                trend_alpha=0.005,
+                trend_sensitivity=1.0,
+                trend_max_shift=5.0,
+                trend_inv_target_per_tick=6.0,
+                trend_take_boost=0.3,
+                log_flush_ts=0,
+                total_ticks=10000000,
+            ),
+        },
+    },
     "pietro": {
         0: {
             "EMERALDS": _override(ROUND_0["EMERALDS"], quote_half_spread=3, maker_size=12),
