@@ -75,8 +75,8 @@ class MMFirstStrategy(BaseStrategy):
         #   Long  → back off bid to best_bid (join), keep ask at best_ask-1
         #   Short → back off ask to best_ask (join), keep bid at best_bid+1
 
-        bid_price: int | None = (book.best_bid + 0.1) if book.best_bid is not None else None
-        ask_price: int | None = (book.best_ask - 0.1) if book.best_ask is not None else None
+        bid_price: int | None = (book.best_bid + 1) if book.best_bid is not None else None
+        ask_price: int | None = (book.best_ask - 1) if book.best_ask is not None else None
         quote_level = "L1"
 
         if inv_ratio >= step_threshold:
