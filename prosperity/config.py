@@ -64,15 +64,30 @@ ROUND_0: Dict[str, ProductConfig] = {
 # Update them as soon as the round opens and products are disclosed.
 
 ROUND_1: Dict[str, ProductConfig] = {
-    # Example: a stable product
-    # "RESIN": ProductConfig(symbol="RESIN", strategy="market_maker", position_limit=50,
-    #     params=dict(anchor_price=10000.0, fair_mode="fixed", ...)),
-    # Example: a volatile product
-    # "KELP": ProductConfig(symbol="KELP", strategy="avellaneda_stoikov", position_limit=50,
-    #     params=dict(gamma=0.1, sigma_window=50, ...)),
-    # Example: a basket
-    # "PICNIC_BASKET": ProductConfig(symbol="PICNIC_BASKET", strategy="stat_arb", position_limit=60,
-    #     params=dict(components={"BAGUETTE": 2, "DIP": 4, "UKULELE": 1}, ...)),
+    "ASH_COATED_OSMIUM": ProductConfig(
+        symbol="ASH_COATED_OSMIUM",
+        strategy="naive_tight_mm",
+        position_limit=80,
+        params=dict(
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    ),
+    "INTARIAN_PEPPER_ROOT": ProductConfig(
+        symbol="INTARIAN_PEPPER_ROOT",
+        strategy="naive_tight_mm",
+        position_limit=80,
+        params=dict(
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    ),
 }
 
 ROUND_2: Dict[str, ProductConfig] = {}
@@ -387,6 +402,28 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 jump_size_frac=0.50,
                 log_flush_ts=0,
                 total_ticks=10000000,
+            ),
+        },
+    },
+    "leo_round1_naive": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="naive_tight_mm",
+                maker_size=80,
+                tighten_ticks=1,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="naive_tight_mm",
+                maker_size=80,
+                tighten_ticks=1,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
             ),
         },
     },
