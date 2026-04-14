@@ -536,12 +536,16 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 inv_step_threshold=0.9,   # step to L2 (join) when |pos| >= 80% of limit
                 take_edge=1,            # take if ask <= mid_smooth - 1 (or bid >= mid_smooth + 1)
                 maker_size_base_pct=0.75,  # base passive size as % of position limit
-                
+
                 pct_kept_for_takers=0.1,  # capacity reserved for taker orders
                 mid_smooth_window=50,
                 mid_smooth_half_life=10,
                 taker_buy_threshold = 9_990,  # classify taker buys at >= this price
                 taker_sell_threshold= 10_025,
+
+                gap_trigger_min=11,           # min tick gap L1→L2 to fire gap exploit
+                gap_trigger_max_vol_pct=0.2, # L1 "thin" threshold: 10% of limit (=8 units)
+                gap_trigger_confirm_ticks=1,  # require 2 consecutive ticks to filter transient gaps
 
                 ts_increment=100,
                 last_ts_value=99900,
@@ -556,6 +560,11 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 pct_kept_for_takers=0.2,
                 mid_smooth_window=20,
                 mid_smooth_half_life=10,
+
+                gap_trigger_min=10,
+                gap_trigger_max_vol_pct=0.10,
+                gap_trigger_confirm_ticks=2,
+
                 ts_increment=100,
                 last_ts_value=99900,
                 log_flush_ts=1000,

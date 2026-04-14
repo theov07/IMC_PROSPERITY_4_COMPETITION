@@ -7,15 +7,20 @@ Philosophy:
     of improving) while keeping level 1 on the reducing side.
   - Taker orders: sweep aggressively when ask_p <= mid_smooth - take_edge
     or bid_p >= mid_smooth + take_edge.
+  - Gap exploit: clear a thin L1 when the gap to L2 is large, then let
+    normal passive quoting re-enter cheaply just above the new best.
   - Sizing: inventory-adaptive (same logic as avellaneda_stoikov).
 
 Key params (all configurable via config.py):
-  inv_step_threshold   — fraction of limit at which bid/ask steps to L2 (default 0.8)
-  take_edge            — min edge vs smoothed mid to trigger a taker order (default 1.0)
-  maker_size_base_pct  — base passive quote size as % of position limit (default 0.2)
-  pct_kept_for_takers  — fraction of remaining capacity reserved for takers (default 0.2)
-  mid_smooth_window    — rolling window for mid-price EMA smoothing (default 20, 0=off)
-  mid_smooth_half_life — EMA half-life for mid smoothing (default window/2)
+  inv_step_threshold        — fraction of limit at which bid/ask steps to L2 (default 0.8)
+  take_edge                 — min edge vs smoothed mid to trigger a taker order (default 1.0)
+  maker_size_base_pct       — base passive quote size as % of position limit (default 0.2)
+  pct_kept_for_takers       — fraction of remaining capacity reserved for takers (default 0.2)
+  mid_smooth_window         — rolling window for mid-price EMA smoothing (default 20, 0=off)
+  mid_smooth_half_life      — EMA half-life for mid smoothing (default window/2)
+  gap_trigger_min           — min tick gap L1→L2 to enable gap exploit (default 10)
+  gap_trigger_max_vol_pct   — max L1 volume as % of limit to consider "thin" (default 0.10)
+  gap_trigger_confirm_ticks — consecutive ticks condition must hold before firing (default 1)
 """
 
 from __future__ import annotations
@@ -146,6 +151,56 @@ class MMFirstStrategy(BaseStrategy):
                 orders.append(Order(self.product, bid_p, -qty))
                 this_taker_sell_px.add(bid_p)
                 sell_cap -= qty
+
+        # ─────────────── GAP EXPLOIT TAKERS ──────────────────────────────
+        # Sweep a thin L1 when there is a large gap to L2, then let normal
+        # passive quoting re-enter cheaply just above the new best.
+        #
+        # Mitigation for L1 refill risk: gap_trigger_confirm_ticks — only
+        # fire after the condition has held for N consecutive ticks, filtering
+        # out transient thin levels caused by a just-printed market order.
+
+        gap_min     = float(self.params.get("gap_trigger_min", 10))
+        gap_vol_pct = float(self.params.get("gap_trigger_max_vol_pct", 0.10))
+        gap_max_vol = int(gap_vol_pct * limit) if limit else 0
+        gap_confirm = int(self.params.get("gap_trigger_confirm_ticks", 1))
+
+        if gap_min > 0 and gap_max_vol > 0:
+            # Bid side: sell into thin best bid when gap to L2 is large
+            bids = sorted(order_depth.buy_orders.keys(), reverse=True)
+            bid_gap_ok = False
+            bid1 = bid2 = bid1_vol = None
+            if len(bids) >= 2:
+                bid1, bid2 = bids[0], bids[1]
+                bid1_vol = order_depth.buy_orders[bid1]
+                bid_gap_ok = (bid1 - bid2) >= gap_min and bid1_vol <= gap_max_vol
+            bid_streak = memory.get("_gap_bid_streak", 0)
+            bid_streak = bid_streak + 1 if bid_gap_ok else 0
+            memory["_gap_bid_streak"] = bid_streak
+            if bid_streak >= gap_confirm and bid_gap_ok and sell_cap > 0:
+                qty = min(bid1_vol, sell_cap, int(ask_size))
+                if qty > 0:
+                    orders.append(Order(self.product, bid1, -qty))
+                    sell_cap -= qty
+                    bid_price = bid2 + 1  # re-anchor passive to new best after clearing L1
+
+            # Ask side: buy into thin best ask when gap to L2 is large
+            asks = sorted(order_depth.sell_orders.keys())
+            ask_gap_ok = False
+            ask1 = ask2 = ask1_vol = None
+            if len(asks) >= 2:
+                ask1, ask2 = asks[0], asks[1]
+                ask1_vol = -order_depth.sell_orders[ask1]
+                ask_gap_ok = (ask2 - ask1) >= gap_min and ask1_vol <= gap_max_vol
+            ask_streak = memory.get("_gap_ask_streak", 0)
+            ask_streak = ask_streak + 1 if ask_gap_ok else 0
+            memory["_gap_ask_streak"] = ask_streak
+            if ask_streak >= gap_confirm and ask_gap_ok and buy_cap > 0:
+                qty = min(ask1_vol, buy_cap, int(bid_size))
+                if qty > 0:
+                    orders.append(Order(self.product, ask1, qty))
+                    buy_cap -= qty
+                    ask_price = ask2 - 1  # re-anchor passive to new best after clearing L1
 
         quote_buy = min(buy_cap, int(bid_size))
         quote_sell = min(sell_cap, int(ask_size))
