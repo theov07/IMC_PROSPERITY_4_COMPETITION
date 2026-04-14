@@ -131,6 +131,29 @@ class MMFirstStrategy(BaseStrategy):
                 this_taker_sell_px.add(bid_p)
                 sell_cap -= qty
 
+        # ─────────────── TAKER PASSIVE RE-ANCHOR ─────────────────────────
+        # After aggressive buys/sells, the pre-computed passive price (step 2)
+        # is stale — it pointed at old_best ± 1 but the taker may have swept
+        # that level.  Re-anchor to the first level that was NOT hit.
+
+        if this_taker_buy_px:
+            new_best_ask = next(
+                (p for p in sorted(order_depth.sell_orders) if p not in this_taker_buy_px),
+                None,
+            )
+            if new_best_ask is not None:
+                ask_price = new_best_ask - 1
+            # else: all ask levels cleared — gap exploit or 0-level logic will handle it
+
+        if this_taker_sell_px:
+            new_best_bid = next(
+                (p for p in sorted(order_depth.buy_orders, reverse=True) if p not in this_taker_sell_px),
+                None,
+            )
+            if new_best_bid is not None:
+                bid_price = new_best_bid + 1
+            # else: all bid levels cleared — gap exploit or 0-level logic will handle it
+
         # ─────────────── GAP EXPLOIT TAKERS ──────────────────────────────
         # Sweep a thin L1 when there is a large gap to L2, then let normal
         # passive quoting re-enter cheaply just above the new best.
