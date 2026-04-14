@@ -12,24 +12,30 @@ V8 direction:
 
 Framework quick state:
 
-- backtester: mode `realistic` propagé partout
-- backtester: métriques de robustesse ajoutées (`drawdown`, `fill_efficiency`, `inventory_pressure`, `passive_adverse_rate`)
+- backtester: mode `realistic` propage partout
+- backtester: metriques de robustesse ajoutees (`drawdown`, `fill_efficiency`, `inventory_pressure`, `passive_adverse_rate`)
+- backtester: diagnostics MM ajoutes (`bid/ask fill efficiency`, `quote age`, refresh, stale exposure, inventory episodes, markouts `+1/+2/+5/+10`, attribution `spread/make/take/inventory/adverse`)
 - compare / grid_search: classement possible par robustesse avec `--rank-by`
-- reconcile: disponible en CLI, lancé automatiquement par le dashboard et l'analyzer si un backtest local cohérent est trouvé
+- reconcile: disponible en CLI, lance automatiquement par le dashboard et l'analyzer si un backtest local coherent est trouve
+- logs officiels: analyse `participant-aware` avec markout par contrepartie
 - dashboard / analyzer: auto-discovery best-effort du `backtest_json` dans `artifacts/`
+- dashboard: cartes diagnostics par symbole + panneau observations / conversions quand dispo
+- dashboard: compare `live vs backtest` avec overlay `position / cumulative fills / quoted spread`
+- dashboard: panel IMC `trade flow`
 
--tester la strat top of the book avec deux levels
--tester le penny jump
--tester le top of the book + join the best si best à une petite quantité
--> chercher à contourner le probleme de reset du FIFO à chaque nouveau OB 
-->faire un module de reverse engineering sur les logs d'une srtat qui achete 1 de chaque produit au début ? 
-->ajouter au dashboard de data exploratory davantage de donnée genre corrélation, copule, le spread entre produit 
--> ajouter un mode mm turn off en cas de vol > seuil ? indice de toxicité ? genre carrément on débranche 
-## Première stratégie
+- tester la strat top of the book avec deux levels
+- tester le penny jump
+- tester le top of the book + join the best si best a une petite quantite
+- chercher a contourner le probleme de reset du FIFO a chaque nouveau OB
+- faire un module de reverse engineering sur les logs d'une strat qui achete 1 de chaque produit au debut
+- ajouter au dashboard de data exploratory davantage de donnee genre correlation, copule, le spread entre produit
+- ajouter un mode mm turn off en cas de vol > seuil ? indice de toxicite ? genre carrement on debranche
 
-La première stratégie créée dans le nouveau framework est `naive`.
+## Premiere strategie
 
-Idée:
+La premiere strategie creee dans le nouveau framework est `naive`.
+
+Idee:
 
 - ne fait pas de fair value
 - ne prend pas agressivement
@@ -55,4 +61,4 @@ python scripts\export_submission.py --member leo_naive --round 0 --output artifa
 
 ## But
 
-Cette stratégie sert de baseline simple et lisible avant de construire des versions plus intelligentes.
+Cette strategie sert de baseline simple et lisible avant de construire des versions plus intelligentes.

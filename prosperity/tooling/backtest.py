@@ -102,6 +102,22 @@ class RobustnessSummary:
     passive_adverse_rate: float | None
     passive_post_fill_edge: float | None
     max_drawdown: float | None = None
+    bid_submitted_volume: int = 0
+    ask_submitted_volume: int = 0
+    buy_filled_qty: int = 0
+    sell_filled_qty: int = 0
+    bid_fill_efficiency: float = 0.0
+    ask_fill_efficiency: float = 0.0
+    quote_metrics: Dict[str, float | int | None] = field(default_factory=dict)
+    inventory_episode_metrics: Dict[str, float | int | None] = field(default_factory=dict)
+    markout_mean_by_horizon: Dict[str, float | None] = field(default_factory=dict)
+    passive_markout_mean_by_horizon: Dict[str, float | None] = field(default_factory=dict)
+    aggressive_markout_mean_by_horizon: Dict[str, float | None] = field(default_factory=dict)
+    markout_eval_qty_by_horizon: Dict[str, int] = field(default_factory=dict)
+    passive_markout_eval_qty_by_horizon: Dict[str, int] = field(default_factory=dict)
+    aggressive_markout_eval_qty_by_horizon: Dict[str, int] = field(default_factory=dict)
+    pnl_attribution: Dict[str, float] = field(default_factory=dict)
+    conversions_requested: int = 0
 
 
 @dataclass
@@ -110,6 +126,8 @@ class Quote:
     symbol: str
     bid: float | None   # best buy order price submitted (None if no buy orders)
     ask: float | None   # best sell order price submitted (None if no sell orders)
+    bid_size: int = 0
+    ask_size: int = 0
 
 
 @dataclass
@@ -117,6 +135,19 @@ class FeatureTick:
     timestamp: int
     symbol: str
     features: Dict[str, float]   # e.g. {"Reservation": 10001.5}
+
+
+@dataclass
+class ObservationTick:
+    timestamp: int
+    symbol: str
+    values: Dict[str, float]
+
+
+@dataclass
+class ConversionTick:
+    timestamp: int
+    conversions: int
 
 
 @dataclass
@@ -129,6 +160,8 @@ class DaySummary:
     robustness: RobustnessSummary
     quotes: List[Quote] = field(default_factory=list)
     feature_ticks: List[FeatureTick] = field(default_factory=list)
+    observation_ticks: List[ObservationTick] = field(default_factory=list)
+    conversion_ticks: List[ConversionTick] = field(default_factory=list)
 
 
 class BacktestEngine:
@@ -469,6 +502,20 @@ class BacktestEngine:
         passive_adverse_qty: int,
         passive_edge_sum: float,
         max_drawdown: float | None = None,
+        bid_submitted_volume: int = 0,
+        ask_submitted_volume: int = 0,
+        buy_filled_qty: int = 0,
+        sell_filled_qty: int = 0,
+        quote_metrics: Dict[str, float | int | None] | None = None,
+        inventory_episode_metrics: Dict[str, float | int | None] | None = None,
+        markout_mean_by_horizon: Dict[str, float | None] | None = None,
+        passive_markout_mean_by_horizon: Dict[str, float | None] | None = None,
+        aggressive_markout_mean_by_horizon: Dict[str, float | None] | None = None,
+        markout_eval_qty_by_horizon: Dict[str, int] | None = None,
+        passive_markout_eval_qty_by_horizon: Dict[str, int] | None = None,
+        aggressive_markout_eval_qty_by_horizon: Dict[str, int] | None = None,
+        pnl_attribution: Dict[str, float] | None = None,
+        conversions_requested: int = 0,
     ) -> RobustnessSummary:
         avg_abs_position_ratio = (position_ratio_sum / tick_count) if tick_count else 0.0
         near_limit_tick_ratio = (near_limit_tick_count / tick_count) if tick_count else 0.0
@@ -476,6 +523,8 @@ class BacktestEngine:
         aggressive_share = (aggressive_qty / traded_volume) if traded_volume else 0.0
         passive_adverse_rate = (passive_adverse_qty / passive_eval_qty) if passive_eval_qty else None
         passive_post_fill_edge = (passive_edge_sum / passive_eval_qty) if passive_eval_qty else None
+        bid_fill_efficiency = (buy_filled_qty / bid_submitted_volume) if bid_submitted_volume else 0.0
+        ask_fill_efficiency = (sell_filled_qty / ask_submitted_volume) if ask_submitted_volume else 0.0
         return RobustnessSummary(
             submitted_volume=submitted_volume,
             traded_volume=traded_volume,
@@ -494,6 +543,449 @@ class BacktestEngine:
             passive_adverse_rate=passive_adverse_rate,
             passive_post_fill_edge=passive_post_fill_edge,
             max_drawdown=max_drawdown,
+            bid_submitted_volume=bid_submitted_volume,
+            ask_submitted_volume=ask_submitted_volume,
+            buy_filled_qty=buy_filled_qty,
+            sell_filled_qty=sell_filled_qty,
+            bid_fill_efficiency=bid_fill_efficiency,
+            ask_fill_efficiency=ask_fill_efficiency,
+            quote_metrics=quote_metrics or {},
+            inventory_episode_metrics=inventory_episode_metrics or {},
+            markout_mean_by_horizon=markout_mean_by_horizon or {},
+            passive_markout_mean_by_horizon=passive_markout_mean_by_horizon or {},
+            aggressive_markout_mean_by_horizon=aggressive_markout_mean_by_horizon or {},
+            markout_eval_qty_by_horizon=markout_eval_qty_by_horizon or {},
+            passive_markout_eval_qty_by_horizon=passive_markout_eval_qty_by_horizon or {},
+            aggressive_markout_eval_qty_by_horizon=aggressive_markout_eval_qty_by_horizon or {},
+            pnl_attribution=pnl_attribution or {},
+            conversions_requested=conversions_requested,
+        )
+
+    @staticmethod
+    def _markout_horizons() -> List[int]:
+        return [1, 2, 5, 10]
+
+    @staticmethod
+    def _side_sign(side: str) -> int:
+        return 1 if str(side).upper() == "BUY" else -1
+
+    @staticmethod
+    def _build_markout_summary(
+        fills: List[Fill],
+        timestamps: List[int],
+        mid_by_timestamp: Dict[int, float],
+    ) -> tuple[
+        Dict[str, float | None],
+        Dict[str, float | None],
+        Dict[str, float | None],
+        Dict[str, int],
+        Dict[str, int],
+        Dict[str, int],
+    ]:
+        horizons = BacktestEngine._markout_horizons()
+        totals = {str(h): 0.0 for h in horizons}
+        passive_totals = {str(h): 0.0 for h in horizons}
+        aggressive_totals = {str(h): 0.0 for h in horizons}
+        qtys = {str(h): 0 for h in horizons}
+        passive_qtys = {str(h): 0 for h in horizons}
+        aggressive_qtys = {str(h): 0 for h in horizons}
+
+        timestamp_index = {timestamp: index for index, timestamp in enumerate(timestamps)}
+
+        for fill in fills:
+            fill_index = timestamp_index.get(fill.timestamp)
+            if fill_index is None:
+                continue
+            sign = BacktestEngine._side_sign(fill.side)
+            for horizon in horizons:
+                future_index = fill_index + horizon
+                if future_index >= len(timestamps):
+                    continue
+                future_mid = mid_by_timestamp.get(timestamps[future_index])
+                if future_mid is None:
+                    continue
+                key = str(horizon)
+                markout = (future_mid - fill.price) * sign
+                weighted = markout * fill.quantity
+                totals[key] += weighted
+                qtys[key] += fill.quantity
+                if fill.aggressive:
+                    aggressive_totals[key] += weighted
+                    aggressive_qtys[key] += fill.quantity
+                else:
+                    passive_totals[key] += weighted
+                    passive_qtys[key] += fill.quantity
+
+        def _to_mean(weighted_totals: Dict[str, float], weighted_qtys: Dict[str, int]) -> Dict[str, float | None]:
+            return {
+                key: (weighted_totals[key] / weighted_qtys[key]) if weighted_qtys[key] else None
+                for key in weighted_totals
+            }
+
+        return (
+            _to_mean(totals, qtys),
+            _to_mean(passive_totals, passive_qtys),
+            _to_mean(aggressive_totals, aggressive_qtys),
+            qtys,
+            passive_qtys,
+            aggressive_qtys,
+        )
+
+    @staticmethod
+    def _build_quote_metrics(quotes: List[Quote], stale_after_ticks: int = 3) -> Dict[str, float | int | None]:
+        if not quotes:
+            return {
+                "active_tick_count": 0,
+                "avg_quote_age_ticks": 0.0,
+                "max_quote_age_ticks": 0,
+                "refresh_count": 0,
+                "bid_refresh_count": 0,
+                "ask_refresh_count": 0,
+                "stale_tick_count": 0,
+                "stale_tick_ratio": 0.0,
+                "stale_submitted_volume": 0,
+            }
+
+        ordered_quotes = sorted(quotes, key=lambda quote: quote.timestamp)
+        bid_state: tuple[float | None, int] | None = None
+        ask_state: tuple[float | None, int] | None = None
+        bid_age = 0
+        ask_age = 0
+        age_sum = 0.0
+        max_age = 0
+        active_tick_count = 0
+        refresh_count = 0
+        bid_refresh_count = 0
+        ask_refresh_count = 0
+        stale_tick_count = 0
+        stale_submitted_volume = 0
+
+        for quote in ordered_quotes:
+            tick_ages: List[int] = []
+            tick_refreshed = False
+
+            if quote.bid is not None and quote.bid_size > 0:
+                bid_key = (quote.bid, quote.bid_size)
+                if bid_key != bid_state:
+                    bid_refresh_count += 1
+                    tick_refreshed = True
+                    bid_age = 1
+                else:
+                    bid_age += 1
+                bid_state = bid_key
+                tick_ages.append(bid_age)
+            else:
+                bid_state = None
+                bid_age = 0
+
+            if quote.ask is not None and quote.ask_size > 0:
+                ask_key = (quote.ask, quote.ask_size)
+                if ask_key != ask_state:
+                    ask_refresh_count += 1
+                    tick_refreshed = True
+                    ask_age = 1
+                else:
+                    ask_age += 1
+                ask_state = ask_key
+                tick_ages.append(ask_age)
+            else:
+                ask_state = None
+                ask_age = 0
+
+            if not tick_ages:
+                continue
+
+            active_tick_count += 1
+            age_sum += sum(tick_ages) / len(tick_ages)
+            max_age = max(max_age, max(tick_ages))
+            if tick_refreshed:
+                refresh_count += 1
+
+            stale_sizes = 0
+            if quote.bid is not None and quote.bid_size > 0 and bid_age >= stale_after_ticks:
+                stale_sizes += quote.bid_size
+            if quote.ask is not None and quote.ask_size > 0 and ask_age >= stale_after_ticks:
+                stale_sizes += quote.ask_size
+            if stale_sizes > 0:
+                stale_tick_count += 1
+                stale_submitted_volume += stale_sizes
+
+        return {
+            "active_tick_count": active_tick_count,
+            "avg_quote_age_ticks": (age_sum / active_tick_count) if active_tick_count else 0.0,
+            "max_quote_age_ticks": max_age,
+            "refresh_count": refresh_count,
+            "bid_refresh_count": bid_refresh_count,
+            "ask_refresh_count": ask_refresh_count,
+            "stale_tick_count": stale_tick_count,
+            "stale_tick_ratio": (stale_tick_count / active_tick_count) if active_tick_count else 0.0,
+            "stale_submitted_volume": stale_submitted_volume,
+        }
+
+    @staticmethod
+    def _build_inventory_episode_metrics(positions: List[int]) -> Dict[str, float | int | None]:
+        if not positions:
+            return {
+                "positive_tick_count": 0,
+                "negative_tick_count": 0,
+                "flat_tick_count": 0,
+                "one_sided_tick_ratio": 0.0,
+                "sign_flip_count": 0,
+                "episode_count": 0,
+                "avg_unwind_ticks": None,
+                "max_unwind_ticks": None,
+                "total_unwind_ticks": 0,
+                "open_episode_ticks": 0,
+            }
+
+        positive_tick_count = sum(1 for position in positions if position > 0)
+        negative_tick_count = sum(1 for position in positions if position < 0)
+        flat_tick_count = sum(1 for position in positions if position == 0)
+
+        last_nonzero_sign = 0
+        sign_flip_count = 0
+        episode_start: int | None = None
+        unwind_ticks: List[int] = []
+
+        for index, position in enumerate(positions):
+            sign = 1 if position > 0 else -1 if position < 0 else 0
+            if sign != 0 and last_nonzero_sign != 0 and sign != last_nonzero_sign:
+                sign_flip_count += 1
+            if sign != 0:
+                last_nonzero_sign = sign
+
+            if position != 0 and episode_start is None:
+                episode_start = index
+            elif position == 0 and episode_start is not None:
+                unwind_ticks.append(index - episode_start)
+                episode_start = None
+
+        open_episode_ticks = (len(positions) - episode_start) if episode_start is not None else 0
+        total_ticks = len(positions)
+        total_unwind_ticks = sum(unwind_ticks)
+
+        return {
+            "positive_tick_count": positive_tick_count,
+            "negative_tick_count": negative_tick_count,
+            "flat_tick_count": flat_tick_count,
+            "one_sided_tick_ratio": ((positive_tick_count + negative_tick_count) / total_ticks) if total_ticks else 0.0,
+            "sign_flip_count": sign_flip_count,
+            "episode_count": len(unwind_ticks),
+            "avg_unwind_ticks": (total_unwind_ticks / len(unwind_ticks)) if unwind_ticks else None,
+            "max_unwind_ticks": max(unwind_ticks) if unwind_ticks else None,
+            "total_unwind_ticks": total_unwind_ticks,
+            "open_episode_ticks": open_episode_ticks,
+        }
+
+    @staticmethod
+    def _build_pnl_attribution(
+        fills: List[Fill],
+        timestamps: List[int],
+        mid_by_timestamp: Dict[int, float],
+    ) -> Dict[str, float]:
+        fills_by_timestamp: Dict[int, List[Fill]] = {}
+        for fill in fills:
+            fills_by_timestamp.setdefault(fill.timestamp, []).append(fill)
+
+        inventory_drift = 0.0
+        execution_edge_total = 0.0
+        make_edge = 0.0
+        take_edge = 0.0
+        passive_adverse_selection_1 = 0.0
+        aggressive_adverse_selection_1 = 0.0
+
+        current_position = 0
+        previous_mid: float | None = None
+
+        for index, timestamp in enumerate(timestamps):
+            current_mid = mid_by_timestamp.get(timestamp)
+            if current_mid is None:
+                continue
+            if previous_mid is not None:
+                inventory_drift += current_position * (current_mid - previous_mid)
+
+            next_mid = None
+            if index + 1 < len(timestamps):
+                next_mid = mid_by_timestamp.get(timestamps[index + 1])
+
+            for fill in fills_by_timestamp.get(timestamp, []):
+                sign = BacktestEngine._side_sign(fill.side)
+                execution_edge = (current_mid - fill.price) * sign * fill.quantity
+                execution_edge_total += execution_edge
+                if fill.aggressive:
+                    take_edge += execution_edge
+                else:
+                    make_edge += execution_edge
+
+                if next_mid is not None:
+                    post_fill_move = (next_mid - current_mid) * sign * fill.quantity
+                    if fill.aggressive:
+                        aggressive_adverse_selection_1 += post_fill_move
+                    else:
+                        passive_adverse_selection_1 += post_fill_move
+
+                current_position += sign * fill.quantity
+
+            previous_mid = current_mid
+
+        return {
+            "spread_capture": execution_edge_total,
+            "execution_edge_total": execution_edge_total,
+            "make_edge": make_edge,
+            "take_edge": take_edge,
+            "inventory_drift": inventory_drift,
+            "passive_adverse_selection_1": passive_adverse_selection_1,
+            "aggressive_adverse_selection_1": aggressive_adverse_selection_1,
+            "adverse_selection_1": passive_adverse_selection_1 + aggressive_adverse_selection_1,
+            "residual_vs_final_pnl": 0.0,
+        }
+
+    @staticmethod
+    def _merge_mean_dict(
+        left_mean: Dict[str, float | None],
+        left_qty: Dict[str, int],
+        right_mean: Dict[str, float | None],
+        right_qty: Dict[str, int],
+    ) -> tuple[Dict[str, float | None], Dict[str, int]]:
+        keys = set(left_mean) | set(left_qty) | set(right_mean) | set(right_qty)
+        merged_mean: Dict[str, float | None] = {}
+        merged_qty: Dict[str, int] = {}
+        for key in keys:
+            left_count = int(left_qty.get(key, 0))
+            right_count = int(right_qty.get(key, 0))
+            total_count = left_count + right_count
+            merged_qty[key] = total_count
+            if total_count <= 0:
+                merged_mean[key] = None
+                continue
+            weighted_sum = 0.0
+            if left_count > 0 and left_mean.get(key) is not None:
+                weighted_sum += float(left_mean[key]) * left_count
+            if right_count > 0 and right_mean.get(key) is not None:
+                weighted_sum += float(right_mean[key]) * right_count
+            merged_mean[key] = weighted_sum / total_count
+        return merged_mean, merged_qty
+
+    @staticmethod
+    def _merge_robustness_summaries(
+        left: RobustnessSummary | None,
+        right: RobustnessSummary,
+        *,
+        max_drawdown: float | None = None,
+    ) -> RobustnessSummary:
+        if left is None:
+            return RobustnessSummary(**asdict(right))
+
+        quote_metrics = {
+            "active_tick_count": int(left.quote_metrics.get("active_tick_count", 0)) + int(right.quote_metrics.get("active_tick_count", 0)),
+            "avg_quote_age_ticks": 0.0,
+            "max_quote_age_ticks": max(
+                int(left.quote_metrics.get("max_quote_age_ticks", 0)),
+                int(right.quote_metrics.get("max_quote_age_ticks", 0)),
+            ),
+            "refresh_count": int(left.quote_metrics.get("refresh_count", 0)) + int(right.quote_metrics.get("refresh_count", 0)),
+            "bid_refresh_count": int(left.quote_metrics.get("bid_refresh_count", 0)) + int(right.quote_metrics.get("bid_refresh_count", 0)),
+            "ask_refresh_count": int(left.quote_metrics.get("ask_refresh_count", 0)) + int(right.quote_metrics.get("ask_refresh_count", 0)),
+            "stale_tick_count": int(left.quote_metrics.get("stale_tick_count", 0)) + int(right.quote_metrics.get("stale_tick_count", 0)),
+            "stale_tick_ratio": 0.0,
+            "stale_submitted_volume": int(left.quote_metrics.get("stale_submitted_volume", 0)) + int(right.quote_metrics.get("stale_submitted_volume", 0)),
+        }
+        active_tick_count = int(quote_metrics["active_tick_count"])
+        quote_age_weighted_sum = (
+            float(left.quote_metrics.get("avg_quote_age_ticks", 0.0)) * int(left.quote_metrics.get("active_tick_count", 0))
+            + float(right.quote_metrics.get("avg_quote_age_ticks", 0.0)) * int(right.quote_metrics.get("active_tick_count", 0))
+        )
+        quote_metrics["avg_quote_age_ticks"] = (quote_age_weighted_sum / active_tick_count) if active_tick_count else 0.0
+        quote_metrics["stale_tick_ratio"] = (
+            float(quote_metrics["stale_tick_count"]) / active_tick_count
+            if active_tick_count else 0.0
+        )
+
+        inventory_metrics = {
+            "positive_tick_count": int(left.inventory_episode_metrics.get("positive_tick_count", 0)) + int(right.inventory_episode_metrics.get("positive_tick_count", 0)),
+            "negative_tick_count": int(left.inventory_episode_metrics.get("negative_tick_count", 0)) + int(right.inventory_episode_metrics.get("negative_tick_count", 0)),
+            "flat_tick_count": int(left.inventory_episode_metrics.get("flat_tick_count", 0)) + int(right.inventory_episode_metrics.get("flat_tick_count", 0)),
+            "one_sided_tick_ratio": 0.0,
+            "sign_flip_count": int(left.inventory_episode_metrics.get("sign_flip_count", 0)) + int(right.inventory_episode_metrics.get("sign_flip_count", 0)),
+            "episode_count": int(left.inventory_episode_metrics.get("episode_count", 0)) + int(right.inventory_episode_metrics.get("episode_count", 0)),
+            "avg_unwind_ticks": None,
+            "max_unwind_ticks": None,
+            "total_unwind_ticks": int(left.inventory_episode_metrics.get("total_unwind_ticks", 0)) + int(right.inventory_episode_metrics.get("total_unwind_ticks", 0)),
+            "open_episode_ticks": int(left.inventory_episode_metrics.get("open_episode_ticks", 0)) + int(right.inventory_episode_metrics.get("open_episode_ticks", 0)),
+        }
+        total_ticks = inventory_metrics["positive_tick_count"] + inventory_metrics["negative_tick_count"] + inventory_metrics["flat_tick_count"]
+        inventory_metrics["one_sided_tick_ratio"] = (
+            (inventory_metrics["positive_tick_count"] + inventory_metrics["negative_tick_count"]) / total_ticks
+            if total_ticks else 0.0
+        )
+        episode_count = int(inventory_metrics["episode_count"])
+        if episode_count > 0:
+            inventory_metrics["avg_unwind_ticks"] = float(inventory_metrics["total_unwind_ticks"]) / episode_count
+            max_candidates = [
+                left.inventory_episode_metrics.get("max_unwind_ticks"),
+                right.inventory_episode_metrics.get("max_unwind_ticks"),
+            ]
+            max_candidates = [int(value) for value in max_candidates if value is not None]
+            inventory_metrics["max_unwind_ticks"] = max(max_candidates) if max_candidates else None
+
+        markout_mean_by_horizon, markout_eval_qty_by_horizon = BacktestEngine._merge_mean_dict(
+            left.markout_mean_by_horizon,
+            left.markout_eval_qty_by_horizon,
+            right.markout_mean_by_horizon,
+            right.markout_eval_qty_by_horizon,
+        )
+        passive_markout_mean_by_horizon, passive_markout_eval_qty_by_horizon = BacktestEngine._merge_mean_dict(
+            left.passive_markout_mean_by_horizon,
+            left.passive_markout_eval_qty_by_horizon,
+            right.passive_markout_mean_by_horizon,
+            right.passive_markout_eval_qty_by_horizon,
+        )
+        aggressive_markout_mean_by_horizon, aggressive_markout_eval_qty_by_horizon = BacktestEngine._merge_mean_dict(
+            left.aggressive_markout_mean_by_horizon,
+            left.aggressive_markout_eval_qty_by_horizon,
+            right.aggressive_markout_mean_by_horizon,
+            right.aggressive_markout_eval_qty_by_horizon,
+        )
+
+        pnl_attribution = {
+            key: float(left.pnl_attribution.get(key, 0.0)) + float(right.pnl_attribution.get(key, 0.0))
+            for key in set(left.pnl_attribution) | set(right.pnl_attribution)
+        }
+
+        return BacktestEngine._build_robustness_summary(
+            submitted_volume=left.submitted_volume + right.submitted_volume,
+            traded_volume=left.traded_volume + right.traded_volume,
+            aggressive_qty=left.aggressive_qty + right.aggressive_qty,
+            passive_qty=left.passive_qty + right.passive_qty,
+            aggressive_trades=left.aggressive_trades + right.aggressive_trades,
+            passive_trades=left.passive_trades + right.passive_trades,
+            tick_count=left.tick_count + right.tick_count,
+            position_ratio_sum=(
+                left.avg_abs_position_ratio * left.tick_count
+                + right.avg_abs_position_ratio * right.tick_count
+            ),
+            near_limit_tick_count=left.near_limit_tick_count + right.near_limit_tick_count,
+            passive_eval_qty=left.passive_eval_qty + right.passive_eval_qty,
+            passive_adverse_qty=left.passive_adverse_qty + right.passive_adverse_qty,
+            passive_edge_sum=(
+                (left.passive_post_fill_edge or 0.0) * left.passive_eval_qty
+                + (right.passive_post_fill_edge or 0.0) * right.passive_eval_qty
+            ),
+            max_drawdown=max_drawdown,
+            bid_submitted_volume=left.bid_submitted_volume + right.bid_submitted_volume,
+            ask_submitted_volume=left.ask_submitted_volume + right.ask_submitted_volume,
+            buy_filled_qty=left.buy_filled_qty + right.buy_filled_qty,
+            sell_filled_qty=left.sell_filled_qty + right.sell_filled_qty,
+            quote_metrics=quote_metrics,
+            inventory_episode_metrics=inventory_metrics,
+            markout_mean_by_horizon=markout_mean_by_horizon,
+            passive_markout_mean_by_horizon=passive_markout_mean_by_horizon,
+            aggressive_markout_mean_by_horizon=aggressive_markout_mean_by_horizon,
+            markout_eval_qty_by_horizon=markout_eval_qty_by_horizon,
+            passive_markout_eval_qty_by_horizon=passive_markout_eval_qty_by_horizon,
+            aggressive_markout_eval_qty_by_horizon=aggressive_markout_eval_qty_by_horizon,
+            pnl_attribution=pnl_attribution,
+            conversions_requested=left.conversions_requested + right.conversions_requested,
         )
 
     def run_day(self, day: str, mode: TradeMatchingMode = TradeMatchingMode.queue) -> DaySummary:
@@ -502,12 +994,16 @@ class BacktestEngine:
 
         prices_df = self.loader.load_prices(price_file)
         order_history = self.loader.order_depth_history(prices_df)
+        observation_history = self.loader.observation_history(prices_df)
         market_trades = self.loader.load_trade_objects(trade_file)
         market_by_timestamp = self.loader.group_trades_by_timestamp(market_trades)
+        price_rows = {
+            (int(row["timestamp"]), str(row["product"])): row
+            for _, row in prices_df.iterrows()
+        }
 
         products = sorted(prices_df["product"].unique())
         listings = self.loader.build_listings(products)
-        observations = self.loader.empty_observation()
         trader = self._load_trader()
 
         cash_by_product = {product: 0.0 for product in products}
@@ -516,24 +1012,40 @@ class BacktestEngine:
         max_abs_position = {product: 0 for product in products}
         limits = self._get_position_limits()
         submitted_volume_by_product = {product: 0 for product in products}
+        bid_submitted_volume_by_product = {product: 0 for product in products}
+        ask_submitted_volume_by_product = {product: 0 for product in products}
         position_ratio_sum_by_product = {product: 0.0 for product in products}
         near_limit_tick_count_by_product = {product: 0 for product in products}
         tick_count_by_product = {product: 0 for product in products}
+        position_path_by_product = {product: [] for product in products}
 
         recent_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
         all_fills: List[Fill] = []
         all_quotes: List[Quote] = []
         all_feature_ticks: List[FeatureTick] = []
+        all_observation_ticks: List[ObservationTick] = []
+        all_conversion_ticks: List[ConversionTick] = []
         equity_curve: List[Tuple[int, float]] = []
         trader_data = ""
+        total_conversions_requested = 0
 
         timestamps = sorted(order_history.keys())
 
         os.environ["INTERNAL_BACKTEST"] = "1"
         try:
-            for index, timestamp in enumerate(timestamps):
+            for timestamp in timestamps:
                 order_depths = order_history[timestamp]
                 current_market_trades_by_product = market_by_timestamp.get(timestamp, {})
+                observations = observation_history.get(timestamp, self.loader.empty_observation())
+
+                for product in products:
+                    row = price_rows.get((timestamp, product))
+                    if row is None:
+                        continue
+                    values = self.loader.row_to_observation_values(row)
+                    if values:
+                        all_observation_ticks.append(ObservationTick(timestamp=timestamp, symbol=product, values=values))
+
                 state = TradingState(
                     traderData=trader_data,
                     timestamp=timestamp,
@@ -546,7 +1058,15 @@ class BacktestEngine:
                 )
 
                 run_out = trader.run(state)
-                trader_result, _, trader_data = run_out[0], run_out[1], run_out[2]
+                trader_result = run_out[0] if len(run_out) > 0 and run_out[0] is not None else {}
+                conversions_requested_raw = run_out[1] if len(run_out) > 1 else 0
+                trader_data = run_out[2] if len(run_out) > 2 else trader_data
+                try:
+                    conversions_requested = int(conversions_requested_raw or 0)
+                except (TypeError, ValueError):
+                    conversions_requested = 0
+                total_conversions_requested += abs(conversions_requested)
+                all_conversion_ticks.append(ConversionTick(timestamp=timestamp, conversions=conversions_requested))
                 # 4th return value is optional: {product: {feature_name: value}}
                 strategy_features: Dict[str, Dict[str, float]] = run_out[3] if len(run_out) > 3 else {}
                 for sym, feats in strategy_features.items():
@@ -555,17 +1075,24 @@ class BacktestEngine:
 
                 next_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
 
-                for product, orders in trader_result.items():
+                for product in products:
+                    orders = trader_result.get(product, [])
                     safe_orders = self._respect_exchange_limits(product, positions.get(product, 0), orders)
                     submitted_volume_by_product[product] += sum(abs(order.quantity) for order in safe_orders)
+                    bid_submitted_volume_by_product[product] += sum(order.quantity for order in safe_orders if order.quantity > 0)
+                    ask_submitted_volume_by_product[product] += sum(-order.quantity for order in safe_orders if order.quantity < 0)
 
-                    buy_prices = [o.price for o in safe_orders if o.quantity > 0]
-                    sell_prices = [o.price for o in safe_orders if o.quantity < 0]
+                    buy_orders = [order for order in safe_orders if order.quantity > 0]
+                    sell_orders = [order for order in safe_orders if order.quantity < 0]
+                    best_bid = max((order.price for order in buy_orders), default=None)
+                    best_ask = min((order.price for order in sell_orders), default=None)
                     all_quotes.append(Quote(
                         timestamp=timestamp,
                         symbol=product,
-                        bid=max(buy_prices) if buy_prices else None,
-                        ask=min(sell_prices) if sell_prices else None,
+                        bid=best_bid,
+                        ask=best_ask,
+                        bid_size=sum(order.quantity for order in buy_orders if order.price == best_bid) if best_bid is not None else 0,
+                        ask_size=sum(-order.quantity for order in sell_orders if order.price == best_ask) if best_ask is not None else 0,
                     ))
 
                     fills = self._simulate_fills(
@@ -605,6 +1132,7 @@ class BacktestEngine:
                     order_depth = order_depths.get(product)
                     if order_depth is not None:
                         marked_equity += positions[product] * self._mid_price(order_depth)
+                    position_path_by_product[product].append(positions[product])
                 equity_curve.append((timestamp, marked_equity))
 
         finally:
@@ -632,8 +1160,15 @@ class BacktestEngine:
         passive_eval_qty_by_product = {product: 0 for product in products}
         passive_adverse_qty_by_product = {product: 0 for product in products}
         passive_edge_sum_by_product = {product: 0.0 for product in products}
+        buy_filled_qty_by_product = {product: 0 for product in products}
+        sell_filled_qty_by_product = {product: 0 for product in products}
 
         for fill in all_fills:
+            if fill.side == "BUY":
+                buy_filled_qty_by_product[fill.symbol] += fill.quantity
+            else:
+                sell_filled_qty_by_product[fill.symbol] += fill.quantity
+
             if fill.aggressive:
                 aggressive_qty_by_product[fill.symbol] += fill.quantity
                 aggressive_trades_by_product[fill.symbol] += 1
@@ -653,6 +1188,7 @@ class BacktestEngine:
                     passive_adverse_qty_by_product[fill.symbol] += fill.quantity
 
         day_drawdown = self._max_drawdown(equity_curve)
+        total_robustness: RobustnessSummary | None = None
 
         for product in products:
             ending_cash = cash_by_product[product]
@@ -660,6 +1196,31 @@ class BacktestEngine:
             pnl = ending_cash + positions[product] * final_mid
             total_pnl += pnl
             product_fills = [fill for fill in all_fills if fill.symbol == product]
+            product_quotes = [quote for quote in all_quotes if quote.symbol == product]
+            quote_metrics = self._build_quote_metrics(product_quotes)
+            inventory_episode_metrics = self._build_inventory_episode_metrics(position_path_by_product[product])
+            (
+                markout_mean_by_horizon,
+                passive_markout_mean_by_horizon,
+                aggressive_markout_mean_by_horizon,
+                markout_eval_qty_by_horizon,
+                passive_markout_eval_qty_by_horizon,
+                aggressive_markout_eval_qty_by_horizon,
+            ) = self._build_markout_summary(
+                product_fills,
+                timestamps,
+                mid_by_product_and_timestamp[product],
+            )
+            pnl_attribution = self._build_pnl_attribution(
+                product_fills,
+                timestamps,
+                mid_by_product_and_timestamp[product],
+            )
+            pnl_attribution["residual_vs_final_pnl"] = pnl - (
+                pnl_attribution.get("execution_edge_total", 0.0)
+                + pnl_attribution.get("inventory_drift", 0.0)
+            )
+
             robustness = self._build_robustness_summary(
                 submitted_volume=submitted_volume_by_product[product],
                 traded_volume=sum(fill.quantity for fill in product_fills),
@@ -673,6 +1234,20 @@ class BacktestEngine:
                 passive_eval_qty=passive_eval_qty_by_product[product],
                 passive_adverse_qty=passive_adverse_qty_by_product[product],
                 passive_edge_sum=passive_edge_sum_by_product[product],
+                bid_submitted_volume=bid_submitted_volume_by_product[product],
+                ask_submitted_volume=ask_submitted_volume_by_product[product],
+                buy_filled_qty=buy_filled_qty_by_product[product],
+                sell_filled_qty=sell_filled_qty_by_product[product],
+                quote_metrics=quote_metrics,
+                inventory_episode_metrics=inventory_episode_metrics,
+                markout_mean_by_horizon=markout_mean_by_horizon,
+                passive_markout_mean_by_horizon=passive_markout_mean_by_horizon,
+                aggressive_markout_mean_by_horizon=aggressive_markout_mean_by_horizon,
+                markout_eval_qty_by_horizon=markout_eval_qty_by_horizon,
+                passive_markout_eval_qty_by_horizon=passive_markout_eval_qty_by_horizon,
+                aggressive_markout_eval_qty_by_horizon=aggressive_markout_eval_qty_by_horizon,
+                pnl_attribution=pnl_attribution,
+                conversions_requested=0,
             )
             product_summaries[product] = ProductSummary(
                 symbol=product, pnl=pnl, ending_position=positions[product],
@@ -680,22 +1255,28 @@ class BacktestEngine:
                 turnover=turnover_by_product[product], max_abs_position=max_abs_position[product],
                 robustness=robustness,
             )
+            total_robustness = self._merge_robustness_summaries(total_robustness, robustness)
 
-        total_robustness = self._build_robustness_summary(
-            submitted_volume=sum(submitted_volume_by_product.values()),
-            traded_volume=sum(fill.quantity for fill in all_fills),
-            aggressive_qty=sum(aggressive_qty_by_product.values()),
-            passive_qty=sum(passive_qty_by_product.values()),
-            aggressive_trades=sum(aggressive_trades_by_product.values()),
-            passive_trades=sum(passive_trades_by_product.values()),
-            tick_count=sum(tick_count_by_product.values()),
-            position_ratio_sum=sum(position_ratio_sum_by_product.values()),
-            near_limit_tick_count=sum(near_limit_tick_count_by_product.values()),
-            passive_eval_qty=sum(passive_eval_qty_by_product.values()),
-            passive_adverse_qty=sum(passive_adverse_qty_by_product.values()),
-            passive_edge_sum=sum(passive_edge_sum_by_product.values()),
-            max_drawdown=day_drawdown,
-        )
+        if total_robustness is None:
+            total_robustness = self._build_robustness_summary(
+                submitted_volume=0,
+                traded_volume=0,
+                aggressive_qty=0,
+                passive_qty=0,
+                aggressive_trades=0,
+                passive_trades=0,
+                tick_count=0,
+                position_ratio_sum=0.0,
+                near_limit_tick_count=0,
+                passive_eval_qty=0,
+                passive_adverse_qty=0,
+                passive_edge_sum=0.0,
+                max_drawdown=day_drawdown,
+                conversions_requested=total_conversions_requested,
+            )
+        else:
+            total_robustness.max_drawdown = day_drawdown
+            total_robustness.conversions_requested = total_conversions_requested
 
         return DaySummary(
             day=day,
@@ -706,6 +1287,8 @@ class BacktestEngine:
             robustness=total_robustness,
             quotes=all_quotes,
             feature_ticks=all_feature_ticks,
+            observation_ticks=all_observation_ticks,
+            conversion_ticks=all_conversion_ticks,
         )
 
 
@@ -720,6 +1303,9 @@ def _result_to_jsonable(summary: DaySummary) -> Dict[str, object]:
         "quotes": [asdict(q) for q in summary.quotes],
         "feature_ticks": [{"timestamp": ft.timestamp, "symbol": ft.symbol, **ft.features}
                           for ft in summary.feature_ticks],
+        "observation_ticks": [{"timestamp": ot.timestamp, "symbol": ot.symbol, **ot.values}
+                              for ot in summary.observation_ticks],
+        "conversion_ticks": [asdict(ct) for ct in summary.conversion_ticks],
     }
 
 
@@ -755,75 +1341,32 @@ def aggregate_day_summaries(summaries: List[DaySummary]) -> Dict[str, object]:
             per_product_pnl[symbol] = per_product_pnl.get(symbol, 0.0) + product_summary.pnl
             per_product_trades[symbol] = per_product_trades.get(symbol, 0) + product_summary.trades
             per_product_max_pos[symbol] = max(per_product_max_pos.get(symbol, 0), product_summary.max_abs_position)
-
-            existing = per_product_robustness.get(symbol)
-            current = product_summary.robustness
-            if existing is None:
-                per_product_robustness[symbol] = RobustnessSummary(
-                    submitted_volume=current.submitted_volume,
-                    traded_volume=current.traded_volume,
-                    aggressive_qty=current.aggressive_qty,
-                    passive_qty=current.passive_qty,
-                    aggressive_trades=current.aggressive_trades,
-                    passive_trades=current.passive_trades,
-                    tick_count=current.tick_count,
-                    avg_abs_position_ratio=current.avg_abs_position_ratio,
-                    near_limit_tick_count=current.near_limit_tick_count,
-                    near_limit_tick_ratio=current.near_limit_tick_ratio,
-                    fill_efficiency=current.fill_efficiency,
-                    aggressive_share=current.aggressive_share,
-                    passive_eval_qty=current.passive_eval_qty,
-                    passive_adverse_qty=current.passive_adverse_qty,
-                    passive_adverse_rate=current.passive_adverse_rate,
-                    passive_post_fill_edge=current.passive_post_fill_edge,
-                    max_drawdown=None,
-                )
-                continue
-
-            merged = BacktestEngine._build_robustness_summary(
-                submitted_volume=existing.submitted_volume + current.submitted_volume,
-                traded_volume=existing.traded_volume + current.traded_volume,
-                aggressive_qty=existing.aggressive_qty + current.aggressive_qty,
-                passive_qty=existing.passive_qty + current.passive_qty,
-                aggressive_trades=existing.aggressive_trades + current.aggressive_trades,
-                passive_trades=existing.passive_trades + current.passive_trades,
-                tick_count=existing.tick_count + current.tick_count,
-                position_ratio_sum=(
-                    existing.avg_abs_position_ratio * existing.tick_count
-                    + current.avg_abs_position_ratio * current.tick_count
-                ),
-                near_limit_tick_count=existing.near_limit_tick_count + current.near_limit_tick_count,
-                passive_eval_qty=existing.passive_eval_qty + current.passive_eval_qty,
-                passive_adverse_qty=existing.passive_adverse_qty + current.passive_adverse_qty,
-                passive_edge_sum=(
-                    (existing.passive_post_fill_edge or 0.0) * existing.passive_eval_qty
-                    + (current.passive_post_fill_edge or 0.0) * current.passive_eval_qty
-                ),
-                max_drawdown=None,
+            per_product_robustness[symbol] = BacktestEngine._merge_robustness_summaries(
+                per_product_robustness.get(symbol),
+                product_summary.robustness,
             )
-            per_product_robustness[symbol] = merged
 
-    total_robustness = BacktestEngine._build_robustness_summary(
-        submitted_volume=sum(summary.robustness.submitted_volume for summary in summaries),
-        traded_volume=sum(summary.robustness.traded_volume for summary in summaries),
-        aggressive_qty=sum(summary.robustness.aggressive_qty for summary in summaries),
-        passive_qty=sum(summary.robustness.passive_qty for summary in summaries),
-        aggressive_trades=sum(summary.robustness.aggressive_trades for summary in summaries),
-        passive_trades=sum(summary.robustness.passive_trades for summary in summaries),
-        tick_count=sum(summary.robustness.tick_count for summary in summaries),
-        position_ratio_sum=sum(
-            summary.robustness.avg_abs_position_ratio * summary.robustness.tick_count
-            for summary in summaries
-        ),
-        near_limit_tick_count=sum(summary.robustness.near_limit_tick_count for summary in summaries),
-        passive_eval_qty=sum(summary.robustness.passive_eval_qty for summary in summaries),
-        passive_adverse_qty=sum(summary.robustness.passive_adverse_qty for summary in summaries),
-        passive_edge_sum=sum(
-            (summary.robustness.passive_post_fill_edge or 0.0) * summary.robustness.passive_eval_qty
-            for summary in summaries
-        ),
-        max_drawdown=total_drawdown,
-    )
+    total_robustness: RobustnessSummary | None = None
+    for summary in summaries:
+        total_robustness = BacktestEngine._merge_robustness_summaries(total_robustness, summary.robustness)
+    if total_robustness is None:
+        total_robustness = BacktestEngine._build_robustness_summary(
+            submitted_volume=0,
+            traded_volume=0,
+            aggressive_qty=0,
+            passive_qty=0,
+            aggressive_trades=0,
+            passive_trades=0,
+            tick_count=0,
+            position_ratio_sum=0.0,
+            near_limit_tick_count=0,
+            passive_eval_qty=0,
+            passive_adverse_qty=0,
+            passive_edge_sum=0.0,
+            max_drawdown=total_drawdown,
+        )
+    else:
+        total_robustness.max_drawdown = total_drawdown
 
     return {
         "total_pnl": total_pnl,

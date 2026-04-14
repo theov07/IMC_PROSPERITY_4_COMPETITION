@@ -380,6 +380,15 @@ def _submission_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return filtered.sort_values("timestamp")
 
 
+def official_position_path(log: OfficialLog, symbol: str) -> pd.DataFrame:
+    submission_trades = _submission_trades(log.trades, symbol)
+    if submission_trades.empty:
+        return pd.DataFrame(columns=["timestamp", "position"])
+    frame = submission_trades.sort_values("timestamp").copy()
+    frame["position"] = frame["signed_quantity"].cumsum()
+    return frame[["timestamp", "position"]]
+
+
 def _compute_activity_features(activities: pd.DataFrame) -> pd.DataFrame:
     features = activities.copy()
     features["microprice"] = (
@@ -388,6 +397,230 @@ def _compute_activity_features(activities: pd.DataFrame) -> pd.DataFrame:
     features["fair"] = features["microprice"].ewm(span=25, adjust=False).mean()
     features["spread"] = features["ask_price_1"] - features["bid_price_1"]
     return features
+
+
+def official_quote_summary(log: OfficialLog, symbol: str) -> dict:
+    lambda_df = _parse_lambda_logs(log.runtime_logs)
+    lambda_sym = lambda_df[lambda_df["product"] == symbol].copy() if not lambda_df.empty else pd.DataFrame()
+    submission_trades = _submission_trades(log.trades, symbol)
+
+    if lambda_sym.empty:
+        return {
+            "symbol": symbol,
+            "quoted_tick_count": 0,
+            "bid_quote_ticks": 0,
+            "ask_quote_ticks": 0,
+            "avg_quoted_spread": None,
+            "buy_fill_count": int((submission_trades.get("side", pd.Series(dtype=str)) == "BUY").sum()) if not submission_trades.empty else 0,
+            "sell_fill_count": int((submission_trades.get("side", pd.Series(dtype=str)) == "SELL").sum()) if not submission_trades.empty else 0,
+            "buy_filled_qty": int(submission_trades.loc[submission_trades.get("side", pd.Series(dtype=str)) == "BUY", "quantity"].sum()) if not submission_trades.empty else 0,
+            "sell_filled_qty": int(submission_trades.loc[submission_trades.get("side", pd.Series(dtype=str)) == "SELL", "quantity"].sum()) if not submission_trades.empty else 0,
+            "buy_fill_rate_per_tick": None,
+            "sell_fill_rate_per_tick": None,
+            "buy_qty_per_tick": None,
+            "sell_qty_per_tick": None,
+        }
+
+    lambda_sym = lambda_sym.sort_values("timestamp").copy()
+    spread_series = (lambda_sym["ask_price"] - lambda_sym["bid_price"]).where(
+        lambda_sym["ask_price"].notna() & lambda_sym["bid_price"].notna()
+    )
+    bid_quote_ticks = int(lambda_sym["bid_price"].notna().sum())
+    ask_quote_ticks = int(lambda_sym["ask_price"].notna().sum())
+    quoted_tick_count = int((lambda_sym["bid_price"].notna() | lambda_sym["ask_price"].notna()).sum())
+
+    buy_trades = submission_trades.loc[submission_trades["side"] == "BUY"] if not submission_trades.empty else pd.DataFrame()
+    sell_trades = submission_trades.loc[submission_trades["side"] == "SELL"] if not submission_trades.empty else pd.DataFrame()
+    buy_fill_count = int(len(buy_trades))
+    sell_fill_count = int(len(sell_trades))
+    buy_filled_qty = int(buy_trades["quantity"].sum()) if not buy_trades.empty else 0
+    sell_filled_qty = int(sell_trades["quantity"].sum()) if not sell_trades.empty else 0
+
+    return {
+        "symbol": symbol,
+        "quoted_tick_count": quoted_tick_count,
+        "bid_quote_ticks": bid_quote_ticks,
+        "ask_quote_ticks": ask_quote_ticks,
+        "avg_quoted_spread": float(spread_series.dropna().mean()) if spread_series.notna().any() else None,
+        "buy_fill_count": buy_fill_count,
+        "sell_fill_count": sell_fill_count,
+        "buy_filled_qty": buy_filled_qty,
+        "sell_filled_qty": sell_filled_qty,
+        "buy_fill_rate_per_tick": (buy_fill_count / bid_quote_ticks) if bid_quote_ticks else None,
+        "sell_fill_rate_per_tick": (sell_fill_count / ask_quote_ticks) if ask_quote_ticks else None,
+        "buy_qty_per_tick": (buy_filled_qty / bid_quote_ticks) if bid_quote_ticks else None,
+        "sell_qty_per_tick": (sell_filled_qty / ask_quote_ticks) if ask_quote_ticks else None,
+    }
+
+
+def _markout_horizons() -> list[int]:
+    return [1, 2, 5, 10]
+
+
+def official_trade_markouts(log: OfficialLog, symbol: str) -> pd.DataFrame:
+    activities = log.activities.loc[log.activities["product"] == symbol].copy()
+    if activities.empty:
+        return pd.DataFrame()
+
+    activities = _compute_activity_features(activities.sort_values("timestamp"))
+    submission_trades = _submission_trades(log.trades, symbol)
+    if submission_trades.empty:
+        return pd.DataFrame()
+
+    timestamps = activities["timestamp"].astype(int).tolist()
+    timestamp_index = {timestamp: index for index, timestamp in enumerate(timestamps)}
+    mid_by_timestamp = dict(zip(timestamps, ((activities["bid_price_1"] + activities["ask_price_1"]) / 2.0).tolist()))
+
+    rows = []
+    horizons = _markout_horizons()
+
+    for _, trade in submission_trades.iterrows():
+        timestamp = int(trade["timestamp"])
+        side = str(trade["side"]).upper()
+        sign = 1 if side == "BUY" else -1
+        index = timestamp_index.get(timestamp)
+        if index is None:
+            continue
+
+        row = trade.to_dict()
+        row["counterparty"] = (
+            str(trade.get("seller") or "").strip() if side == "BUY"
+            else str(trade.get("buyer") or "").strip()
+        ) or "UNKNOWN"
+        row["mid_price"] = mid_by_timestamp.get(timestamp)
+
+        for horizon in horizons:
+            key = f"markout_{horizon}"
+            future_index = index + horizon
+            if future_index >= len(timestamps):
+                row[key] = None
+                row[f"{key}_qty"] = 0
+                continue
+            future_mid = mid_by_timestamp.get(timestamps[future_index])
+            if future_mid is None:
+                row[key] = None
+                row[f"{key}_qty"] = 0
+                continue
+            row[key] = (future_mid - float(trade["price"])) * sign
+            row[f"{key}_qty"] = int(trade["quantity"])
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
+def official_market_trade_flow(log: OfficialLog, symbol: str) -> pd.DataFrame:
+    trades = log.trades.loc[log.trades.get("symbol", pd.Series(dtype=str)) == symbol].copy() if not log.trades.empty else pd.DataFrame()
+    activities = log.activities.loc[log.activities["product"] == symbol].copy() if not log.activities.empty else pd.DataFrame()
+    if trades.empty:
+        return pd.DataFrame(columns=["timestamp", "price", "quantity", "side", "signed_quantity", "source"])
+    if activities.empty:
+        frame = trades.sort_values("timestamp").copy()
+        frame["side"] = "UNKNOWN"
+        frame["signed_quantity"] = 0
+        frame["source"] = "market"
+        return frame[["timestamp", "price", "quantity", "side", "signed_quantity", "source"]]
+
+    activities = _compute_activity_features(activities.sort_values("timestamp"))
+    activity_by_timestamp = {
+        int(row["timestamp"]): row
+        for _, row in activities.iterrows()
+    }
+
+    rows = []
+    for _, trade in trades.iterrows():
+        timestamp = int(trade["timestamp"])
+        price = float(trade["price"])
+        quantity = int(trade["quantity"])
+        buyer = str(trade.get("buyer") or "")
+        seller = str(trade.get("seller") or "")
+        snapshot = activity_by_timestamp.get(timestamp)
+
+        if buyer == "SUBMISSION":
+            side = "BUY"
+            source = "submission"
+        elif seller == "SUBMISSION":
+            side = "SELL"
+            source = "submission"
+        elif snapshot is None:
+            side = "UNKNOWN"
+            source = "market"
+        else:
+            bid = float(snapshot["bid_price_1"])
+            ask = float(snapshot["ask_price_1"])
+            mid = float((bid + ask) / 2.0)
+            if price >= ask:
+                side = "BUY"
+            elif price <= bid:
+                side = "SELL"
+            elif price > mid:
+                side = "BUY"
+            elif price < mid:
+                side = "SELL"
+            else:
+                side = "UNKNOWN"
+            source = "market"
+
+        signed_quantity = quantity if side == "BUY" else -quantity if side == "SELL" else 0
+        rows.append({
+            "timestamp": timestamp,
+            "price": price,
+            "quantity": quantity,
+            "side": side,
+            "signed_quantity": signed_quantity,
+            "source": source,
+        })
+
+    return pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
+
+
+def participant_aware_summary(log: OfficialLog, symbol: str) -> dict:
+    trades = official_trade_markouts(log, symbol)
+    horizons = _markout_horizons()
+    if trades.empty:
+        return {
+            "symbol": symbol,
+            "trade_count": 0,
+            "traded_volume": 0,
+            "mean_markout_by_horizon": {str(h): None for h in horizons},
+            "participants": [],
+        }
+
+    mean_markout_by_horizon = {}
+    for horizon in horizons:
+        column = f"markout_{horizon}"
+        valid = trades.dropna(subset=[column])
+        if valid.empty:
+            mean_markout_by_horizon[str(horizon)] = None
+            continue
+        qty = valid["quantity"].clip(lower=0)
+        mean_markout_by_horizon[str(horizon)] = float((valid[column] * qty).sum() / qty.sum()) if qty.sum() else None
+
+    participants = []
+    for counterparty, group in trades.groupby("counterparty"):
+        participant = {
+            "counterparty": counterparty,
+            "trade_count": int(len(group)),
+            "traded_volume": int(group["quantity"].sum()),
+            "buy_qty": int(group.loc[group["side"] == "BUY", "quantity"].sum()),
+            "sell_qty": int(group.loc[group["side"] == "SELL", "quantity"].sum()),
+        }
+        for horizon in horizons:
+            column = f"markout_{horizon}"
+            valid = group.dropna(subset=[column])
+            qty = valid["quantity"].clip(lower=0)
+            participant[f"mean_markout_{horizon}"] = (
+                float((valid[column] * qty).sum() / qty.sum()) if not valid.empty and qty.sum() else None
+            )
+        participants.append(participant)
+
+    participants.sort(key=lambda row: (-row["traded_volume"], row["counterparty"]))
+    return {
+        "symbol": symbol,
+        "trade_count": int(len(trades)),
+        "traded_volume": int(trades["quantity"].sum()),
+        "mean_markout_by_horizon": mean_markout_by_horizon,
+        "participants": participants,
+    }
 
 
 def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, edge: float = 1.0) -> Path:
@@ -505,9 +738,23 @@ def summarize_log(log: OfficialLog) -> str:
 
     traded_volume = int(submission_trades["quantity"].sum())
     per_symbol = submission_trades.groupby("symbol")["quantity"].agg(["count", "sum"]).to_dict("index")
+    participant_preview = {}
+    for symbol in sorted(submission_trades["symbol"].dropna().unique()):
+        participant_summary = participant_aware_summary(log, symbol)
+        top_participants = participant_summary["participants"][:2]
+        if top_participants:
+            participant_preview[symbol] = [
+                {
+                    "counterparty": participant["counterparty"],
+                    "volume": participant["traded_volume"],
+                    "markout_1": participant.get("mean_markout_1"),
+                }
+                for participant in top_participants
+            ]
     return (
         f"{prefix} trade_count={len(submission_trades)} "
-        f"traded_volume={traded_volume} per_symbol={per_symbol}"
+        f"traded_volume={traded_volume} per_symbol={per_symbol} "
+        f"top_counterparties={participant_preview}"
     )
 
 
@@ -541,6 +788,27 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         print(summarize_reconcile_report(report))
 
     for symbol in symbols:
+        quote_summary = official_quote_summary(log, symbol)
+        if quote_summary.get("quoted_tick_count"):
+            print(
+                f"{symbol} quote_summary="
+                f"ticks={quote_summary['quoted_tick_count']} "
+                f"bid_fill_rate={quote_summary.get('buy_fill_rate_per_tick')} "
+                f"ask_fill_rate={quote_summary.get('sell_fill_rate_per_tick')} "
+                f"avg_spread={quote_summary.get('avg_quoted_spread')}"
+            )
+        participant_summary = participant_aware_summary(log, symbol)
+        top_participants = participant_summary["participants"][:5]
+        if top_participants:
+            compact = [
+                (
+                    participant["counterparty"],
+                    participant["traded_volume"],
+                    participant.get("mean_markout_1"),
+                )
+                for participant in top_participants
+            ]
+            print(f"{symbol} participant_summary={compact}")
         output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge)
         print(f"saved {output_path}")
 
