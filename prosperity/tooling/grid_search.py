@@ -50,20 +50,31 @@ def _parse_param_spec(spec: str) -> Tuple[str, str, List[float]]:
 
 
 def _apply_overrides(round_num: int, overrides: Dict[str, Dict[str, float]], member: str = "champion"):
-    """Temporarily patch round config with overrides and return the modified mapping."""
-    base = get_round_config(round_num, member)
-    patched: Dict[str, ProductConfig] = {}
-    for sym, pc in base.items():
-        if sym in overrides:
-            new_params = {**pc.params, **overrides[sym]}
-            patched[sym] = ProductConfig(
-                symbol=pc.symbol,
-                strategy=pc.strategy,
-                position_limit=pc.position_limit,
-                params=new_params,
+    """Return a member-override mapping with param overrides applied.
+
+    Important: we patch the override mapping itself, not the fully-resolved round config.
+    This preserves explicit product removals such as {"ASH_COATED_OSMIUM": None}.
+    """
+    effective = get_round_config(round_num, member)
+    original_overrides = MEMBER_OVERRIDES.get(member, {}).get(round_num, {})
+    patched: Dict[str, ProductConfig | None] = dict(original_overrides)
+
+    for sym, params in overrides.items():
+        if sym not in effective:
+            raise ValueError(
+                f"Cannot override {sym} for member={member!r}, round={round_num}: "
+                "product is not active in the effective config."
             )
-        else:
-            patched[sym] = pc
+
+        pc = effective[sym]
+        new_params = {**pc.params, **params}
+        patched[sym] = ProductConfig(
+            symbol=pc.symbol,
+            strategy=pc.strategy,
+            position_limit=pc.position_limit,
+            params=new_params,
+        )
+
     return patched
 
 

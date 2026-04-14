@@ -36,6 +36,8 @@ class BaseStrategy(ABC):
             orders: list of Order objects to send
             conversions: integer conversion request (0 if none)
         """
+        self._memory = memory  # available to all helper methods via self._memory
+
         order_depth = state.order_depths.get(self.product)
         if order_depth is None:
             return [], 0
@@ -62,6 +64,65 @@ class BaseStrategy(ABC):
     ) -> Tuple[List[Order], int]:
         """Produce orders and conversion request for this product."""
         ...
+
+    # ------------------------------------------------------------------
+    # Shared price utilities (call from any strategy)
+    # ------------------------------------------------------------------
+    def _microprice(self, book: "BookSnapshot") -> float:
+        """Volume-weighted microprice using all available book levels.
+
+        bid_vwap = Σ(price × vol) / Σvol  across all bid levels
+        ask_vwap = same for asks
+        microprice = (bid_vwap × ask_total + ask_vwap × bid_total) / (bid_total + ask_total)
+
+        One side empty OR both sides empty → returns the previous microprice
+        stored in self._memory["_microprice_last"] (or 0.0 on the very first tick).
+
+        Stores result in self._memory["_microprice_last"].
+        Requires self._memory to be set (done automatically by on_tick).
+        """
+        bid_total = sum(v for _, v in book.bid_levels)
+        ask_total = sum(v for _, v in book.ask_levels)
+
+        prev = self._memory.get("_microprice_last", 0.0)
+
+        if bid_total == 0 or ask_total == 0:
+            # One or both sides empty: can't compute a meaningful cross-side price
+            return float(prev)
+
+        bid_vwap = sum(p * v for p, v in book.bid_levels) / bid_total
+        ask_vwap = sum(p * v for p, v in book.ask_levels) / ask_total
+        result = (bid_vwap * ask_total + ask_vwap * bid_total) / (bid_total + ask_total)
+
+        self._memory["_microprice_last"] = result
+        return result
+
+    def _smooth_mid(self, mid: float, memory: Dict[str, Any]) -> float:
+        """EWMA smoother for any price series (mid, microprice, etc.).
+
+        Params read from self.params:
+          mid_smooth_window    — rolling window size (default 20; 0 = disabled)
+          mid_smooth_half_life — EMA half-life in ticks (default window/2)
+
+        Stores in memory: ``mid_smooth_buf``, ``mid_smoothed``.
+        Returns the smoothed value (or the raw input when window <= 0 or too few samples).
+        """
+        window = int(self.params.get("mid_smooth_window", 20))
+        if window <= 0:
+            return mid
+        half_life = float(self.params.get("mid_smooth_half_life", window / 2.0))
+        buf = memory.setdefault("mid_smooth_buf", [])
+        buf.append(mid)
+        if len(buf) > window:
+            buf[:] = buf[-window:]
+        if len(buf) < 2:
+            return mid
+        alpha = 1.0 - 2.0 ** (-1.0 / half_life) if half_life > 0 else 1.0
+        smoothed = buf[0]
+        for p in buf[1:]:
+            smoothed = alpha * p + (1.0 - alpha) * smoothed
+        memory["mid_smoothed"] = smoothed
+        return smoothed
 
     # ------------------------------------------------------------------
     # Shared volatility estimation (call from any strategy)

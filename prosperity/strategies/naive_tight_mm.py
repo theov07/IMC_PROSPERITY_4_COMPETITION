@@ -52,8 +52,8 @@ class NaiveTightMarketMakerStrategy(BaseStrategy):
         if book.best_bid is not None and book.best_ask is not None:
             spread = book.best_ask - book.best_bid
             if spread >= 2:
-                bid_price = min(book.best_bid + tighten_ticks, book.best_ask - 1)
-                ask_price = max(book.best_ask - tighten_ticks, book.best_bid + 1)
+                bid_price = min(book.best_bid + tighten_ticks, book.best_ask - 0.1)
+                ask_price = max(book.best_ask - tighten_ticks, book.best_bid + 0.1)
 
         if bid_price is not None and buy_cap > 0:
             orders.append(Order(self.product, bid_price, min(maker_size, buy_cap)))
