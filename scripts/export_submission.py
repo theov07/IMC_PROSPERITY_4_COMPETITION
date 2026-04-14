@@ -48,6 +48,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "black_scholes":      ("prosperity/strategies/black_scholes.py",      "BlackScholesStrategy"),
     "conversion_arb":     ("prosperity/strategies/conversion_arb.py",     "ConversionArbStrategy"),
     "signal_trader":      ("prosperity/strategies/signal_trader.py",      "SignalTraderStrategy"),
+    "mm_first":           ("prosperity/strategies/mm_first.py",           "MMFirstStrategy"),
+    "buy_and_hold":       ("prosperity/strategies/buy_and_hold.py",       "BuyAndHoldStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
