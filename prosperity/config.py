@@ -543,7 +543,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig]]] = {
                 taker_buy_threshold = 9_990,  # classify taker buys at >= this price
                 taker_sell_threshold= 10_025,
 
-                gap_trigger_min=11,           # min tick gap L1→L2 to fire gap exploit
+                gap_trigger_min=10,           # min tick gap L1→L2 to fire gap exploit
                 gap_trigger_max_vol_pct=0.2, # L1 "thin" threshold: 10% of limit (=8 units)
                 gap_trigger_confirm_ticks=1,  # require 2 consecutive ticks to filter transient gaps
 
