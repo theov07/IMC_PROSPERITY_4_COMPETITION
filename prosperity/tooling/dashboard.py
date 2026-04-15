@@ -517,7 +517,7 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
 
     if has_vol:
         n_rows  = 6
-        heights = [0.32, 0.10, 0.12, 0.12, 0.10, 0.24]
+        heights = [0.46, 0.08, 0.10, 0.10, 0.08, 0.18]
         titles  = ["Price & Trades", "Spread", "Position & Imbalance", "Volatility (σ)", "PnL"]
         vol_row = 4
         pnl_row = 5
@@ -528,7 +528,7 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         pnl_row = 6
     else:
         n_rows  = 5
-        heights = [0.36, 0.12, 0.14, 0.14, 0.24]
+        heights = [0.50, 0.10, 0.12, 0.10, 0.18]
         titles  = ["Price & Trades", "Spread", "Position & Imbalance", "PnL"]
         vol_row = None
         pnl_row = 4
@@ -561,6 +561,15 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
 
     # Strategy lambda logs: reservation price + MM quotes (no smoothing on discrete prices)
     if not lambda_sym.empty:
+        if "fair_value" in lambda_sym.columns:
+            fv_data = lambda_sym.dropna(subset=["fair_value"])
+            if not fv_data.empty:
+                fig.add_trace(go.Scatter(
+                    x=fv_data["timestamp"], y=fv_data["fair_value"],
+                    name="Strategy fair (block-OLS reg)", mode=_mode,
+                    marker=dict(**_marker, color="#9c36b5"),
+                    line=dict(color="#9c36b5", width=1.6, shape=line_shape, dash="dash"),
+                ), row=1, col=1)
         if "reservation" in lambda_sym.columns:
             res_data = lambda_sym.dropna(subset=["reservation"])
             if not res_data.empty:
@@ -640,6 +649,7 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     color_map = _product_color_map(symbols)
     _add_pnl_traces(fig, pnl_df, color_map, row=pnl_row, total_df=log.graph if not log.graph.empty else None)
 
+    height = 1360 if has_vol else 1220
     fig.update_layout(height=height, uirevision=f"imc-{symbol}", **_layout_base(theme))
     fig.update_annotations(**_subplot_title_style(theme))
     return fig

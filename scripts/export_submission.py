@@ -49,6 +49,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "round1_regression_mm_v5": ("prosperity/strategies/round_1/regression_mm_v5.py", "Round1RegressionMMV5Strategy"),
     "leo_fusion_a": ("prosperity/strategies/round_1/leo_fusion_a.py", "LeoFusionAStrategy"),
     "leo_fusion_b": ("prosperity/strategies/round_1/leo_fusion_b.py", "LeoFusionBStrategy"),
+    "leo_fusion_b_v3": ("prosperity/strategies/round_1/leo_fusion_b_v3.py", "LeoFusionBV3Strategy"),
     "leo_fusion_c": ("prosperity/strategies/round_1/leo_fusion_c.py", "LeoFusionCStrategy"),
     "leo_fusion_d": ("prosperity/strategies/round_1/leo_fusion_d.py", "LeoFusionDStrategy"),
     "naive_tight_mm_v10": ("prosperity/strategies/naive_tight_mm_v10.py", "NaiveTightMarketMakerV10Strategy"),
@@ -81,6 +82,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "buy_and_hold":       ("prosperity/strategies/buy_and_hold.py",       "BuyAndHoldStrategy"),
     "trend_carry_window": ("prosperity/strategies/trend_carry_window.py", "TrendCarryWindowStrategy"),
     "trend_carry_window_v2": ("prosperity/strategies/trend_carry_window_v2.py", "TrendCarryWindowV2Strategy"),
+    "osmium_mr":          ("prosperity/strategies/osmium_mr.py",          "OsmiumMeanRevStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -94,8 +96,10 @@ CORE_MODULES = [
 STRATEGY_DEPS: dict[str, list[str]] = {
     "leo_fusion_a": ["round1_regression_mm_v5"],
     "leo_fusion_b": ["round1_regression_mm_v5"],
+    "leo_fusion_b_v3": ["round1_regression_mm_v5"],
     "leo_fusion_c": ["round1_regression_mm_v5"],
     "leo_fusion_d": ["round1_regression_mm_v5"],
+    "osmium_mr": ["naive_tight_mm_v10"],
 }
 
 
