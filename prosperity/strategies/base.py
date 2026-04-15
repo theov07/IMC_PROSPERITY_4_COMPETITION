@@ -207,7 +207,7 @@ class BaseStrategy(ABC):
         Strategies may append extra per-tick diagnostics through ``extras`` as
         long as they keep a stable schema across ticks.
         """
-        if not self.runtime_trace_enabled():
+        if not self.params.get("quote_trace_enabled", False):
             return
 
         row: Dict[str, Any] = {
