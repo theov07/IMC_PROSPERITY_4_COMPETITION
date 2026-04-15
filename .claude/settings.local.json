@@ -84,7 +84,14 @@
       "Bash(PYTHONUNBUFFERED=1 PYTHONPATH=. python -u scripts/export_submission.py --member leo_osmium_v1 --round 1 --output artifacts/submissions/leo_osmium_v1_r1.py)",
       "Bash(cp \"C:/Users/LéoRENAULT/Downloads/strat/154666.py\" submissions/test_154666.py)",
       "Bash(tee /tmp/osm_params.log)",
-      "Bash(sort -t= -k2 -nr)"
+      "Bash(sort -t= -k2 -nr)",
+      "Bash(ls artifacts/submissions/)",
+      "Bash(ls artifacts/submissions/round_1/)",
+      "Bash(mkdir -p artifacts/submissions/round_1/leo)",
+      "Bash(python scripts/export_submission.py --member leo_fusion_b_v2 --round 1 --output artifacts/submissions/round_1/leo/best_root_only.py)",
+      "Bash(python scripts/export_submission.py --member leo_osmium_only --round 1 --output artifacts/submissions/round_1/leo/best_osmium_only.py)",
+      "Bash(python scripts/export_submission.py --member leo_osmium_v1 --round 1 --output artifacts/submissions/round_1/leo/best_combined_osmium_root.py)",
+      "Bash(ls -la artifacts/submissions/round_1/leo/best_*)"
     ]
   }
 }
