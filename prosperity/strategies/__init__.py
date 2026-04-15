@@ -36,6 +36,12 @@ def _load_registry():
     from prosperity.strategies.naive_tight_mm_v21 import BookFollowingTrendMMV21Strategy
     from prosperity.strategies.naive_tight_mm_v23 import NaiveTightMarketMakerV23Strategy
     from prosperity.strategies.naive_tight_mm_v24 import NaiveTightMarketMakerV24Strategy
+    from prosperity.strategies.naive_tight_mm_v25 import TrendCarryMMV25Strategy
+    from prosperity.strategies.naive_tight_mm_v26 import TrendCarryMMV26Strategy
+    from prosperity.strategies.naive_tight_mm_v34 import TrendCarryMMV34Strategy
+    from prosperity.strategies.naive_tight_mm_v37 import TrendCarryMMV37Strategy
+    from prosperity.strategies.naive_tight_mm_v38 import TrendCarryMMV38Strategy
+    from prosperity.strategies.naive_tight_mm_v41 import TrendCarryMMV41Strategy
     from prosperity.strategies.round_1.regression_top_book import Round1RegressionTopBookStrategy
     from prosperity.strategies.round_1.regression_mm_v3 import Round1RegressionMMV3Strategy
     from prosperity.strategies.round_1.regression_mm_v4 import Round1RegressionMMV4Strategy
@@ -71,6 +77,12 @@ def _load_registry():
     _REGISTRY["book_following_trend_mm_v21"] = BookFollowingTrendMMV21Strategy
     _REGISTRY["naive_tight_mm_v23"] = NaiveTightMarketMakerV23Strategy
     _REGISTRY["naive_tight_mm_v24"] = NaiveTightMarketMakerV24Strategy
+    _REGISTRY["trend_carry_mm_v25"] = TrendCarryMMV25Strategy
+    _REGISTRY["trend_carry_mm_v26"] = TrendCarryMMV26Strategy
+    _REGISTRY["trend_carry_mm_v34"] = TrendCarryMMV34Strategy
+    _REGISTRY["trend_carry_mm_v37"] = TrendCarryMMV37Strategy
+    _REGISTRY["trend_carry_mm_v38"] = TrendCarryMMV38Strategy
+    _REGISTRY["trend_carry_mm_v41"] = TrendCarryMMV41Strategy
     _REGISTRY["round1_regression_top_book"] = Round1RegressionTopBookStrategy
     _REGISTRY["round1_regression_mm_v3"] = Round1RegressionMMV3Strategy
     _REGISTRY["round1_regression_mm_v4"] = Round1RegressionMMV4Strategy
