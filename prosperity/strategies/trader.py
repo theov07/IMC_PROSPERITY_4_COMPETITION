@@ -9,7 +9,7 @@ from datamodel import Order, TradingState
 from prosperity.config import ProductConfig, get_round_config
 from prosperity.persistence import dump_state, load_state
 from prosperity.strategies import build_strategy
-from prosperity.strategies.base import BaseStrategy
+from prosperity.strategies.base.base import BaseStrategy
 
 
 # ── Change these two constants before each round submission ──────────

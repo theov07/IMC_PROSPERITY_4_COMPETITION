@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Tuple
 from datamodel import Order, OrderDepth, TradingState
 
 from prosperity.market import BookSnapshot, snapshot_from_order_depth
-from prosperity.strategies.base import BaseStrategy
+from prosperity.strategies.base.base import BaseStrategy
 
 
 def _norm_cdf(x: float) -> float:
