@@ -810,7 +810,6 @@ def _cleanup_dashboard_port(port: int, label: str) -> None:
         print(f"Warning: port {port} still has listeners after cleanup: {', '.join(map(str, remaining))}")
 
 
-def load_data(data_dir: str | None = None) -> Dict[str, Dict[str, object]]:
 def load_data(data_dir: str) -> Dict[str, Dict[str, object]]:
     """Load and precompute all day/product research data once at startup.
 
