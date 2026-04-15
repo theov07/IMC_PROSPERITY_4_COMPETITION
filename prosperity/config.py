@@ -540,8 +540,8 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 pct_kept_for_takers=0.1,  # capacity reserved for taker orders
                 mid_smooth_window=50,
                 mid_smooth_half_life=10,
-                taker_buy_threshold = 9000,  # classify taker buys at >= this price
-                taker_sell_threshold= 11000,
+                taker_buy_threshold = 9990,  # classify taker buys at >= this price
+                taker_sell_threshold= 10025,
 
                 gap_trigger_min=10,           # min tick gap L1→L2 to fire gap exploit
                 gap_trigger_max_vol_pct=0.2, # L1 "thin" threshold: 10% of limit (=8 units)
