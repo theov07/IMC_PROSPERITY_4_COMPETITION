@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Tuple
 from datamodel import Order, OrderDepth, TradingState
 
 from prosperity.market import BookSnapshot
-from prosperity.strategies.base import BaseStrategy
+from prosperity.strategies.base.base import BaseStrategy
 
 
 def _ewma(previous: float | None, current: float, alpha: float) -> float:
