@@ -325,3 +325,47 @@ Current read:
 
 - `V24` is a valid isolated candidate and its submission export is ready.
 - `V17` remains the safest baseline to submit.
+
+V25: V18 carry rewrite
+
+Goal:
+
+- restart from the successful visual intuition behind `V18`
+- buy hard early
+- keep a large long core
+- free only a little inventory on local over-extensions
+- rebuy dips so trims mostly create room rather than de-risking
+
+Design:
+
+- still inspired by `V18` and its continuous quoting style
+- fair value changed to:
+  - `fair = fv + trend_weight * slope - stretch_weight * stretch`
+- target inventory is explicitly positive and high in bull mode
+- early warm-up no longer allows silly opening sells
+- trims are passive and small, with cooldown
+
+Final local `realistic` read:
+
+- `day 0`
+  - total: `96333.0`
+  - IPR: `79485.0`
+  - trajectory: `t50=5900`, `t70=6800`, `t80=7600`
+- `day -1`
+  - total: `96564.0`
+  - IPR: `79471.0`
+  - trajectory: `t50=3000`, `t70=3900`, `t80=4000`
+
+Comparison:
+
+- `V17` total over the same two days: `192417.0`
+- `V18` total over the same two days: `192385.0`
+- `V25` total over the same two days: `192897.0`
+
+Current read:
+
+- `V25` is the best local IPR branch so far.
+- the gain does not come from flattening earlier; it comes from:
+  - reaching a full long inventory quickly
+  - monetizing local over-extensions with small passive trims
+  - reloading the trimmed inventory on the next pullback

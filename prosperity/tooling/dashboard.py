@@ -209,6 +209,21 @@ def _smooth(series: "pd.Series", n: int) -> "pd.Series":
     return series.ewm(alpha=alpha, adjust=False).mean()
 
 
+def _apply_price_height_inc(heights: list, base_total: int, inc: int) -> tuple:
+    """Add inc*100 px to the price row (row 0) absolute height.
+
+    All other rows keep their absolute pixel size; the total figure height
+    grows by the same amount.  Returns (new_heights, new_total).
+    """
+    if inc <= 0:
+        return heights, base_total
+    extra = inc * 100
+    new_total = base_total + extra
+    price_abs = heights[0] * base_total + extra
+    new_heights = [price_abs / new_total] + [h * base_total / new_total for h in heights[1:]]
+    return new_heights, new_total
+
+
 # ── Shared helpers ─────────────────────────────────────────────────────────
 
 def _trade_markers(fig, df: pd.DataFrame, row: int, prefix: str = ""):
@@ -243,6 +258,37 @@ def _trade_markers(fig, df: pd.DataFrame, row: int, prefix: str = ""):
     else:
         _scatter(df[df["side"] == "BUY"],  "Buy",  "triangle-up",   C_BUY)
         _scatter(df[df["side"] == "SELL"], "Sell", "triangle-down", C_SELL)
+
+
+C_TILT_BUY  = "#f9e2af"   # yellow diamond — tilted buy fill
+C_TILT_SELL = "#89dceb"   # cyan diamond  — tilted sell fill
+
+
+def _trade_markers_tilted(fig, df: pd.DataFrame, row: int) -> None:
+    """Diamond markers for fills that occurred while z-score tilt was active."""
+    if df.empty:
+        return
+    mkw = dict(line=dict(width=0.8, color="#212529"))
+    for side, color, symbol_shape in [
+        ("BUY",  C_TILT_BUY,  "diamond"),
+        ("SELL", C_TILT_SELL, "diamond"),
+    ]:
+        subset = df[df["side"].str.upper() == side]
+        if subset.empty:
+            continue
+        fig.add_trace(go.Scatter(
+            x=subset["timestamp"], y=subset["price"], mode="markers",
+            name=f"Tilted {'buy' if side == 'BUY' else 'sell'}",
+            marker=dict(symbol=symbol_shape, color=color,
+                        size=(subset["quantity"].clip(1, 20) * 0.5 + 6).astype(int), **mkw),
+            text=[f"qty={q}  px={p}  z={z:.2f}  bf={bf:.2f}"
+                  for q, p, z, bf in zip(
+                      subset["quantity"], subset["price"],
+                      subset.get("Z", pd.Series([float("nan")] * len(subset))).fillna(float("nan")),
+                      subset.get("BidFactor", pd.Series([1.0] * len(subset))).fillna(1.0),
+                  )],
+            hoverinfo="text+name",
+        ), row=row, col=1)
 
 
 def _position_series(fills: pd.DataFrame | list[dict], symbol: str | None = None) -> pd.DataFrame:
@@ -314,7 +360,7 @@ def _bt_per_product_pnl(backtest_data: dict, market_df_raw: pd.DataFrame | None)
     ts_offset = 0
     pnl_carry: dict[str, float] = {}   # cumulative PnL from completed days, per symbol
 
-    for day in backtest_data["days"]:
+    for day in sorted(backtest_data["days"], key=lambda d: int(d["day"])):
         curve = day.get("equity_curve", [])
         day_max_ts = curve[-1][0] if curve else 0
         tick = (curve[1][0] - curve[0][0]) if len(curve) >= 2 else 100
@@ -436,7 +482,7 @@ def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return df.sort_values("timestamp")
 
 
-def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, line_shape: str = "linear") -> go.Figure:
+def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, line_shape: str = "linear", price_height_inc: int = 0) -> go.Figure:
     _mode = "lines+markers" if line_shape == "hv" else "lines"
     _marker = dict(size=3) if line_shape == "hv" else {}
     from prosperity.tooling.logs import _compute_activity_features, _parse_lambda_logs, official_market_trade_flow
@@ -490,6 +536,9 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         flow_row = 3
         position_row = 4
         pnl_row = 5
+
+    height = 1040 if has_vol else 940
+    heights, height = _apply_price_height_inc(heights, height, price_height_inc)
 
     fig = make_subplots(
         rows=n_rows, cols=1, shared_xaxes=True,
@@ -624,7 +673,7 @@ def _merge_backtest_days(backtest_data: dict, market_df_raw: pd.DataFrame | None
     pnl_offset = 0.0
     ts_offset = 0
 
-    for day in backtest_data["days"]:
+    for day in sorted(backtest_data["days"], key=lambda d: int(d["day"])):
         curve = day.get("equity_curve", [])
         fills = day.get("fills", [])
         quotes = day.get("quotes", [])
@@ -688,6 +737,7 @@ C_FEATURE_PALETTE = ["#fab387", "#cba6f7", "#94e2d5", "#f9e2af", "#89dceb"]
 def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.DataFrame | None,
                           theme: str = "dark", show_quotes: bool = False,
                           smooth_n: int = 0, line_shape: str = "linear",
+                          price_height_inc: int = 0,
                           _precomputed: tuple | None = None,
                           _per_prod_pnl: pd.DataFrame | None = None) -> go.Figure:
     _mode = "lines+markers" if line_shape == "hv" else "lines"
@@ -713,34 +763,65 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
     has_market = not market_df.empty
 
     # Detect vol-scale features (sigma / vol) to route to a dedicated subplot.
+    # Detect z-score panel columns: "Z", "BidFactor", "AskFactor" (from ZScoreStrategy).
     _all_feat_cols = (
         [c for c in sym_features.columns if c not in ("timestamp", "symbol")]
         if not sym_features.empty else []
     )
-    _vol_feat_cols  = [c for c in _all_feat_cols if "sigma" in c.lower() or "vol" in c.lower()]
-    _price_feat_cols = [c for c in _all_feat_cols if c not in _vol_feat_cols]
-    has_vol = has_market and bool(_vol_feat_cols)
+    _vol_feat_cols   = [c for c in _all_feat_cols if "sigma" in c.lower() or "vol" in c.lower()]
+    _zscore_col      = "Z" if "Z" in _all_feat_cols else None
+    _zfactor_cols    = [c for c in _all_feat_cols if c in ("BidFactor", "AskFactor")]
+    _price_feat_cols = [c for c in _all_feat_cols
+                        if c not in _vol_feat_cols
+                        and c != _zscore_col
+                        and c not in _zfactor_cols]
+    has_vol    = has_market and bool(_vol_feat_cols)
+    has_zscore = bool(_zscore_col) and bool(_zfactor_cols)
 
-    if has_market and has_vol:
+    if has_market and has_vol and has_zscore:
+        n_rows  = 5
+        heights = [0.32, 0.12, 0.11, 0.16, 0.29]
+        titles  = ["Price & Fills", "Position", "Volatility (σ)", "Z-score & Tilt", "Equity PnL"]
+        vol_row    = 3
+        zscore_row = 4
+        pnl_row    = 5
+    elif has_market and has_zscore:
+        n_rows  = 4
+        heights = [0.38, 0.14, 0.18, 0.30]
+        titles  = ["Price & Fills", "Position", "Z-score & Tilt", "Equity PnL"]
+        vol_row    = None
+        zscore_row = 3
+        pnl_row    = 4
+    elif has_market and has_vol:
         n_rows  = 4
         heights = [0.40, 0.15, 0.12, 0.33]
         titles  = ["Price & Fills", "Position", "Volatility (σ)", "Equity PnL"]
+        vol_row    = 3
+        zscore_row = None
+        pnl_row    = 4
     elif has_market:
         n_rows  = 3
         heights = [0.45, 0.20, 0.35]
         titles  = ["Price & Fills", "Position", "Equity PnL"]
+        vol_row    = None
+        zscore_row = None
+        pnl_row    = 3
     else:
         n_rows  = 2
         heights = [0.35, 0.65]
         titles  = ["Position", "Equity PnL"]
+        vol_row    = None
+        zscore_row = None
+        pnl_row    = 2
+
+    height = 800
+    heights, height = _apply_price_height_inc(heights, height, price_height_inc)
 
     fig = make_subplots(rows=n_rows, cols=1, shared_xaxes=True,
         row_heights=heights, subplot_titles=titles, vertical_spacing=0.05)
 
     price_row = 1
     pos_row   = 2 if has_market else 1
-    vol_row   = 3 if has_vol else None
-    pnl_row   = (4 if has_vol else 3) if has_market else 2
 
     # Price + fills
     if has_market:
@@ -789,7 +870,21 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                     line=dict(color=color, width=1.3, shape=line_shape),
                 ), row=price_row, col=1)
 
-        _trade_markers(fig, sym_fills, row=price_row)
+        # Tilted-fill-aware markers: when z-score data is present, split fills into
+        # tilted (|z| > threshold, i.e. BidFactor or AskFactor != 1) vs neutral.
+        if has_zscore and not sym_fills.empty and not sym_features.empty:
+            _zf_cols = ["timestamp"] + [c for c in ("Z", "BidFactor", "AskFactor") if c in sym_features.columns]
+            _zf_data = sym_features[_zf_cols].dropna(subset=["BidFactor"]).sort_values("timestamp")
+            _merged  = pd.merge_asof(sym_fills.sort_values("timestamp"), _zf_data, on="timestamp")
+            _tilted  = _merged[
+                ((_merged["BidFactor"].fillna(1.0) - 1.0).abs() > 0.01) |
+                ((_merged["AskFactor"].fillna(1.0) - 1.0).abs() > 0.01)
+            ]
+            _neutral = _merged[~_merged.index.isin(_tilted.index)]
+            _trade_markers(fig, _neutral, row=price_row, prefix="")
+            _trade_markers_tilted(fig, _tilted, row=price_row)
+        else:
+            _trade_markers(fig, sym_fills, row=price_row)
 
     # Position
     pos_df = _position_series(sym_fills)
@@ -811,6 +906,46 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 line=dict(color=color, width=1.3, shape=line_shape),
             ), row=vol_row, col=1)
 
+    # Z-score & Tilt subplot — only when ZScoreStrategy feature columns are present
+    if zscore_row is not None and not sym_features.empty and _zscore_col is not None:
+        z_data = sym_features[["timestamp", "Z"]].dropna(subset=["Z"]).sort_values("timestamp")
+        if not z_data.empty:
+            # Auto-detect threshold: smallest |z| where factors are != 1
+            threshold_val = None
+            if "BidFactor" in sym_features.columns:
+                _tilted_mask = (sym_features["BidFactor"].fillna(1.0) - 1.0).abs() > 0.01
+                _tilted_z = sym_features.loc[_tilted_mask, "Z"].dropna().abs()
+                if not _tilted_z.empty:
+                    threshold_val = float(_tilted_z.min())
+
+            # Z-score line
+            fig.add_trace(go.Scatter(
+                x=z_data["timestamp"], y=z_data["Z"],
+                name="Z-score", line=dict(color="#cba6f7", width=1.4),
+            ), row=zscore_row, col=1)
+
+            # Threshold lines
+            if threshold_val is not None:
+                fig.add_hline(y= threshold_val, line_color="rgba(243,139,168,0.7)",
+                              line_dash="dash", line_width=1, row=zscore_row, col=1)
+                fig.add_hline(y=-threshold_val, line_color="rgba(166,227,161,0.7)",
+                              line_dash="dash", line_width=1, row=zscore_row, col=1)
+            fig.add_hline(y=0, line_color="rgba(150,150,150,0.4)",
+                          line_dash="dot", line_width=1, row=zscore_row, col=1)
+
+            # BidFactor / AskFactor lines (dotted, secondary signal)
+            for col_name, color, label in [
+                ("BidFactor", "#a6e3a1", "Bid factor"),
+                ("AskFactor", "#f38ba8", "Ask factor"),
+            ]:
+                if col_name in sym_features.columns:
+                    fd = sym_features[["timestamp", col_name]].dropna(subset=[col_name])
+                    if not fd.empty:
+                        fig.add_trace(go.Scatter(
+                            x=fd["timestamp"], y=fd[col_name],
+                            name=label, line=dict(color=color, width=1, dash="dot"),
+                        ), row=zscore_row, col=1)
+
     # Equity PnL — per-product stacked areas + total line
     per_prod_pnl = _per_prod_pnl if _per_prod_pnl is not None else _bt_per_product_pnl(backtest_data, market_df_raw)
     if not per_prod_pnl.empty:
@@ -821,7 +956,6 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
         fig.add_trace(go.Scatter(x=equity_df["timestamp"], y=equity_df["value"],
             name="Total PnL", line=dict(color=C_PNL_TOTAL, width=2)), row=pnl_row, col=1)
 
-    height = 800 #if has_market else 700
     fig.update_layout(height=height, uirevision=f"bt-{symbol}", **_layout_base(theme))
     fig.update_annotations(**_subplot_title_style(theme))
     return fig
@@ -905,8 +1039,10 @@ def _toggle_btn_style(theme: str) -> dict:
 
 def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: str | None = None,
              log_path: str | None = None, log2_path: str | None = None,
-             backtest_json_path: str | None = None,
-             reconcile_report: dict | None = None):
+             backtest_json_path: str | None = None, backtest_json2_path: str | None = None,
+             backtest_data2: dict | None = None,
+             reconcile_report: dict | None = None,
+             price_height_inc: int = 0):
     if not HAS_DASH:
         print("dash not installed. Run: pip install dash")
         return
@@ -924,20 +1060,28 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
         fill_syms = {f["symbol"] for f in all_fills}
         summary_syms = {sym for d in backtest_data["days"] for sym in d.get("product_summaries", {})}
         bt_symbols = sorted(fill_syms | summary_syms)
+    bt2_symbols: list[str] = []
+    if backtest_data2:
+        all_fills2 = [f for d in backtest_data2["days"] for f in d["fills"]]
+        fill_syms2 = {f["symbol"] for f in all_fills2}
+        summary_syms2 = {sym for d in backtest_data2["days"] for sym in d.get("product_summaries", {})}
+        bt2_symbols = sorted(fill_syms2 | summary_syms2)
 
-    all_symbols = sorted(set(imc_symbols) | set(imc2_symbols) | set(bt_symbols))
+    all_symbols = sorted(set(imc_symbols) | set(imc2_symbols) | set(bt_symbols) | set(bt2_symbols))
     if not all_symbols:
         print("No symbols found.")
         return
 
-    # Pre-load raw market data
+    # Pre-load raw market data (shared by both backtests — same round assumed)
     market_df_raw: pd.DataFrame | None = None
-    if data_dir and backtest_data:
+    _active_bt = backtest_data or backtest_data2
+    if data_dir and _active_bt:
         from prosperity.tooling.data import MarketDataLoader
         loader = MarketDataLoader(data_dir)
-        round_num = backtest_data.get("round", 0)
+        round_num = _active_bt.get("round", 0)
+        _ref_days = sorted(_active_bt["days"], key=lambda d: int(d["day"]))
         frames = []
-        for day in backtest_data["days"]:
+        for day in _ref_days:
             try:
                 df = loader.load_prices(f"prices_round_{round_num}_day_{day['day']}.csv")
                 df["day"] = str(day["day"])
@@ -956,13 +1100,20 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
     if backtest_data and not log2:
         total = sum(d["pnl"] for d in backtest_data["days"])
         days_str = ", ".join(str(d["day"]) for d in backtest_data["days"])
-        parts.append(f"Backtest · {backtest_data.get('strategy', '')}  |  PnL = {total:+.2f}  (days {days_str})")
+        label = "Backtest #1" if backtest_data2 else "Backtest"
+        parts.append(f"{label} · {backtest_data.get('strategy', '')}  |  PnL = {total:+.2f}  (days {days_str})")
+    if backtest_data2 and not log2:
+        total2 = sum(d["pnl"] for d in backtest_data2["days"])
+        days_str2 = ", ".join(str(d["day"]) for d in backtest_data2["days"])
+        parts.append(f"Backtest #2 · {backtest_data2.get('strategy', '')}  |  PnL = {total2:+.2f}  (days {days_str2})")
     if log_path:
         loaded_files.append(f"Log: {log_path}")
     if log2_path:
         loaded_files.append(f"Log2: {log2_path}")
     if backtest_json_path and not log2:
-        loaded_files.append(f"Backtest JSON: {backtest_json_path}")
+        loaded_files.append(f"BT1: {backtest_json_path}")
+    if backtest_json2_path and not log2:
+        loaded_files.append(f"BT2: {backtest_json2_path}")
     if data_dir:
         loaded_files.append(f"Market data: {data_dir}")
     if loaded_files:
@@ -975,6 +1126,13 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
         bt_precomputed = _merge_backtest_days(backtest_data, market_df_raw)
         bt_per_prod_pnl = _bt_per_product_pnl(backtest_data, market_df_raw)
         print("Precomputed backtest data.")
+
+    bt2_precomputed: tuple | None = None
+    bt2_per_prod_pnl: pd.DataFrame = pd.DataFrame()
+    if backtest_data2:
+        bt2_precomputed = _merge_backtest_days(backtest_data2, market_df_raw)
+        bt2_per_prod_pnl = _bt_per_product_pnl(backtest_data2, market_df_raw)
+        print("Precomputed backtest2 data.")
 
     app = Dash(__name__, title="Prosperity Trading Dashboard")
 
@@ -1013,15 +1171,7 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
                     options=[{"label": s, "value": s} for s in all_symbols],
                     value=all_symbols[0], clearable=False,
                     style={"width": "200px", "fontSize": "13px"}),
-                *([
-                    dcc.Checklist(
-                        id="quotes-toggle",
-                        options=[{"label": " Show MM quotes", "value": "show"}],
-                        value=[],
-                        style={"marginLeft": "24px", "fontSize": "13px"},
-                        inputStyle={"marginRight": "6px"},
-                    )
-                ] if (backtest_data and not log2) else [html.Div(id="quotes-toggle")]),
+                html.Div(id="quotes-toggle", style={"display": "none"}),
                 dcc.Checklist(
                     id="step-toggle",
                     options=[{"label": " Step chart (hv)", "value": "hv"}],
@@ -1137,18 +1287,16 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
             {"display": "flex", "alignItems": "center", "marginBottom": "20px", "color": t["text"]},
         )
 
-    # ── Rebuild charts area on theme, symbol, quotes-toggle, or smooth change ──
+    # ── Rebuild charts area on theme, symbol, or smooth change ──
     @app.callback(
         Output("charts-area", "children"),
         Input("theme-store", "data"),
         Input("symbol-select", "value"),
-        Input("quotes-toggle", "value"),
         Input("smooth-toggle", "value"),
         Input("smooth-n", "value"),
         Input("step-toggle", "value"),
     )
-    def update_charts(theme, symbol, quotes_value, smooth_value, smooth_n_raw, step_value):
-        show_quotes = bool(quotes_value)
+    def update_charts(theme, symbol, smooth_value, smooth_n_raw, step_value):
         smooth_n = int(smooth_n_raw or 0) if smooth_value else 0
         line_shape = "hv" if step_value else "linear"
         children = []
@@ -1157,19 +1305,54 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
                 _section_header("IMC Simulation Results", theme),
                 html.Div(
                     dcc.Graph(id="imc-chart",
-                              figure=build_imc_figure(log, symbol, theme, smooth_n=smooth_n, line_shape=line_shape),
+                              figure=build_imc_figure(log, symbol, theme, smooth_n=smooth_n, line_shape=line_shape, price_height_inc=price_height_inc),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
                 ),
             ]
-        if log and (log2 or backtest_data):
+        if log and (log2 or backtest_data or backtest_data2):
             children.append(_divider(theme))
         if log2:
             children += [
                 _section_header(f"IMC Simulation #2 · {log2.submission_id}", theme),
                 html.Div(
                     dcc.Graph(id="bt-chart",
-                              figure=build_imc_figure(log2, symbol, theme, smooth_n=smooth_n, line_shape=line_shape),
+                              figure=build_imc_figure(log2, symbol, theme, smooth_n=smooth_n, line_shape=line_shape, price_height_inc=price_height_inc),
+                              config=_GRAPH_CONFIG),
+                    style=_card_style(theme),
+                ),
+            ]
+        elif backtest_data and backtest_data2:
+            # Two backtest panels side-by-side (stacked vertically)
+            strat1 = backtest_data.get("strategy", "Backtest #1")
+            strat2 = backtest_data2.get("strategy", "Backtest #2")
+            children += [
+                _section_header(f"Backtest #1 · {strat1}", theme),
+                html.Div(
+                    dcc.Graph(id="bt-chart",
+                              figure=build_backtest_figure(
+                                  backtest_data, symbol, market_df_raw, theme,
+                                  show_quotes=True,
+                                  smooth_n=smooth_n, line_shape=line_shape,
+                                  price_height_inc=price_height_inc,
+                                  _precomputed=bt_precomputed,
+                                  _per_prod_pnl=bt_per_prod_pnl,
+                              ),
+                              config=_GRAPH_CONFIG),
+                    style=_card_style(theme),
+                ),
+                _divider(theme),
+                _section_header(f"Backtest #2 · {strat2}", theme),
+                html.Div(
+                    dcc.Graph(id="bt-chart2",
+                              figure=build_backtest_figure(
+                                  backtest_data2, symbol, market_df_raw, theme,
+                                  show_quotes=True,
+                                  smooth_n=smooth_n, line_shape=line_shape,
+                                  price_height_inc=price_height_inc,
+                                  _precomputed=bt2_precomputed,
+                                  _per_prod_pnl=bt2_per_prod_pnl,
+                              ),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
                 ),
@@ -1181,9 +1364,10 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
                     dcc.Graph(id="bt-chart",
                               figure=build_backtest_figure(
                                   backtest_data, symbol, market_df_raw, theme,
-                                  show_quotes=show_quotes,
+                                  show_quotes=True,
                                   smooth_n=smooth_n,
                                   line_shape=line_shape,
+                                  price_height_inc=price_height_inc,
                                   _precomputed=bt_precomputed,
                                   _per_prod_pnl=bt_per_prod_pnl,
                               ),
@@ -1213,8 +1397,12 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--log", help="Path to official IMC JSON or LOG file")
     parser.add_argument("--log2", help="Second IMC log for side-by-side comparison (replaces backtest panel)")
     parser.add_argument("--backtest-json", help="Path to backtest JSON (optional: auto-discovery is attempted from artifacts/)")
+    parser.add_argument("--backtest-json2", dest="backtest_json2",
+        help="Second backtest JSON — adds a second panel for strategy comparison (e.g. --backtest-json2 artifacts/bt2.json)")
     parser.add_argument("--data-dir", default=None,
         help="Market data root or per-round directory (enables price chart in backtest view)")
+    parser.add_argument("--inc-height", type=int, default=0, metavar="N",
+        help="Increase the Price & Fills chart height by N×100 px (e.g. --inc-height 2 adds 200 px)")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if not args.log and not args.backtest_json and not getattr(args, "log2", None):
@@ -1251,6 +1439,14 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
             print(f"Loaded backtest: strategy={backtest_data.get('strategy')}  "
                   f"days={[d['day'] for d in backtest_data['days']]}  total_pnl={total:.2f}")
 
+    backtest_data2 = None
+    backtest_json2_path = getattr(args, "backtest_json2", None)
+    if backtest_json2_path:
+        backtest_data2 = json.loads(Path(backtest_json2_path).read_text(encoding="utf-8"))
+        total2 = sum(d["pnl"] for d in backtest_data2["days"])
+        print(f"Loaded backtest2: strategy={backtest_data2.get('strategy')}  "
+              f"days={[d['day'] for d in backtest_data2['days']]}  total_pnl={total2:.2f}")
+
     reconcile_report = None
     if log is not None and backtest_data is not None:
         from prosperity.tooling.reconcile import reconcile_backtest_to_official, summarize_reconcile_report
@@ -1260,8 +1456,10 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
 
     run_dash(log=log, log2=log2, backtest_data=backtest_data, data_dir=args.data_dir,
              log_path=args.log, log2_path=getattr(args, "log2", None),
-             backtest_json_path=backtest_json_path,
-             reconcile_report=reconcile_report)
+             backtest_json_path=backtest_json_path, backtest_json2_path=backtest_json2_path,
+             backtest_data2=backtest_data2,
+             reconcile_report=reconcile_report,
+             price_height_inc=args.inc_height)
     return 0
 
 
