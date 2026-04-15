@@ -51,8 +51,8 @@ def _load_registry():
     from prosperity.strategies.round_1.leo_fusion_c import LeoFusionCStrategy
     from prosperity.strategies.round_1.leo_fusion_d import LeoFusionDStrategy
     from prosperity.strategies.avellaneda_stoikov import AvellanedaStoikovStrategy
-    from prosperity.strategies.mm_first import MMFirstStrategy
-    from prosperity.strategies.mean_reversion import MeanReversionStrategy
+    from prosperity.strategies.round_1.mm_first import MMFirstStrategy
+    from prosperity.strategies.round_1.mean_reversion import MeanReversionStrategy
     from prosperity.strategies.zscore import ZScoreStrategy
     from prosperity.strategies.buy_and_hold import BuyAndHoldStrategy
     from prosperity.strategies.stat_arb import StatArbStrategy
