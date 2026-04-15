@@ -540,8 +540,8 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 pct_kept_for_takers=0.1,  # capacity reserved for taker orders
                 mid_smooth_window=50,
                 mid_smooth_half_life=10,
-                taker_buy_threshold = 9_990,  # classify taker buys at >= this price
-                taker_sell_threshold= 10_025,
+                taker_buy_threshold = 9000,  # classify taker buys at >= this price
+                taker_sell_threshold= 11000,
 
                 gap_trigger_min=10,           # min tick gap L1→L2 to fire gap exploit
                 gap_trigger_max_vol_pct=0.2, # L1 "thin" threshold: 10% of limit (=8 units)
@@ -565,6 +565,79 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 gap_trigger_max_vol_pct=0.10,
                 gap_trigger_confirm_ticks=2,
 
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+        },
+    },
+    "tibo_mean_rev": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="mean_reversion",
+                band_window=200,          # rolling window size M
+                band_rank=10,             # N-th largest/smallest for upper/lower band
+                exit_band_pct=0.5,        # exit when price reverts to midpoint of bands
+                min_band_width=0,         # skip entry if pS-pL < this (0 = always enter)
+                maker_size_base_pct=0.5,  # base order size as % of position limit
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="mean_reversion",
+                band_window=200,
+                band_rank=10,
+                exit_band_pct=0.5,
+                min_band_width=0,
+                maker_size_base_pct=0.5,
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+        },
+    },
+    "tibo_zscore": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="zscore",
+                # z-score signal
+                zscore_window=25,          # rolling window for mean/std
+                zscore_threshold=2,       # |z| must exceed this to tilt sizes
+                zscore_size_scale=0.5,      # scale per unit of excess z (1 + 0.5 * excess)
+                zscore_max_scale=2.0,       # cap on the size multiplier
+                # quoting
+                inv_step_threshold=0.8,
+                take_edge=.5,
+                maker_size_base_pct=0.5,
+                pct_kept_for_takers=0.2,
+                mid_smooth_window=50,
+                mid_smooth_half_life=10,
+                
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="zscore",
+                zscore_window=100,
+                zscore_threshold=1.0,
+                zscore_size_scale=0.5,
+                zscore_max_scale=3.0,
+                inv_step_threshold=0.8,
+                take_edge=1.0,
+                maker_size_base_pct=0.5,
+                pct_kept_for_takers=0.2,
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
                 ts_increment=100,
                 last_ts_value=99900,
                 log_flush_ts=1000,
