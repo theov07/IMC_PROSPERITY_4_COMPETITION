@@ -540,8 +540,8 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 pct_kept_for_takers=0.1,  # capacity reserved for taker orders
                 mid_smooth_window=50,
                 mid_smooth_half_life=10,
-                taker_buy_threshold = 9_990,  # classify taker buys at >= this price
-                taker_sell_threshold= 10_025,
+                taker_buy_threshold = 9990,  # classify taker buys at >= this price
+                taker_sell_threshold= 10025,
 
                 gap_trigger_min=10,           # min tick gap L1→L2 to fire gap exploit
                 gap_trigger_max_vol_pct=0.2, # L1 "thin" threshold: 10% of limit (=8 units)
@@ -565,6 +565,79 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 gap_trigger_max_vol_pct=0.10,
                 gap_trigger_confirm_ticks=2,
 
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+        },
+    },
+    "tibo_mean_rev": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="mean_reversion",
+                band_window=200,          # rolling window size M
+                band_rank=10,             # N-th largest/smallest for upper/lower band
+                exit_band_pct=0.5,        # exit when price reverts to midpoint of bands
+                min_band_width=0,         # skip entry if pS-pL < this (0 = always enter)
+                maker_size_base_pct=0.5,  # base order size as % of position limit
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="mean_reversion",
+                band_window=200,
+                band_rank=10,
+                exit_band_pct=0.5,
+                min_band_width=0,
+                maker_size_base_pct=0.5,
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+        },
+    },
+    "tibo_zscore": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="zscore",
+                # z-score signal
+                zscore_window=25,          # rolling window for mean/std
+                zscore_threshold=2,       # |z| must exceed this to tilt sizes
+                zscore_size_scale=0.5,      # scale per unit of excess z (1 + 0.5 * excess)
+                zscore_max_scale=2.0,       # cap on the size multiplier
+                # quoting
+                inv_step_threshold=0.8,
+                take_edge=.5,
+                maker_size_base_pct=0.5,
+                pct_kept_for_takers=0.2,
+                mid_smooth_window=50,
+                mid_smooth_half_life=10,
+                
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="zscore",
+                zscore_window=100,
+                zscore_threshold=1.0,
+                zscore_size_scale=0.5,
+                zscore_max_scale=3.0,
+                inv_step_threshold=0.8,
+                take_edge=1.0,
+                maker_size_base_pct=0.5,
+                pct_kept_for_takers=0.2,
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
                 ts_increment=100,
                 last_ts_value=99900,
                 log_flush_ts=1000,
@@ -3467,29 +3540,228 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
             ),
         },
     },
-    # V41: detrend + rolling-window dip-buy signal.
-    # Fits a linear regression to the mid price history, removes the trend,
-    # and buys with a fixed size whenever the detrended price is among the
-    # cheapest 5 of the last 100 ticks.
-    "theo_round1_v41": {
+
+    # ── Round 1 Leo fusion candidates (IPR only, ASH disabled) ──────────
+    "leo_fusion_a": {
         1: {
             "ASH_COATED_OSMIUM": None,
             "INTARIAN_PEPPER_ROOT": _override(
                 ROUND_1["INTARIAN_PEPPER_ROOT"],
-                strategy="trend_carry_mm_v41",
-                reg_window=200,
-                rolling_window_size=100,
-                buy_rank_threshold=5,
-                detrend_buy_size=20,
-                detrend_sell_edge=6.0,
-                detrend_sell_size=2,
-                position_target=80,
-                log_flush_ts=10000,
-                total_ticks=10000000,
+                strategy="leo_fusion_a",
+                maker_size=80,
+                tighten_ticks=1,
+                # V5 block-OLS signal
+                seed_slope=0.1015,
+                block_size=100,
+                min_completed_blocks=5,
+                reg_horizon=25,
+                reg_r2_floor=0.85,
+                reg_r2_cap=0.98,
+                reg_rmse_floor=1.0,
+                reg_residual_reversion=0.25,
+                bootstrap_confidence=0.55,
+                startup_target=40,
+                startup_end_ts=30000,
+                # V22 quoting / take / opp_sell
+                bull_threshold=1.0,
+                bull_min_confidence=0.4,
+                target_bull=50,
+                bid_spread_bull=1.0,
+                ask_spread_bull=7.0,
+                neut_spread=3.0,
+                take_buy_edge_bull=-2.0,
+                take_sell_edge_bull=12.0,
+                take_buy_edge_neut=2.0,
+                take_sell_edge_neut=2.0,
+                unwind_take_edge=8.0,
+                unwind_min_position=20,
+                rich_block_residual_z=0.9,
+                inventory_soft_ratio=0.40,
+                aggravate_min_frac=0.20,
+                unwind_boost_frac=0.40,
+                opp_sell_edge=1.0,
+                opp_sell_min_position=80,
+                opp_sell_take_size=2,
+                opp_sell_cooldown_ticks=10,
+                log_flush_ts=0,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_fusion_b": {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="leo_fusion_b",
+                maker_size=80,
+                tighten_ticks=1,
+                seed_slope=0.1015,
+                block_size=100,
+                min_completed_blocks=5,
+                reg_horizon=25,
+                reg_r2_floor=0.85,
+                reg_r2_cap=0.98,
+                reg_rmse_floor=1.0,
+                reg_residual_reversion=0.25,
+                bootstrap_confidence=0.55,
+                # V5 inventory target params
+                trend_inv_per_tick=26.0,
+                resid_inv_per_z=7.0,
+                trend_inventory_cap=74,
+                startup_target=40,
+                startup_end_ts=30000,
+                target_gap_scale=26.0,
+                trend_buy_boost_per_tick=0.24,
+                trend_sell_boost_per_tick=0.20,
+                cheap_buy_boost_per_z=0.18,
+                rich_sell_boost_per_z=0.14,
+                aggravate_cut=0.04,
+                one_sided_target_gap=24,
+                strong_trend_ticks=1.1,
+                very_strong_trend_ticks=2.0,
+                cheap_residual_z=0.9,
+                rich_residual_z=1.0,
+                max_bid_extra_ticks=2,
+                max_ask_relax_ticks=2,
+                # V18 quoting + take
+                bull_threshold=1.0,
+                bid_spread_bull=1.0,
+                ask_spread_bull=9.0,
+                neut_spread_bid=2.0,
+                neut_spread_ask=5.0,
+                take_buy_edge_bull=-8.0,
+                take_sell_edge_bull=6.0,
+                take_buy_edge_neut=2.0,
+                take_sell_edge_neut=2.0,
+                unwind_take_edge=10.0,
+                log_flush_ts=0,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_fusion_c": {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="leo_fusion_c",
+                maker_size=80,
+                tighten_ticks=1,
+                seed_slope=0.1015,
+                block_size=100,
+                min_completed_blocks=5,
+                reg_horizon=25,
+                reg_r2_floor=0.85,
+                reg_r2_cap=0.98,
+                reg_rmse_floor=1.0,
+                reg_residual_reversion=0.25,
+                bootstrap_confidence=0.55,
+                trend_inv_per_tick=26.0,
+                resid_inv_per_z=7.0,
+                trend_inventory_cap=74,
+                startup_target=40,
+                startup_end_ts=30000,
+                target_gap_scale=26.0,
+                trend_buy_boost_per_tick=0.24,
+                trend_sell_boost_per_tick=0.20,
+                cheap_buy_boost_per_z=0.18,
+                rich_sell_boost_per_z=0.14,
+                aggravate_cut=0.04,
+                one_sided_target_gap=24,
+                strong_trend_ticks=1.1,
+                very_strong_trend_ticks=2.0,
+                cheap_residual_z=0.9,
+                rich_residual_z=1.0,
+                max_bid_extra_ticks=2,
+                max_ask_relax_ticks=2,
+                # Fusion C take params
+                aggressive_take_edge=2.0,
+                aggressive_take_size=8,
+                log_flush_ts=0,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        },
+    },
+    "leo_fusion_d": {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="leo_fusion_d",
+                maker_size=80,
+                tighten_ticks=1,
+                seed_slope=0.1015,
+                block_size=100,
+                min_completed_blocks=5,
+                reg_horizon=25,
+                reg_r2_floor=0.85,
+                reg_r2_cap=0.98,
+                reg_rmse_floor=1.0,
+                reg_residual_reversion=0.25,
+                bootstrap_confidence=0.55,
+                trend_inv_per_tick=26.0,
+                resid_inv_per_z=7.0,
+                trend_inventory_cap=74,
+                startup_target=40,
+                startup_end_ts=30000,
+                target_gap_scale=26.0,
+                trend_buy_boost_per_tick=0.24,
+                trend_sell_boost_per_tick=0.20,
+                cheap_buy_boost_per_z=0.18,
+                rich_sell_boost_per_z=0.14,
+                aggravate_cut=0.04,
+                one_sided_target_gap=24,
+                strong_trend_ticks=1.1,
+                very_strong_trend_ticks=2.0,
+                cheap_residual_z=0.9,
+                rich_residual_z=1.0,
+                max_bid_extra_ticks=2,
+                max_ask_relax_ticks=2,
+                # Regime thresholds
+                regime_confidence_floor=0.5,
+                bootstrap_target_bull=40,
+                # V22 shared quote params for bootstrap regime
+                bid_spread_bull=1.0,
+                ask_spread_bull=7.0,
+                neut_spread=3.0,
+                # V18 shared quote params for strong regime
+                ask_spread_bull_wide=9.0,
+                neut_spread_bid=2.0,
+                neut_spread_ask=5.0,
+                # Strong regime take
+                strong_take_edge=2.0,
+                strong_take_size=8,
+                # Sizing
+                inventory_soft_ratio=0.40,
+                aggravate_min_frac=0.20,
+                unwind_boost_frac=0.40,
+                log_flush_ts=0,
+                ts_increment=100,
+                last_ts_value=999900,
             ),
         },
     },
 }
+
+
+# ── V2 variants (block_size=200, R^2 ~0.99; rebalanced trend/residual weights
+#    so residual_z can drive sells on spikes instead of being dominated by trend).
+for _base in ("leo_fusion_a", "leo_fusion_b", "leo_fusion_c", "leo_fusion_d"):
+    MEMBER_OVERRIDES[f"{_base}_v2"] = {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                MEMBER_OVERRIDES[_base][1]["INTARIAN_PEPPER_ROOT"],
+                block_size=200,
+                trend_inv_per_tick=14.0,
+                resid_inv_per_z=18.0,
+            ),
+        },
+    }
 
 
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
