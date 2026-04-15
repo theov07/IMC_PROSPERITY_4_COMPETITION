@@ -207,7 +207,7 @@ class MarketDataLoader:
         prefix = f"prices_round_{round_num}_day_"
         for file_path in self._round_dir(round_num).glob(f"{prefix}*.csv"):
             days.append(file_path.stem.replace(prefix, ""))
-        return sorted(days)
+        return sorted(days, key=lambda d: int(d))
 
     @staticmethod
     def empty_observation() -> Observation:

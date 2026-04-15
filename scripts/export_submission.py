@@ -47,6 +47,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "round1_regression_mm_v3": ("prosperity/strategies/round_1/regression_mm_v3.py", "Round1RegressionMMV3Strategy"),
     "round1_regression_mm_v4": ("prosperity/strategies/round_1/regression_mm_v4.py", "Round1RegressionMMV4Strategy"),
     "round1_regression_mm_v5": ("prosperity/strategies/round_1/regression_mm_v5.py", "Round1RegressionMMV5Strategy"),
+    "leo_fusion_a": ("prosperity/strategies/round_1/leo_fusion_a.py", "LeoFusionAStrategy"),
+    "leo_fusion_b": ("prosperity/strategies/round_1/leo_fusion_b.py", "LeoFusionBStrategy"),
+    "leo_fusion_c": ("prosperity/strategies/round_1/leo_fusion_c.py", "LeoFusionCStrategy"),
+    "leo_fusion_d": ("prosperity/strategies/round_1/leo_fusion_d.py", "LeoFusionDStrategy"),
     "naive_tight_mm_v10": ("prosperity/strategies/naive_tight_mm_v10.py", "NaiveTightMarketMakerV10Strategy"),
     "naive_tight_mm_v11": ("prosperity/strategies/naive_tight_mm_v11.py", "NaiveTightMarketMakerV11Strategy"),
     "naive_tight_mm_v12": ("prosperity/strategies/naive_tight_mm_v12.py", "NaiveTightMarketMakerV12Strategy"),
@@ -72,6 +76,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "conversion_arb":     ("prosperity/strategies/conversion_arb.py",     "ConversionArbStrategy"),
     "signal_trader":      ("prosperity/strategies/signal_trader.py",      "SignalTraderStrategy"),
     "mm_first":           ("prosperity/strategies/mm_first.py",           "MMFirstStrategy"),
+    "mean_reversion":     ("prosperity/strategies/mean_reversion.py",     "MeanReversionStrategy"),
+    "zscore":             ("prosperity/strategies/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/buy_and_hold.py",       "BuyAndHoldStrategy"),
 }
 
@@ -81,6 +87,14 @@ CORE_MODULES = [
     "prosperity/persistence.py",
     "prosperity/strategies/base.py",
 ]
+
+# Extra strategy-module dependencies (inlined before the strategy file that needs them).
+STRATEGY_DEPS: dict[str, list[str]] = {
+    "leo_fusion_a": ["round1_regression_mm_v5"],
+    "leo_fusion_b": ["round1_regression_mm_v5"],
+    "leo_fusion_c": ["round1_regression_mm_v5"],
+    "leo_fusion_d": ["round1_regression_mm_v5"],
+}
 
 
 # ── Source processing ──────────────────────────────────────────────────────
@@ -311,9 +325,22 @@ def main() -> int:
     parser.add_argument("--member", default="champion", choices=valid_members)
     parser.add_argument("--round", type=int, default=0)
     parser.add_argument("--output", default=None, help="Output file path")
+    parser.add_argument(
+        "--product",
+        nargs="*",
+        metavar="SYMBOL",
+        help="Only include these product(s), e.g. --product ASH_COATED_OSMIUM",
+    )
     args = parser.parse_args()
 
     config = get_round_config(args.round, args.member)
+    if args.product:
+        unknown_products = set(args.product) - set(config)
+        if unknown_products:
+            print(f"ERROR: unknown product(s): {sorted(unknown_products)}", file=sys.stderr)
+            print(f"Available: {sorted(config.keys())}", file=sys.stderr)
+            return 1
+        config = {k: v for k, v in config.items() if k in args.product}
 
     # Determine which strategy modules to inline.
     needed: set[str] = {pc.strategy for pc in config.values()}
@@ -323,8 +350,21 @@ def main() -> int:
         print(f"Add them to STRATEGY_REGISTRY in {__file__}", file=sys.stderr)
         return 1
 
-    # Ordered list: core first, then one file per needed strategy (sorted for determinism).
-    module_files = list(CORE_MODULES) + [STRATEGY_REGISTRY[n][0] for n in sorted(needed)]
+    # Resolve dependencies: prepend each needed strategy's deps.
+    resolved: list[str] = []
+    for n in sorted(needed):
+        for dep in STRATEGY_DEPS.get(n, []):
+            if dep not in resolved:
+                resolved.append(dep)
+        if n not in resolved:
+            resolved.append(n)
+    unknown_dep = set(resolved) - set(STRATEGY_REGISTRY)
+    if unknown_dep:
+        print(f"ERROR: STRATEGY_DEPS references unknown: {sorted(unknown_dep)}", file=sys.stderr)
+        return 1
+
+    # Ordered list: core first, then one file per needed strategy (deps before dependents).
+    module_files = list(CORE_MODULES) + [STRATEGY_REGISTRY[n][0] for n in resolved]
 
     # Inline each module, collecting external imports along the way.
     all_ext_imports: list[str] = []
