@@ -60,6 +60,7 @@ def _load_registry():
     from prosperity.strategies.conversion_arb import ConversionArbStrategy
     from prosperity.strategies.naive_tight_mm_v19 import BookFollowingTrendMMV19Strategy
     from prosperity.strategies.signal_trader import SignalTraderStrategy
+    from prosperity.strategies.trend_carry_window import TrendCarryWindowStrategy
 
     _REGISTRY["market_maker"] = MarketMakerStrategy
     _REGISTRY["naive_tight_mm"] = NaiveTightMarketMakerStrategy
@@ -107,6 +108,7 @@ def _load_registry():
     _REGISTRY["conversion_arb"] = ConversionArbStrategy
     _REGISTRY["book_following_trend_mm_v19"] = BookFollowingTrendMMV19Strategy
     _REGISTRY["signal_trader"] = SignalTraderStrategy
+    _REGISTRY["trend_carry_window"] = TrendCarryWindowStrategy
     _LOADED = True
 
 
