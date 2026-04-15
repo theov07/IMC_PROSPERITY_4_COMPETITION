@@ -66,7 +66,7 @@ def _load_registry():
     from prosperity.strategies.naive_tight_mm_v19 import BookFollowingTrendMMV19Strategy
     from prosperity.strategies.signal_trader import SignalTraderStrategy
     from prosperity.strategies.trend_carry_window import TrendCarryWindowStrategy
-    from prosperity.strategies.osmium_mr import OsmiumMeanRevStrategy
+    from prosperity.strategies.metal_winner.osmium_mr import OsmiumMeanRevStrategy
     from prosperity.strategies.osmium_mr_v2 import OsmiumMeanRevV2Strategy
 
     _REGISTRY["market_maker"] = MarketMakerStrategy
