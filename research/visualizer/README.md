@@ -22,6 +22,12 @@ Interactive dashboard:
 .venv\Scripts\python research\visualizer\dashboard.py
 ```
 
+Round-specific dashboard with nested data folders:
+
+```bash
+.venv\Scripts\python research\visualizer\dashboard.py --round 1
+```
+
 Optional order-book animation:
 
 ```bash

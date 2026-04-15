@@ -9,7 +9,7 @@ Priority list for turning this repository from a solid framework into a competit
 - Add an experiment registry: strategy, round, params, days tested, total pnl, per-product pnl, notes, submission id.
 - Add backtest-json pairing confidence and better auto-discovery explanations in the dashboard UI itself.
 -Notebook 
--Vérifier que c'est LIFO et pas LIFO qui a été implémenté 
+-Vérifier que c'est FIFO et pas LIFO qui a été implémenté 
 ## High Value
 
 - Make round activation faster: one place to fill products, limits, conversions, and strategy mappings when a new round opens.

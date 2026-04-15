@@ -1,7 +1,9 @@
 import unittest
 
 from datamodel import Listing, Observation, Order, OrderDepth, Trade, TradingState
+from prosperity.config import MEMBER_OVERRIDES
 from prosperity.tooling.backtest import BacktestEngine, TradeMatchingMode, aggregate_day_summaries
+from prosperity.tooling.grid_search import _apply_overrides
 
 import main
 
@@ -124,6 +126,27 @@ class PassiveFillRuleTests(unittest.TestCase):
         )
 
         self.assertEqual(sum(fill.quantity for fill in fills), 5)
+
+
+class GridSearchOverrideTests(unittest.TestCase):
+    def test_apply_overrides_preserves_removed_products(self):
+        patched = _apply_overrides(
+            1,
+            {"INTARIAN_PEPPER_ROOT": {"enable_selective_take": 1.0}},
+            member="leo_reg_lin_round1_v5",
+        )
+
+        self.assertIn("ASH_COATED_OSMIUM", patched)
+        self.assertIsNone(patched["ASH_COATED_OSMIUM"])
+        self.assertIn("INTARIAN_PEPPER_ROOT", patched)
+        self.assertEqual(patched["INTARIAN_PEPPER_ROOT"].params["enable_selective_take"], 1.0)
+
+    def test_backtest_engine_position_limits_use_member_config(self):
+        engine = BacktestEngine("data", "leo_reg_lin_round1_v5", round_num=1)
+        limits = engine._get_position_limits()
+
+        self.assertIn("INTARIAN_PEPPER_ROOT", limits)
+        self.assertNotIn("ASH_COATED_OSMIUM", limits)
 
 
 if __name__ == "__main__":
