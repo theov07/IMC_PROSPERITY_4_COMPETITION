@@ -79,6 +79,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "mean_reversion":     ("prosperity/strategies/mean_reversion.py",     "MeanReversionStrategy"),
     "zscore":             ("prosperity/strategies/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/buy_and_hold.py",       "BuyAndHoldStrategy"),
+    "trend_carry_window": ("prosperity/strategies/trend_carry_window.py", "TrendCarryWindowStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).

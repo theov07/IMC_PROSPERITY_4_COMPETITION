@@ -63,7 +63,7 @@ class MMFirstStrategy(BaseStrategy):
         ask_price: int | None = (book.best_ask - 1) if book.best_ask is not None else None
         quote_level = "L1"
 
-        if inv_ratio >= step_threshold:
+        if inv_ratio >= step_threshold: # TODO test if its useful
             # Long: ease off buying, stay aggressive on selling
             if book.best_bid is not None:
                 bid_price = book.best_bid   # join, no improvement
