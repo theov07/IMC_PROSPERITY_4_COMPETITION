@@ -48,6 +48,11 @@ def _load_registry():
     from prosperity.strategies.round_1.regression_mm_v5 import Round1RegressionMMV5Strategy
     from prosperity.strategies.round_1.leo_fusion_a import LeoFusionAStrategy
     from prosperity.strategies.round_1.leo_fusion_b import LeoFusionBStrategy
+    from prosperity.strategies.round_1.leo_fusion_b_v3 import LeoFusionBV3Strategy
+    from prosperity.strategies.round_1.leo_fusion_b_v4 import LeoFusionBV4Strategy
+    from prosperity.strategies.round_1.leo_fusion_b_v5 import LeoFusionBV5Strategy
+    from prosperity.strategies.round_1.leo_fusion_b_v6 import LeoFusionBV6Strategy
+    from prosperity.strategies.round_1.leo_fusion_b_v7 import LeoFusionBV7Strategy
     from prosperity.strategies.round_1.leo_fusion_c import LeoFusionCStrategy
     from prosperity.strategies.round_1.leo_fusion_d import LeoFusionDStrategy
     from prosperity.strategies.avellaneda_stoikov import AvellanedaStoikovStrategy
@@ -61,6 +66,8 @@ def _load_registry():
     from prosperity.strategies.naive_tight_mm_v19 import BookFollowingTrendMMV19Strategy
     from prosperity.strategies.signal_trader import SignalTraderStrategy
     from prosperity.strategies.trend_carry_window import TrendCarryWindowStrategy
+    from prosperity.strategies.osmium_mr import OsmiumMeanRevStrategy
+    from prosperity.strategies.osmium_mr_v2 import OsmiumMeanRevV2Strategy
 
     _REGISTRY["market_maker"] = MarketMakerStrategy
     _REGISTRY["naive_tight_mm"] = NaiveTightMarketMakerStrategy
@@ -96,6 +103,11 @@ def _load_registry():
     _REGISTRY["round1_regression_mm_v5"] = Round1RegressionMMV5Strategy
     _REGISTRY["leo_fusion_a"] = LeoFusionAStrategy
     _REGISTRY["leo_fusion_b"] = LeoFusionBStrategy
+    _REGISTRY["leo_fusion_b_v3"] = LeoFusionBV3Strategy
+    _REGISTRY["leo_fusion_b_v4"] = LeoFusionBV4Strategy
+    _REGISTRY["leo_fusion_b_v5"] = LeoFusionBV5Strategy
+    _REGISTRY["leo_fusion_b_v6"] = LeoFusionBV6Strategy
+    _REGISTRY["leo_fusion_b_v7"] = LeoFusionBV7Strategy
     _REGISTRY["leo_fusion_c"] = LeoFusionCStrategy
     _REGISTRY["leo_fusion_d"] = LeoFusionDStrategy
     _REGISTRY["avellaneda_stoikov"] = AvellanedaStoikovStrategy
@@ -109,6 +121,8 @@ def _load_registry():
     _REGISTRY["book_following_trend_mm_v19"] = BookFollowingTrendMMV19Strategy
     _REGISTRY["signal_trader"] = SignalTraderStrategy
     _REGISTRY["trend_carry_window"] = TrendCarryWindowStrategy
+    _REGISTRY["osmium_mr"] = OsmiumMeanRevStrategy
+    _REGISTRY["osmium_mr_v2"] = OsmiumMeanRevV2Strategy
     _LOADED = True
 
 

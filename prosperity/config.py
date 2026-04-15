@@ -3657,7 +3657,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 opp_sell_min_position=80,
                 opp_sell_take_size=2,
                 opp_sell_cooldown_ticks=10,
-                log_flush_ts=0,
+                log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
             ),
@@ -3710,7 +3710,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 take_buy_edge_neut=2.0,
                 take_sell_edge_neut=2.0,
                 unwind_take_edge=10.0,
-                log_flush_ts=0,
+                log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
             ),
@@ -3754,7 +3754,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 # Fusion C take params
                 aggressive_take_edge=2.0,
                 aggressive_take_size=8,
-                log_flush_ts=0,
+                log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
             ),
@@ -3813,7 +3813,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 inventory_soft_ratio=0.40,
                 aggravate_min_frac=0.20,
                 unwind_boost_frac=0.40,
-                log_flush_ts=0,
+                log_flush_ts=1000,
                 ts_increment=100,
                 last_ts_value=999900,
             ),
@@ -3836,6 +3836,152 @@ for _base in ("leo_fusion_a", "leo_fusion_b", "leo_fusion_c", "leo_fusion_d"):
             ),
         },
     }
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v3"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v3",
+            block_size=200,
+            v3_take_buy_edge=2.0,
+            v3_take_sell_edge=2.0,
+            v3_passive_spread=3.0,
+            v3_passive_size=80,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v4"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v4",
+            v4_regime_trend_cut=1.0,
+            v4_buy_z=1.0,
+            v4_sell_z=1.0,
+            v4_slope_bias_k=25.0,
+            v4_passive_spread=3.0,
+            v4_passive_size=80,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v5"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v5",
+            v5_core_target=80,
+            v5_scalp_range=10,
+            v5_scalp_edge=20.0,
+            v5_scalp_spread=20.0,
+            v5_accum_take_edge=0.0,
+            v5_passive_size=20,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v6"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v6",
+            v6_core_target=80,
+            v6_scalp_range=10,
+            v6_scalp_edge=6.0,
+            v6_scalp_size=10,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v7"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v7",
+            v7_core_target=80,
+            v7_scalp_range=10,
+            v7_sell_offset=15.0,
+            v7_rebuy_margin=3.0,
+            v7_scalp_size=5,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_only"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=0.6,
+            anchor_alpha=0.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v1"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=0.6,
+            anchor_alpha=0.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v2"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v2",
+            take_edge=2.0,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.8,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=10.0,
+            ar_gain=1.2,
+            anchor_alpha=0.0,
+            take_abs_buy=9990,
+            take_abs_sell=10025,
+            gap_trigger_min=10,
+            gap_trigger_max_vol_pct=0.15,
+            gap_trigger_confirm_ticks=2,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
 
 
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
