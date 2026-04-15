@@ -798,12 +798,10 @@ def participant_aware_summary(log: OfficialLog, symbol: str) -> dict:
     }
 
 
-def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, edge: float = 1.0) -> Path:
-    symbol_activities, symbol_trades, position_plot, buy_opportunities, sell_opportunities = _prepare_symbol_review_data(
-        log,
-        symbol,
-        edge,
-    )
+def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, edge: float = 1.0, group: str | None = None) -> Path:
+    symbol_activities = log.activities.loc[log.activities["product"] == symbol].copy()
+    if symbol_activities.empty:
+        raise ValueError(f"No activity rows found for product {symbol}")
 
     symbol_activities = _compute_activity_features(symbol_activities.sort_values("timestamp"))
     symbol_trades = _submission_trades(log.trades, symbol)
@@ -998,7 +996,9 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
     pos_ax.grid(alpha=0.15)
     pos_ax.legend(loc="upper left")
 
-    output_path = Path(output_dir) / log.analysis_group / f"{log.submission_id}_{symbol}_review.png"
+    group_name = group if group is not None else log.analysis_group
+    group_dir = Path(output_dir) / group_name if group_name else Path(output_dir)
+    output_path = group_dir / f"{log.submission_id}_{symbol}_review.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.tight_layout()
     figure.savefig(output_path, dpi=160)
@@ -1290,6 +1290,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--backtest-json", help="Optional local backtest JSON to auto-reconcile against (auto-discovery is attempted from artifacts/)")
     parser.add_argument("--symbol", action="append", help="Product symbol to plot, can be passed multiple times")
     parser.add_argument("--outdir", default="artifacts/analysis", help="Directory that will receive generated plots")
+    parser.add_argument("--group", default=None, help="Override subfolder name under --outdir (default: parent folder of log)")
     parser.add_argument("--edge", type=float, default=1.0, help="Opportunity threshold around fair value")
     parser.add_argument("--plotly", action="store_true", help="Generate an interactive Plotly HTML review instead of a PNG")
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -1340,6 +1341,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
             output_path = plot_symbol_review_plotly(log, symbol, args.outdir, edge=args.edge)
         else:
             output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge)
+        output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge, group=args.group)
         print(f"saved {output_path}")
 
     return 0
