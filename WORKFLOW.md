@@ -151,13 +151,23 @@ Check what's already configured in [prosperity/config.py](prosperity/config.py):
 cat prosperity/config.py
 ```
 
-Available strategies:
-- `market_maker` — Classic market making with fair value + inventory skew (**most used for round 0**)
-- `avellaneda_stoikov` — Inventory-aware quoting model (more sophisticated MM)
+Generic strategies:
+- `market_maker` — Classic market making with fair value + inventory skew
+- `avellaneda_stoikov` — Inventory-aware quoting model
 - `stat_arb` — Statistical arbitrage on baskets
 - `black_scholes` — Options/voucher pricing
 - `conversion_arb` — Arbitrage on conversions
 - `signal_trader` — Directional strategy following signals
+- `mm_first`, `buy_and_hold` — baselines
+
+Round-0 iterative quoters (naive tight-MM family, `prosperity/strategies/naive_tight_mm*.py`):
+- `naive_tight_mm`, `naive_tight_mm_v2` … `v12`, `v14` … `v17`, `v23`, `v24`
+- `trend_biased_mm_v18`, `book_following_trend_mm_v19/v20/v21`
+
+Round-1 research strategies (`prosperity/strategies/round_1/`):
+- `round1_regression_top_book`, `round1_regression_mm_v3/v4/v5`
+
+Check the full registry in [prosperity/strategies/__init__.py](prosperity/strategies/__init__.py).
 
 #### Step 2b: Create Your Config Variant
 

@@ -167,6 +167,7 @@ class DaySummary:
 class BacktestEngine:
     def __init__(self, data_dir: str | Path, strategy_module: str, round_num: int = 0):
         self.loader = MarketDataLoader(data_dir)
+        self.strategy_name = strategy_module
         self.strategy_module = STRATEGY_ALIASES.get(strategy_module, strategy_module)
         self.round_num = round_num
 
@@ -177,7 +178,8 @@ class BacktestEngine:
         return module.Trader()
 
     def _get_position_limits(self) -> Dict[str, int]:
-        config = get_round_config(self.round_num)
+        member = self.strategy_name if self.strategy_name in MEMBER_OVERRIDES else "champion"
+        config = get_round_config(self.round_num, member)
         return {sym: pc.position_limit for sym, pc in config.items()}
 
     @staticmethod
@@ -1407,6 +1409,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     days = args.days or engine.loader.available_days(args.round)
     if not days:
         raise RuntimeError("No price files found in the selected data directory.")
+    days = sorted(days, key=lambda d: int(d))
 
     summaries = [engine.run_day(day, mode=mode) for day in days]
 

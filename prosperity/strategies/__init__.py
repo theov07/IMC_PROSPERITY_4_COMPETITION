@@ -24,12 +24,41 @@ def _load_registry():
     from prosperity.strategies.naive_tight_mm_v7 import NaiveTightMarketMakerV7Strategy
     from prosperity.strategies.naive_tight_mm_v8 import NaiveTightMarketMakerV8Strategy
     from prosperity.strategies.naive_tight_mm_v9 import NaiveTightMarketMakerV9Strategy
+    from prosperity.strategies.naive_tight_mm_v10 import NaiveTightMarketMakerV10Strategy
+    from prosperity.strategies.naive_tight_mm_v11 import NaiveTightMarketMakerV11Strategy
+    from prosperity.strategies.naive_tight_mm_v12 import NaiveTightMarketMakerV12Strategy
+    from prosperity.strategies.naive_tight_mm_v14 import NaiveTightMarketMakerV14Strategy
+    from prosperity.strategies.naive_tight_mm_v15 import NaiveTightMarketMakerV15Strategy
+    from prosperity.strategies.naive_tight_mm_v16 import NaiveTightMarketMakerV16Strategy
+    from prosperity.strategies.naive_tight_mm_v17 import NaiveTightMarketMakerV17Strategy
+    from prosperity.strategies.naive_tight_mm_v18 import TrendBiasedMMV18Strategy
+    from prosperity.strategies.naive_tight_mm_v20 import BookFollowingTrendMMV20Strategy
+    from prosperity.strategies.naive_tight_mm_v21 import BookFollowingTrendMMV21Strategy
+    from prosperity.strategies.naive_tight_mm_v23 import NaiveTightMarketMakerV23Strategy
+    from prosperity.strategies.naive_tight_mm_v24 import NaiveTightMarketMakerV24Strategy
+    from prosperity.strategies.naive_tight_mm_v25 import TrendCarryMMV25Strategy
+    from prosperity.strategies.naive_tight_mm_v26 import TrendCarryMMV26Strategy
+    from prosperity.strategies.naive_tight_mm_v34 import TrendCarryMMV34Strategy
+    from prosperity.strategies.naive_tight_mm_v37 import TrendCarryMMV37Strategy
+    from prosperity.strategies.naive_tight_mm_v38 import TrendCarryMMV38Strategy
+    from prosperity.strategies.naive_tight_mm_v41 import TrendCarryMMV41Strategy
+    from prosperity.strategies.round_1.regression_top_book import Round1RegressionTopBookStrategy
+    from prosperity.strategies.round_1.regression_mm_v3 import Round1RegressionMMV3Strategy
+    from prosperity.strategies.round_1.regression_mm_v4 import Round1RegressionMMV4Strategy
+    from prosperity.strategies.round_1.regression_mm_v5 import Round1RegressionMMV5Strategy
+    from prosperity.strategies.round_1.leo_fusion_a import LeoFusionAStrategy
+    from prosperity.strategies.round_1.leo_fusion_b import LeoFusionBStrategy
+    from prosperity.strategies.round_1.leo_fusion_c import LeoFusionCStrategy
+    from prosperity.strategies.round_1.leo_fusion_d import LeoFusionDStrategy
     from prosperity.strategies.avellaneda_stoikov import AvellanedaStoikovStrategy
-    from prosperity.strategies.mm_first import MMFirstStrategy
+    from prosperity.strategies.round_1.mm_first import MMFirstStrategy
+    from prosperity.strategies.round_1.mean_reversion import MeanReversionStrategy
+    from prosperity.strategies.zscore import ZScoreStrategy
     from prosperity.strategies.buy_and_hold import BuyAndHoldStrategy
     from prosperity.strategies.stat_arb import StatArbStrategy
     from prosperity.strategies.black_scholes import BlackScholesStrategy
     from prosperity.strategies.conversion_arb import ConversionArbStrategy
+    from prosperity.strategies.naive_tight_mm_v19 import BookFollowingTrendMMV19Strategy
     from prosperity.strategies.signal_trader import SignalTraderStrategy
 
     _REGISTRY["market_maker"] = MarketMakerStrategy
@@ -42,12 +71,41 @@ def _load_registry():
     _REGISTRY["naive_tight_mm_v7"] = NaiveTightMarketMakerV7Strategy
     _REGISTRY["naive_tight_mm_v8"] = NaiveTightMarketMakerV8Strategy
     _REGISTRY["naive_tight_mm_v9"] = NaiveTightMarketMakerV9Strategy
+    _REGISTRY["naive_tight_mm_v10"] = NaiveTightMarketMakerV10Strategy
+    _REGISTRY["naive_tight_mm_v11"] = NaiveTightMarketMakerV11Strategy
+    _REGISTRY["naive_tight_mm_v12"] = NaiveTightMarketMakerV12Strategy
+    _REGISTRY["naive_tight_mm_v14"] = NaiveTightMarketMakerV14Strategy
+    _REGISTRY["naive_tight_mm_v15"] = NaiveTightMarketMakerV15Strategy
+    _REGISTRY["naive_tight_mm_v16"] = NaiveTightMarketMakerV16Strategy
+    _REGISTRY["naive_tight_mm_v17"] = NaiveTightMarketMakerV17Strategy
+    _REGISTRY["trend_biased_mm_v18"] = TrendBiasedMMV18Strategy
+    _REGISTRY["book_following_trend_mm_v20"] = BookFollowingTrendMMV20Strategy
+    _REGISTRY["book_following_trend_mm_v21"] = BookFollowingTrendMMV21Strategy
+    _REGISTRY["naive_tight_mm_v23"] = NaiveTightMarketMakerV23Strategy
+    _REGISTRY["naive_tight_mm_v24"] = NaiveTightMarketMakerV24Strategy
+    _REGISTRY["trend_carry_mm_v25"] = TrendCarryMMV25Strategy
+    _REGISTRY["trend_carry_mm_v26"] = TrendCarryMMV26Strategy
+    _REGISTRY["trend_carry_mm_v34"] = TrendCarryMMV34Strategy
+    _REGISTRY["trend_carry_mm_v37"] = TrendCarryMMV37Strategy
+    _REGISTRY["trend_carry_mm_v38"] = TrendCarryMMV38Strategy
+    _REGISTRY["trend_carry_mm_v41"] = TrendCarryMMV41Strategy
+    _REGISTRY["round1_regression_top_book"] = Round1RegressionTopBookStrategy
+    _REGISTRY["round1_regression_mm_v3"] = Round1RegressionMMV3Strategy
+    _REGISTRY["round1_regression_mm_v4"] = Round1RegressionMMV4Strategy
+    _REGISTRY["round1_regression_mm_v5"] = Round1RegressionMMV5Strategy
+    _REGISTRY["leo_fusion_a"] = LeoFusionAStrategy
+    _REGISTRY["leo_fusion_b"] = LeoFusionBStrategy
+    _REGISTRY["leo_fusion_c"] = LeoFusionCStrategy
+    _REGISTRY["leo_fusion_d"] = LeoFusionDStrategy
     _REGISTRY["avellaneda_stoikov"] = AvellanedaStoikovStrategy
     _REGISTRY["mm_first"] = MMFirstStrategy
+    _REGISTRY["mean_reversion"] = MeanReversionStrategy
+    _REGISTRY["zscore"] = ZScoreStrategy
     _REGISTRY["buy_and_hold"] = BuyAndHoldStrategy
     _REGISTRY["stat_arb"] = StatArbStrategy
     _REGISTRY["black_scholes"] = BlackScholesStrategy
     _REGISTRY["conversion_arb"] = ConversionArbStrategy
+    _REGISTRY["book_following_trend_mm_v19"] = BookFollowingTrendMMV19Strategy
     _REGISTRY["signal_trader"] = SignalTraderStrategy
     _LOADED = True
 

@@ -399,6 +399,181 @@ def _compute_activity_features(activities: pd.DataFrame) -> pd.DataFrame:
     return features
 
 
+def _book_levels(columns: Iterable[str], side: str) -> list[int]:
+    prefix = f"{side}_price_"
+    levels: list[int] = []
+    for column in columns:
+        if not column.startswith(prefix):
+            continue
+        suffix = column[len(prefix):]
+        if suffix.isdigit():
+            levels.append(int(suffix))
+    return sorted(set(levels))
+
+
+def _max_executable_book_qty(row: pd.Series, side: str, price_limit: float, levels: list[int]) -> int:
+    book_side = "ask" if side == "BUY" else "bid"
+    total = 0
+
+    for level in levels:
+        price = row.get(f"{book_side}_price_{level}")
+        volume = row.get(f"{book_side}_volume_{level}")
+        if pd.isna(price) or pd.isna(volume):
+            continue
+        if side == "BUY" and float(price) <= float(price_limit):
+            total += max(int(volume), 0)
+        if side == "SELL" and float(price) >= float(price_limit):
+            total += max(int(volume), 0)
+
+    return total
+
+
+def _annotate_points(
+    ax: plt.Axes,
+    frame: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    label_col: str,
+    color: str,
+    y_offset: float,
+) -> None:
+    vertical_align = "bottom" if y_offset >= 0 else "top"
+    for row in frame.itertuples(index=False):
+        label = getattr(row, label_col, None)
+        if label is None or label == "":
+            continue
+        ax.annotate(
+            str(label),
+            (getattr(row, x_col), getattr(row, y_col)),
+            textcoords="offset points",
+            xytext=(0, y_offset),
+            ha="center",
+            va=vertical_align,
+            fontsize=6,
+            color=color,
+            alpha=0.95,
+            bbox={"boxstyle": "round,pad=0.12", "fc": "white", "ec": "none", "alpha": 0.6},
+            annotation_clip=True,
+        )
+
+
+def _build_position_plot(symbol_activities: pd.DataFrame, position_path: pd.DataFrame) -> pd.DataFrame:
+    if position_path.empty:
+        return pd.DataFrame({
+            "timestamp": symbol_activities["timestamp"],
+            "position": [0] * len(symbol_activities),
+        })
+
+    first_ts = int(symbol_activities["timestamp"].min())
+    last_ts = int(symbol_activities["timestamp"].max())
+    position_plot = position_path.copy()
+    if int(position_plot.iloc[0]["timestamp"]) > first_ts:
+        position_plot = pd.concat(
+            [
+                pd.DataFrame([{"timestamp": first_ts, "position": 0}]),
+                position_plot,
+            ],
+            ignore_index=True,
+        )
+    if int(position_plot.iloc[-1]["timestamp"]) < last_ts:
+        position_plot = pd.concat(
+            [
+                position_plot,
+                pd.DataFrame([{"timestamp": last_ts, "position": int(position_plot.iloc[-1]["position"])}]),
+            ],
+            ignore_index=True,
+        )
+    return position_plot.sort_values("timestamp").reset_index(drop=True)
+
+
+def _trade_book_label(quantity: int, max_book_qty: int) -> str:
+    return f"{quantity}/{max_book_qty}" if max_book_qty > 0 else f"{quantity}/?"
+
+
+def _prepare_symbol_review_data(
+    log: OfficialLog,
+    symbol: str,
+    edge: float,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    symbol_activities = log.activities.loc[log.activities["product"] == symbol].copy()
+    if symbol_activities.empty:
+        raise ValueError(f"No activity rows found for product {symbol}")
+
+    symbol_activities = _compute_activity_features(symbol_activities.sort_values("timestamp"))
+    symbol_trades = _submission_trades(log.trades, symbol)
+    position_path = official_position_path(log, symbol)
+    position_plot = _build_position_plot(symbol_activities, position_path)
+
+    ask_levels = _book_levels(symbol_activities.columns, "ask")
+    bid_levels = _book_levels(symbol_activities.columns, "bid")
+
+    symbol_activities["buy_trigger"] = symbol_activities["fair"] - edge
+    symbol_activities["sell_trigger"] = symbol_activities["fair"] + edge
+
+    buy_opportunities = symbol_activities["ask_price_1"] <= symbol_activities["buy_trigger"]
+    sell_opportunities = symbol_activities["bid_price_1"] >= symbol_activities["sell_trigger"]
+
+    symbol_activities["buy_max_book_qty"] = symbol_activities.apply(
+        lambda row: _max_executable_book_qty(row, "BUY", row["buy_trigger"], ask_levels),
+        axis=1,
+    )
+    symbol_activities["sell_max_book_qty"] = symbol_activities.apply(
+        lambda row: _max_executable_book_qty(row, "SELL", row["sell_trigger"], bid_levels),
+        axis=1,
+    )
+    symbol_activities["buy_label"] = symbol_activities["buy_max_book_qty"].map(lambda qty: f"B{qty}" if qty > 0 else "")
+    symbol_activities["sell_label"] = symbol_activities["sell_max_book_qty"].map(lambda qty: f"S{qty}" if qty > 0 else "")
+
+    if position_path.empty:
+        symbol_activities["position"] = 0
+    else:
+        activity_positions = pd.merge_asof(
+            symbol_activities[["timestamp"]].sort_values("timestamp"),
+            position_path.sort_values("timestamp"),
+            on="timestamp",
+            direction="backward",
+        )
+        symbol_activities["position"] = activity_positions["position"].fillna(0).astype(int)
+
+    if not symbol_trades.empty:
+        symbol_trades = symbol_trades.copy()
+        symbol_trades["position_after"] = symbol_trades["signed_quantity"].cumsum()
+        symbol_trades["position_before"] = symbol_trades["position_after"] - symbol_trades["signed_quantity"]
+
+        trade_book_columns = [
+            "timestamp",
+            "fair",
+            "spread",
+            "buy_trigger",
+            "sell_trigger",
+            "position",
+            *[f"ask_price_{level}" for level in ask_levels],
+            *[f"ask_volume_{level}" for level in ask_levels],
+            *[f"bid_price_{level}" for level in bid_levels],
+            *[f"bid_volume_{level}" for level in bid_levels],
+        ]
+        symbol_trades = symbol_trades.merge(
+            symbol_activities[trade_book_columns],
+            on="timestamp",
+            how="left",
+        )
+        symbol_trades["max_book_qty"] = symbol_trades.apply(
+            lambda row: _max_executable_book_qty(
+                row,
+                row["side"],
+                row["price"],
+                ask_levels if row["side"] == "BUY" else bid_levels,
+            ),
+            axis=1,
+        )
+        symbol_trades["trade_label"] = symbol_trades.apply(
+            lambda row: _trade_book_label(int(row["quantity"]), int(row["max_book_qty"])),
+            axis=1,
+        )
+
+    return symbol_activities, symbol_trades, position_plot, buy_opportunities, sell_opportunities
+
+
 def official_quote_summary(log: OfficialLog, symbol: str) -> dict:
     lambda_df = _parse_lambda_logs(log.runtime_logs)
     lambda_sym = lambda_df[lambda_df["product"] == symbol].copy() if not lambda_df.empty else pd.DataFrame()
@@ -624,27 +799,47 @@ def participant_aware_summary(log: OfficialLog, symbol: str) -> dict:
 
 
 def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, edge: float = 1.0) -> Path:
-    symbol_activities = log.activities.loc[log.activities["product"] == symbol].copy()
-    if symbol_activities.empty:
-        raise ValueError(f"No activity rows found for product {symbol}")
+    symbol_activities, symbol_trades, position_plot, buy_opportunities, sell_opportunities = _prepare_symbol_review_data(
+        log,
+        symbol,
+        edge,
+    )
 
     symbol_activities = _compute_activity_features(symbol_activities.sort_values("timestamp"))
     symbol_trades = _submission_trades(log.trades, symbol)
 
+    # Strategy-side features (fair_value, trend_ticks, residual_z, inv_target ...)
+    strategy_quotes = _parse_lambda_logs(log.runtime_logs)
+    strategy_quotes = strategy_quotes.loc[strategy_quotes["product"] == symbol].copy()
+
     buy_opportunities = symbol_activities["ask_price_1"] <= symbol_activities["fair"] - edge
     sell_opportunities = symbol_activities["bid_price_1"] >= symbol_activities["fair"] + edge
 
-    figure, (price_ax, exec_ax) = plt.subplots(
-        2,
+    figure, (price_ax, pos_ax, cash_ax, exec_ax) = plt.subplots(
+        4,
         1,
-        figsize=(16, 10),
+        figsize=(16, 14),
         sharex=True,
-        gridspec_kw={"height_ratios": [3, 1]},
+        gridspec_kw={"height_ratios": [3, 1, 1, 1]},
     )
 
     price_ax.plot(symbol_activities["timestamp"], symbol_activities["bid_price_1"], label="Best bid", color="#0b7285")
     price_ax.plot(symbol_activities["timestamp"], symbol_activities["ask_price_1"], label="Best ask", color="#c92a2a")
     price_ax.plot(symbol_activities["timestamp"], symbol_activities["fair"], label="Fair value (EWM microprice)", color="#2b8a3e")
+
+    # Overlay strategy's internal fair value (block-OLS regression) if logged.
+    if not strategy_quotes.empty and "fair_value" in strategy_quotes.columns:
+        reg_fv = pd.to_numeric(strategy_quotes["fair_value"], errors="coerce")
+        mask = reg_fv.notna()
+        if mask.any():
+            price_ax.plot(
+                strategy_quotes.loc[mask, "timestamp"],
+                reg_fv.loc[mask],
+                label="Strategy fair (block-OLS reg)",
+                color="#9c36b5",
+                linewidth=1.3,
+                linestyle="--",
+            )
 
     price_ax.scatter(
         symbol_activities.loc[buy_opportunities, "timestamp"],
@@ -661,6 +856,24 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
         s=18,
         color="#ff8787",
         alpha=0.35,
+    )
+    _annotate_points(
+        price_ax,
+        symbol_activities.loc[buy_opportunities, ["timestamp", "ask_price_1", "buy_label"]],
+        "timestamp",
+        "ask_price_1",
+        "buy_label",
+        "#2b8a3e",
+        8,
+    )
+    _annotate_points(
+        price_ax,
+        symbol_activities.loc[sell_opportunities, ["timestamp", "bid_price_1", "sell_label"]],
+        "timestamp",
+        "bid_price_1",
+        "sell_label",
+        "#c92a2a",
+        -10,
     )
 
     if not symbol_trades.empty:
@@ -688,6 +901,56 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
             edgecolors="black",
             linewidths=0.3,
         )
+        _annotate_points(
+            price_ax,
+            buy_trades[["timestamp", "price", "trade_label"]],
+            "timestamp",
+            "price",
+            "trade_label",
+            "#1b5e20",
+            18,
+        )
+        _annotate_points(
+            price_ax,
+            sell_trades[["timestamp", "price", "trade_label"]],
+            "timestamp",
+            "price",
+            "trade_label",
+            "#b02a37",
+            -18,
+        )
+
+        sorted_trades = symbol_trades.sort_values("timestamp").reset_index(drop=True)
+        inventory = sorted_trades["signed_quantity"].cumsum()
+        # Cash: SELL adds price*qty, BUY subtracts price*qty.
+        cash_delta = -sorted_trades["price"] * sorted_trades["signed_quantity"]
+        cash_running = cash_delta.cumsum()
+
+        # Extend steps to the end of the price panel so flat-position regions
+        # after the last trade stay visible.
+        end_ts = float(symbol_activities["timestamp"].max())
+        inv_ts = pd.concat([sorted_trades["timestamp"], pd.Series([end_ts])], ignore_index=True)
+        inv_vals = pd.concat([inventory, pd.Series([inventory.iloc[-1]])], ignore_index=True)
+        cash_vals = pd.concat([cash_running, pd.Series([cash_running.iloc[-1]])], ignore_index=True)
+
+        pos_ax.plot(inv_ts, inv_vals, color="#1864ab", linewidth=1.4, drawstyle="steps-post")
+        pos_ax.fill_between(inv_ts, 0, inv_vals, color="#1864ab", alpha=0.15, step="post")
+        pos_ax.axhline(0, color="#adb5bd", linewidth=1)
+        max_abs_pos = float(inventory.abs().max() or 1.0)
+        pos_ax.text(
+            0.01, 0.92,
+            f"end={int(inventory.iloc[-1])}  max|pos|={int(max_abs_pos)}",
+            transform=pos_ax.transAxes, fontsize=9, color="#1864ab",
+        )
+
+        cash_ax.plot(inv_ts, cash_vals, color="#e8590c", linewidth=1.4, drawstyle="steps-post")
+        cash_ax.fill_between(inv_ts, 0, cash_vals, color="#e8590c", alpha=0.12, step="post")
+        cash_ax.axhline(0, color="#adb5bd", linewidth=1)
+        cash_ax.text(
+            0.01, 0.92,
+            f"end_cash={cash_running.iloc[-1]:,.0f}",
+            transform=cash_ax.transAxes, fontsize=9, color="#e8590c",
+        )
 
         exec_colors = symbol_trades["side"].map({"BUY": "#2f9e44", "SELL": "#f03e3e"})
         exec_ax.bar(
@@ -705,21 +968,284 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
         pnl_ax.set_ylabel("PnL")
         pnl_ax.legend(loc="upper right")
 
-    price_ax.set_title(f"{symbol} price path, trades, and opportunity markers")
+    price_ax.set_title(f"{symbol} price path, trades, and opportunity markers (B8/S5=max book qty, 1/23=filled/book)")
     price_ax.set_ylabel("Price")
     price_ax.legend(loc="upper left", ncol=2)
     price_ax.grid(alpha=0.2)
 
+    pos_ax.set_ylabel("Inventory")
+    pos_ax.grid(alpha=0.15)
+
+    cash_ax.set_ylabel("Cash balance")
+    cash_ax.grid(alpha=0.15)
+
     exec_ax.axhline(0, color="#adb5bd", linewidth=1)
     exec_ax.set_ylabel("Signed qty")
-    exec_ax.set_xlabel("Timestamp")
     exec_ax.grid(alpha=0.15)
+
+    pos_ax.step(
+        position_plot["timestamp"],
+        position_plot["position"],
+        where="post",
+        color="#6741d9",
+        linewidth=1.6,
+        label="Position",
+    )
+
+    pos_ax.axhline(0, color="#adb5bd", linewidth=1)
+    pos_ax.set_ylabel("Balance")
+    pos_ax.set_xlabel("Timestamp")
+    pos_ax.grid(alpha=0.15)
+    pos_ax.legend(loc="upper left")
 
     output_path = Path(output_dir) / log.analysis_group / f"{log.submission_id}_{symbol}_review.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.tight_layout()
     figure.savefig(output_path, dpi=160)
     plt.close(figure)
+    return output_path
+
+
+def plot_symbol_review_plotly(log: OfficialLog, symbol: str, output_dir: str | Path, edge: float = 1.0) -> Path:
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    symbol_activities, symbol_trades, position_plot, buy_opportunities, sell_opportunities = _prepare_symbol_review_data(
+        log,
+        symbol,
+        edge,
+    )
+
+    fig = make_subplots(
+        rows=3,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.04,
+        row_heights=[0.56, 0.24, 0.20],
+        specs=[[{}], [{"secondary_y": True}], [{}]],
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=symbol_activities["timestamp"],
+            y=symbol_activities["bid_price_1"],
+            mode="lines",
+            name="Best bid",
+            line={"color": "#0b7285", "width": 2},
+            hovertemplate="t=%{x}<br>best bid=%{y}<extra></extra>",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=symbol_activities["timestamp"],
+            y=symbol_activities["ask_price_1"],
+            mode="lines",
+            name="Best ask",
+            line={"color": "#c92a2a", "width": 2},
+            hovertemplate="t=%{x}<br>best ask=%{y}<extra></extra>",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=symbol_activities["timestamp"],
+            y=symbol_activities["fair"],
+            mode="lines",
+            name="Fair value",
+            line={"color": "#2b8a3e", "width": 2},
+            hovertemplate="t=%{x}<br>fair=%{y:.2f}<extra></extra>",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=symbol_activities["timestamp"],
+            y=symbol_activities["buy_trigger"],
+            mode="lines",
+            name="Buy trigger",
+            line={"color": "#74c69d", "width": 1, "dash": "dot"},
+            visible="legendonly",
+            hovertemplate="t=%{x}<br>buy trigger=%{y:.2f}<extra></extra>",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=symbol_activities["timestamp"],
+            y=symbol_activities["sell_trigger"],
+            mode="lines",
+            name="Sell trigger",
+            line={"color": "#ff8787", "width": 1, "dash": "dot"},
+            visible="legendonly",
+            hovertemplate="t=%{x}<br>sell trigger=%{y:.2f}<extra></extra>",
+        ),
+        row=1,
+        col=1,
+    )
+
+    buy_opp_frame = symbol_activities.loc[buy_opportunities].copy()
+    sell_opp_frame = symbol_activities.loc[sell_opportunities].copy()
+
+    if not buy_opp_frame.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=buy_opp_frame["timestamp"],
+                y=buy_opp_frame["ask_price_1"],
+                mode="markers+text",
+                name="Buy opportunities",
+                marker={"color": "#74c69d", "size": 8, "opacity": 0.45},
+                text=buy_opp_frame["buy_label"],
+                textposition="top center",
+                textfont={"size": 10, "color": "#2b8a3e"},
+                customdata=buy_opp_frame[["fair", "buy_trigger", "spread", "position", "buy_max_book_qty"]],
+                hovertemplate=(
+                    "t=%{x}<br>ask=%{y}<br>fair=%{customdata[0]:.2f}<br>"
+                    "buy trigger=%{customdata[1]:.2f}<br>spread=%{customdata[2]:.0f}<br>"
+                    "position=%{customdata[3]}<br>max executable buy=%{customdata[4]}<extra></extra>"
+                ),
+            ),
+            row=1,
+            col=1,
+        )
+
+    if not sell_opp_frame.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=sell_opp_frame["timestamp"],
+                y=sell_opp_frame["bid_price_1"],
+                mode="markers+text",
+                name="Sell opportunities",
+                marker={"color": "#ff8787", "size": 8, "opacity": 0.45},
+                text=sell_opp_frame["sell_label"],
+                textposition="bottom center",
+                textfont={"size": 10, "color": "#c92a2a"},
+                customdata=sell_opp_frame[["fair", "sell_trigger", "spread", "position", "sell_max_book_qty"]],
+                hovertemplate=(
+                    "t=%{x}<br>bid=%{y}<br>fair=%{customdata[0]:.2f}<br>"
+                    "sell trigger=%{customdata[1]:.2f}<br>spread=%{customdata[2]:.0f}<br>"
+                    "position=%{customdata[3]}<br>max executable sell=%{customdata[4]}<extra></extra>"
+                ),
+            ),
+            row=1,
+            col=1,
+        )
+
+    if not symbol_trades.empty:
+        buy_trades = symbol_trades.loc[symbol_trades["side"] == "BUY"]
+        sell_trades = symbol_trades.loc[symbol_trades["side"] == "SELL"]
+
+        if not buy_trades.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=buy_trades["timestamp"],
+                    y=buy_trades["price"],
+                    mode="markers+text",
+                    name="Submission buys",
+                    marker={"symbol": "triangle-up", "size": buy_trades["quantity"].clip(lower=1) * 1.8 + 8, "color": "#2f9e44", "line": {"color": "black", "width": 0.6}},
+                    text=buy_trades["trade_label"],
+                    textposition="top center",
+                    textfont={"size": 10, "color": "#1b5e20"},
+                    customdata=buy_trades[["quantity", "max_book_qty", "position_before", "position_after", "fair", "spread"]],
+                    hovertemplate=(
+                        "t=%{x}<br>buy px=%{y}<br>filled=%{customdata[0]}<br>"
+                        "book max at px=%{customdata[1]}<br>position before=%{customdata[2]}<br>"
+                        "position after=%{customdata[3]}<br>fair=%{customdata[4]:.2f}<br>"
+                        "spread=%{customdata[5]:.0f}<extra></extra>"
+                    ),
+                ),
+                row=1,
+                col=1,
+            )
+
+        if not sell_trades.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=sell_trades["timestamp"],
+                    y=sell_trades["price"],
+                    mode="markers+text",
+                    name="Submission sells",
+                    marker={"symbol": "triangle-down", "size": sell_trades["quantity"].clip(lower=1) * 1.8 + 8, "color": "#f03e3e", "line": {"color": "black", "width": 0.6}},
+                    text=sell_trades["trade_label"],
+                    textposition="bottom center",
+                    textfont={"size": 10, "color": "#b02a37"},
+                    customdata=sell_trades[["quantity", "max_book_qty", "position_before", "position_after", "fair", "spread"]],
+                    hovertemplate=(
+                        "t=%{x}<br>sell px=%{y}<br>filled=%{customdata[0]}<br>"
+                        "book max at px=%{customdata[1]}<br>position before=%{customdata[2]}<br>"
+                        "position after=%{customdata[3]}<br>fair=%{customdata[4]:.2f}<br>"
+                        "spread=%{customdata[5]:.0f}<extra></extra>"
+                    ),
+                ),
+                row=1,
+                col=1,
+            )
+
+        exec_colors = symbol_trades["side"].map({"BUY": "#2f9e44", "SELL": "#f03e3e"})
+        fig.add_trace(
+            go.Bar(
+                x=symbol_trades["timestamp"],
+                y=symbol_trades["signed_quantity"],
+                name="Signed execution quantity",
+                marker_color=exec_colors,
+                opacity=0.7,
+                hovertemplate="t=%{x}<br>signed qty=%{y}<extra></extra>",
+            ),
+            row=2,
+            col=1,
+            secondary_y=False,
+        )
+
+    if not log.graph.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=log.graph["timestamp"],
+                y=log.graph["value"],
+                mode="lines",
+                name="PnL graph",
+                line={"color": "#495057", "width": 2},
+                hovertemplate="t=%{x}<br>PnL=%{y:.2f}<extra></extra>",
+            ),
+            row=2,
+            col=1,
+            secondary_y=True,
+        )
+
+    fig.add_trace(
+        go.Scatter(
+            x=position_plot["timestamp"],
+            y=position_plot["position"],
+            mode="lines",
+            name="Position",
+            line={"color": "#6741d9", "width": 2, "shape": "hv"},
+            hovertemplate="t=%{x}<br>position=%{y}<extra></extra>",
+        ),
+        row=3,
+        col=1,
+    )
+
+    fig.update_yaxes(title_text="Price", row=1, col=1)
+    fig.update_yaxes(title_text="Signed qty", row=2, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="PnL", row=2, col=1, secondary_y=True)
+    fig.update_yaxes(title_text="Balance", row=3, col=1)
+    fig.update_xaxes(title_text="Timestamp", row=3, col=1)
+
+    fig.update_layout(
+        title=f"{symbol} review (B8/S5=max book qty, 1/23=filled/book)",
+        template="plotly_white",
+        hovermode="x unified",
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "left", "x": 0},
+        height=980,
+        margin={"l": 60, "r": 60, "t": 80, "b": 50},
+    )
+
+    output_path = Path(output_dir) / log.analysis_group / f"{log.submission_id}_{symbol}_review.html"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(output_path, include_plotlyjs=True, full_html=True)
     return output_path
 
 
@@ -765,6 +1291,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--symbol", action="append", help="Product symbol to plot, can be passed multiple times")
     parser.add_argument("--outdir", default="artifacts/analysis", help="Directory that will receive generated plots")
     parser.add_argument("--edge", type=float, default=1.0, help="Opportunity threshold around fair value")
+    parser.add_argument("--plotly", action="store_true", help="Generate an interactive Plotly HTML review instead of a PNG")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     log = load_official_log(args.log)
@@ -809,7 +1336,10 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
                 for participant in top_participants
             ]
             print(f"{symbol} participant_summary={compact}")
-        output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge)
+        if args.plotly:
+            output_path = plot_symbol_review_plotly(log, symbol, args.outdir, edge=args.edge)
+        else:
+            output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge)
         print(f"saved {output_path}")
 
     return 0
