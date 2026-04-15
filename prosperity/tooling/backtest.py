@@ -1409,6 +1409,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     days = args.days or engine.loader.available_days(args.round)
     if not days:
         raise RuntimeError("No price files found in the selected data directory.")
+    days = sorted(days, key=lambda d: int(d))
 
     summaries = [engine.run_day(day, mode=mode) for day in days]
 

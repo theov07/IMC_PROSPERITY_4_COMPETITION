@@ -61,6 +61,12 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "naive_tight_mm_v17": ("prosperity/strategies/naive_tight_mm_v17.py", "NaiveTightMarketMakerV17Strategy"),
     "naive_tight_mm_v23": ("prosperity/strategies/naive_tight_mm_v23.py", "NaiveTightMarketMakerV23Strategy"),
     "naive_tight_mm_v24": ("prosperity/strategies/naive_tight_mm_v24.py", "NaiveTightMarketMakerV24Strategy"),
+    "trend_carry_mm_v25": ("prosperity/strategies/naive_tight_mm_v25.py", "TrendCarryMMV25Strategy"),
+    "trend_carry_mm_v26": ("prosperity/strategies/naive_tight_mm_v26.py", "TrendCarryMMV26Strategy"),
+    "trend_carry_mm_v34": ("prosperity/strategies/naive_tight_mm_v34.py", "TrendCarryMMV34Strategy"),
+    "trend_carry_mm_v37": ("prosperity/strategies/naive_tight_mm_v37.py", "TrendCarryMMV37Strategy"),
+    "trend_carry_mm_v38": ("prosperity/strategies/naive_tight_mm_v38.py", "TrendCarryMMV38Strategy"),
+    "trend_carry_mm_v41": ("prosperity/strategies/naive_tight_mm_v41.py", "TrendCarryMMV41Strategy"),
     "trend_biased_mm_v18": ("prosperity/strategies/naive_tight_mm_v18.py", "TrendBiasedMMV18Strategy"),
     "book_following_trend_mm_v19": ("prosperity/strategies/naive_tight_mm_v19.py", "BookFollowingTrendMMV19Strategy"),
     "book_following_trend_mm_v20": ("prosperity/strategies/naive_tight_mm_v20.py", "BookFollowingTrendMMV20Strategy"),
@@ -71,7 +77,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "conversion_arb":     ("prosperity/strategies/conversion_arb.py",     "ConversionArbStrategy"),
     "signal_trader":      ("prosperity/strategies/signal_trader.py",      "SignalTraderStrategy"),
     "mm_first":           ("prosperity/strategies/mm_first.py",           "MMFirstStrategy"),
+    "mean_reversion":     ("prosperity/strategies/mean_reversion.py",     "MeanReversionStrategy"),
+    "zscore":             ("prosperity/strategies/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/buy_and_hold.py",       "BuyAndHoldStrategy"),
+    "trend_carry_window": ("prosperity/strategies/trend_carry_window.py", "TrendCarryWindowStrategy"),
     "osmium_mr":          ("prosperity/strategies/osmium_mr.py",          "OsmiumMeanRevStrategy"),
 }
 
