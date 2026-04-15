@@ -70,6 +70,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "conversion_arb":     ("prosperity/strategies/conversion_arb.py",     "ConversionArbStrategy"),
     "signal_trader":      ("prosperity/strategies/signal_trader.py",      "SignalTraderStrategy"),
     "mm_first":           ("prosperity/strategies/mm_first.py",           "MMFirstStrategy"),
+    "mean_reversion":     ("prosperity/strategies/mean_reversion.py",     "MeanReversionStrategy"),
+    "zscore":             ("prosperity/strategies/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/buy_and_hold.py",       "BuyAndHoldStrategy"),
 }
 
