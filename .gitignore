@@ -26,3 +26,10 @@ dist/
 
 # Research output (regenerable)
 research/visualizer/__pycache__/
+
+
+logs/round_1/theo
+artifacts/analysis/round_1/theo
+
+.claude/*
+artifacts/analysis/round_1/theo/README.md
