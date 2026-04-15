@@ -3822,6 +3822,18 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
 }
 
 
+# Trend-carry window v2: same params as tibo_trend, cleaner strategy file.
+MEMBER_OVERRIDES["tibo_trend_v2"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["tibo_trend"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="trend_carry_window_v2",
+        ),
+    },
+}
+
+
 # ── V2 variants (block_size=200, R^2 ~0.99; rebalanced trend/residual weights
 #    so residual_z can drive sells on spikes instead of being dominated by trend).
 for _base in ("leo_fusion_a", "leo_fusion_b", "leo_fusion_c", "leo_fusion_d"):
