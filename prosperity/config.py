@@ -2497,6 +2497,71 @@ MEMBER_OVERRIDES["leo_fusion_b_v7"] = {
 }
 
 
+MEMBER_OVERRIDES["leo_osmium_only"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=0.6,
+            anchor_alpha=0.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v1"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=0.6,
+            anchor_alpha=0.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v2"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v2",
+            take_edge=2.0,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.8,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=10.0,
+            ar_gain=1.2,
+            anchor_alpha=0.0,
+            take_abs_buy=9990,
+            take_abs_sell=10025,
+            gap_trigger_min=10,
+            gap_trigger_max_vol_pct=0.15,
+            gap_trigger_confirm_ticks=2,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
