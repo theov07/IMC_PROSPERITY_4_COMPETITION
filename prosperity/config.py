@@ -306,6 +306,56 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
             ),
         },
     },
+    "tibo_mm_first_v2": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="mm_first_v2",
+                inv_step_threshold=0.9,
+                take_edge=1,
+                maker_size_base_pct=0.75,
+                pct_kept_for_takers=0.1,
+                mid_smooth_window=50,
+                mid_smooth_half_life=10,
+                taker_buy_threshold=9990,
+                taker_sell_threshold=10025,
+                gap_trigger_min=10,
+                gap_trigger_max_vol_pct=0.2,
+                gap_trigger_confirm_ticks=1,
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+            "INTARIAN_PEPPER_ROOT": _override(
+                ROUND_1["INTARIAN_PEPPER_ROOT"],
+                strategy="mm_first_v2",
+                inv_step_threshold=0.8,
+                take_edge=1.0,
+                maker_size_base_pct=0.5,
+                pct_kept_for_takers=0.2,
+                mid_smooth_window=20,
+                mid_smooth_half_life=10,
+                gap_trigger_min=10,
+                gap_trigger_max_vol_pct=0.10,
+                gap_trigger_confirm_ticks=2,
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+        },
+    },
+    "tibo_osmium": {
+        1: {
+            "ASH_COATED_OSMIUM": _override(
+                ROUND_1["ASH_COATED_OSMIUM"],
+                strategy="trend_carry_window",
+                ts_increment=100,
+                last_ts_value=99900,
+                log_flush_ts=1000,
+            ),
+            "INTARIAN_PEPPER_ROOT": None,
+        },
+    },
     "tibo_zscore": {
         1: {
             "ASH_COATED_OSMIUM": _override(
