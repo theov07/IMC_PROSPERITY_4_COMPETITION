@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from dataclasses import dataclass
+from html import escape
 from pathlib import Path
 from typing import Iterable
 
@@ -55,6 +57,272 @@ def _normalize_numeric_columns(frame: pd.DataFrame, integer_columns: set[str] | 
         elif column == "quantity":
             normalized[column] = pd.to_numeric(normalized[column], errors="coerce").fillna(0).astype(int)
     return normalized
+
+
+def _plotly_export_theme_tokens() -> dict[str, dict[str, str]]:
+    return {
+        "light": {
+            "plotly_template": "plotly_white",
+            "page_bg": "#f5f7fb",
+            "panel_bg": "#ffffff",
+            "plot_bg": "#ffffff",
+            "paper_bg": "#ffffff",
+            "text": "#1f2937",
+            "muted": "#6b7280",
+            "border": "#d0d7e2",
+            "grid": "#e5e7eb",
+            "axis": "#cbd5e1",
+            "button_bg": "#ffffff",
+            "button_text": "#111827",
+            "button_active_bg": "#111827",
+            "button_active_text": "#ffffff",
+            "shadow": "0 12px 32px rgba(15, 23, 42, 0.08)",
+        },
+        "dark": {
+            "plotly_template": "plotly_dark",
+            "page_bg": "#020617",
+            "panel_bg": "#0f172a",
+            "plot_bg": "#0f172a",
+            "paper_bg": "#0f172a",
+            "text": "#e5e7eb",
+            "muted": "#94a3b8",
+            "border": "#334155",
+            "grid": "#243244",
+            "axis": "#475569",
+            "button_bg": "#111827",
+            "button_text": "#e5e7eb",
+            "button_active_bg": "#f8fafc",
+            "button_active_text": "#0f172a",
+            "shadow": "0 18px 40px rgba(0, 0, 0, 0.45)",
+        },
+    }
+
+
+def _themed_plotly_review_figure(fig_json: dict, theme: str) -> dict:
+    themed = copy.deepcopy(fig_json)
+    tokens = _plotly_export_theme_tokens()[theme]
+    layout = themed.setdefault("layout", {})
+
+    layout["template"] = tokens["plotly_template"]
+    layout["paper_bgcolor"] = tokens["paper_bg"]
+    layout["plot_bgcolor"] = tokens["plot_bg"]
+
+    font = dict(layout.get("font", {}))
+    font["color"] = tokens["text"]
+    layout["font"] = font
+
+    title = layout.get("title")
+    if isinstance(title, dict):
+        title_font = dict(title.get("font", {}))
+        title_font["color"] = tokens["text"]
+        title["font"] = title_font
+
+    legend = dict(layout.get("legend", {}))
+    legend.setdefault("bgcolor", "rgba(0,0,0,0)")
+    layout["legend"] = legend
+
+    for key, value in list(layout.items()):
+        if not isinstance(value, dict):
+            continue
+        if not key.startswith(("xaxis", "yaxis")):
+            continue
+        value.setdefault("gridcolor", tokens["grid"])
+        value.setdefault("zerolinecolor", tokens["grid"])
+        value.setdefault("linecolor", tokens["axis"])
+        axis_title = value.get("title")
+        if isinstance(axis_title, dict):
+            axis_title_font = dict(axis_title.get("font", {}))
+            axis_title_font["color"] = tokens["text"]
+            axis_title["font"] = axis_title_font
+
+    annotations = layout.get("annotations")
+    if isinstance(annotations, list):
+        for annotation in annotations:
+            if not isinstance(annotation, dict):
+                continue
+            ann_font = dict(annotation.get("font", {}))
+            ann_font["color"] = tokens["text"]
+            annotation["font"] = ann_font
+
+    return themed
+
+
+def _write_plotly_review_html(fig, output_path: Path, page_title: str) -> None:
+    from plotly.offline import get_plotlyjs
+    from plotly.utils import PlotlyJSONEncoder
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    base_fig = fig.to_plotly_json()
+    themed_figures = {
+        "light": _themed_plotly_review_figure(base_fig, "light"),
+        "dark": _themed_plotly_review_figure(base_fig, "dark"),
+    }
+    theme_tokens = _plotly_export_theme_tokens()
+
+    title_text = escape(page_title)
+    html_payload = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title_text}</title>
+  <script type="text/javascript">{get_plotlyjs()}</script>
+  <style>
+    :root {{
+      color-scheme: light dark;
+    }}
+    * {{
+      box-sizing: border-box;
+    }}
+    body {{
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }}
+    .page {{
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 18px 18px 28px;
+    }}
+    .toolbar {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }}
+    .toolbar-copy {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }}
+    .toolbar-title {{
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }}
+    .toolbar-subtitle {{
+      font-size: 13px;
+    }}
+    .theme-switch {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px;
+      border-radius: 999px;
+    }}
+    .theme-btn {{
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
+    }}
+    .theme-btn:hover {{
+      transform: translateY(-1px);
+    }}
+    .chart-shell {{
+      border-radius: 20px;
+      padding: 10px;
+      transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }}
+    #plotly-review-root {{
+      width: 100%;
+      min-height: 980px;
+    }}
+    @media (max-width: 900px) {{
+      .toolbar {{
+        align-items: flex-start;
+      }}
+      .theme-switch {{
+        width: 100%;
+        justify-content: flex-start;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="toolbar">
+      <div class="toolbar-copy">
+        <div class="toolbar-title">{title_text}</div>
+        <div class="toolbar-subtitle" id="theme-subtitle">Interactive export with light and dark themes</div>
+      </div>
+      <div class="theme-switch" id="theme-switch">
+        <button class="theme-btn" id="theme-light" type="button">Light</button>
+        <button class="theme-btn" id="theme-dark" type="button">Dark</button>
+      </div>
+    </div>
+    <div class="chart-shell" id="chart-shell">
+      <div id="plotly-review-root"></div>
+    </div>
+  </div>
+  <script>
+    const THEME_FIGURES = {json.dumps(themed_figures, cls=PlotlyJSONEncoder)};
+    const THEME_TOKENS = {json.dumps(theme_tokens)};
+    const PLOT_CONFIG = {{responsive: true, displaylogo: false}};
+    const STORAGE_KEY = "prosperity_plotly_export_theme";
+    const plotRoot = document.getElementById("plotly-review-root");
+    const chartShell = document.getElementById("chart-shell");
+    const themeSwitch = document.getElementById("theme-switch");
+    const subtitle = document.getElementById("theme-subtitle");
+    const buttons = {{
+      light: document.getElementById("theme-light"),
+      dark: document.getElementById("theme-dark"),
+    }};
+
+    function resolveInitialTheme() {{
+      try {{
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved && THEME_TOKENS[saved]) {{
+          return saved;
+        }}
+      }} catch (_err) {{}}
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }}
+
+    function applyChrome(theme) {{
+      const tokens = THEME_TOKENS[theme];
+      document.body.style.backgroundColor = tokens.page_bg;
+      document.body.style.color = tokens.text;
+      chartShell.style.backgroundColor = tokens.panel_bg;
+      chartShell.style.border = "1px solid " + tokens.border;
+      chartShell.style.boxShadow = tokens.shadow;
+      themeSwitch.style.backgroundColor = tokens.panel_bg;
+      themeSwitch.style.border = "1px solid " + tokens.border;
+      subtitle.style.color = tokens.muted;
+
+      Object.entries(buttons).forEach(([name, button]) => {{
+        const active = name === theme;
+        button.style.backgroundColor = active ? tokens.button_active_bg : tokens.button_bg;
+        button.style.color = active ? tokens.button_active_text : tokens.button_text;
+        button.style.borderColor = active ? tokens.button_active_bg : tokens.border;
+      }});
+    }}
+
+    function applyTheme(theme) {{
+      const figure = THEME_FIGURES[theme] || THEME_FIGURES.light;
+      applyChrome(theme);
+      Plotly.react(plotRoot, figure.data, figure.layout, PLOT_CONFIG);
+      try {{
+        window.localStorage.setItem(STORAGE_KEY, theme);
+      }} catch (_err) {{}}
+    }}
+
+    buttons.light.addEventListener("click", function () {{ applyTheme("light"); }});
+    buttons.dark.addEventListener("click", function () {{ applyTheme("dark"); }});
+    applyTheme(resolveInitialTheme());
+  </script>
+</body>
+</html>
+"""
+
+    output_path.write_text(html_payload, encoding="utf-8")
 
 
 @dataclass
@@ -1243,8 +1511,7 @@ def plot_symbol_review_plotly(log: OfficialLog, symbol: str, output_dir: str | P
     group_name = group if group is not None else log.analysis_group
     group_dir = Path(output_dir) / group_name if group_name else Path(output_dir)
     output_path = group_dir / f"{log.submission_id}_{symbol}_review.html"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.write_html(output_path, include_plotlyjs=True, full_html=True)
+    _write_plotly_review_html(fig, output_path, f"{symbol} review")
     return output_path
 
 
