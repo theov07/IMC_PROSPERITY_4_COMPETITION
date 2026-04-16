@@ -76,9 +76,9 @@ class MMFirstStrategy(BaseStrategy):
 
         # Crossing prevention
         if bid_price is not None and book.best_ask is not None:
-            bid_price = min(bid_price, book.best_ask - 1)
+            bid_price = min(bid_price, mid_smooth - 1)
         if ask_price is not None and book.best_bid is not None:
-            ask_price = max(ask_price, book.best_bid + 1)
+            ask_price = max(ask_price, mid_smooth + 1)
         if bid_price is not None and ask_price is not None and ask_price <= bid_price:
             ask_price = bid_price + 1
 

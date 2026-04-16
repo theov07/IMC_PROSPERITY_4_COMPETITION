@@ -480,14 +480,14 @@ class ZScoreStrategy(BaseStrategy):
         ask_price: int | None = (book.best_ask - 1) if book.best_ask is not None else memory.get("_last_ask_price")
         quote_level = "L1"
 
-        if inventory_ratio >= step_threshold:
-            if book.best_bid is not None:
-                bid_price = book.best_bid
-            quote_level = "L2"
-        elif inventory_ratio <= -step_threshold:
-            if book.best_ask is not None:
-                ask_price = book.best_ask
-            quote_level = "L2"
+        # if inventory_ratio >= step_threshold:
+        #     if book.best_bid is not None:
+        #         bid_price = book.best_bid
+        #     quote_level = "L2"
+        # elif inventory_ratio <= -step_threshold:
+        #     if book.best_ask is not None:
+        #         ask_price = book.best_ask
+        #     quote_level = "L2"
 
         # Crossing prevention  (mid_smooth is float → cast to int before arithmetic)
         if bid_price is not None and book.best_ask is not None:
@@ -632,7 +632,7 @@ PRODUCTS = {'ASH_COATED_OSMIUM': {'inv_step_threshold': 0.8,
                        'maker_size_base_pct': 0.5,
                        'mid_smooth_half_life': 10,
                        'mid_smooth_window': 50,
-                       'pct_kept_for_takers': 0.2,
+                       'pct_kept_for_takers': 0.1,
                        'position_limit': 80,
                        'strategy': 'zscore',
                        'take_edge': 0.5,
