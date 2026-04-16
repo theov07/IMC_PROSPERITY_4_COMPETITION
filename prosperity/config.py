@@ -325,6 +325,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 zscore_max_scale=5.0,
 
                 gap_trigger_min=10,
+                OB_cleared_shift=75,
                 gap_trigger_max_vol_pct=0.1,
                 gap_trigger_confirm_ticks=1,
                 zscore_gap_gate=1.5,
@@ -346,7 +347,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 gap_trigger_min=10,
                 gap_trigger_max_vol_pct=0.10,
                 gap_trigger_confirm_ticks=2,
-                zscore_window=50,
+                zscore_window=1000,
                 zscore_threshold=1.0,
                 zscore_size_scale=0.5,
                 zscore_max_scale=3.0,
