@@ -63,6 +63,7 @@ class Fill:
     price: int
     quantity: int
     aggressive: bool
+    gap_exploit: bool = False
 
 
 @dataclass
@@ -1075,6 +1076,21 @@ class BacktestEngine:
                     if feats:
                         all_feature_ticks.append(FeatureTick(timestamp=timestamp, symbol=sym, features=feats))
 
+                # Parse gap exploit prices from trader_data to annotate fills.
+                # Strategy stores _gap_buy_px / _gap_sell_px in product memory this tick.
+                _gap_prices: Dict[str, Dict[str, set]] = {}
+                try:
+                    _td_parsed = json.loads(trader_data) if trader_data else {}
+                    _prod_mems = _td_parsed.get("products", {}) if isinstance(_td_parsed, dict) else {}
+                    for _prod, _mem in _prod_mems.items():
+                        if isinstance(_mem, dict):
+                            _gap_prices[_prod] = {
+                                "buy":  set(_mem.get("_gap_buy_px",  [])),
+                                "sell": set(_mem.get("_gap_sell_px", [])),
+                            }
+                except Exception:
+                    pass
+
                 next_own_trades: Dict[str, List[Trade]] = {product: [] for product in products}
 
                 for product in products:
@@ -1104,6 +1120,15 @@ class BacktestEngine:
                         timestamp,
                         mode,
                     )
+
+                    _gap_buy  = _gap_prices.get(product, {}).get("buy",  set())
+                    _gap_sell = _gap_prices.get(product, {}).get("sell", set())
+                    for fill in fills:
+                        if fill.aggressive:
+                            fill.gap_exploit = (
+                                (fill.side == "BUY"  and fill.price in _gap_buy) or
+                                (fill.side == "SELL" and fill.price in _gap_sell)
+                            )
 
                     for fill in fills:
                         all_fills.append(fill)

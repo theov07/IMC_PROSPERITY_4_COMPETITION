@@ -352,11 +352,16 @@ class MMFirstStrategy(BaseStrategy):
         sell_cap: int,
         position: int,
         limit: int,
-    ) -> List[Order]:
+    ) -> Tuple[List[Order], int, int]:
         """Size and emit passive bid/ask orders with a hard inventory stop.
 
         Hard stop: when |position| >= limit * (1 - pct_kept_for_takers), suppress
         the inventory-increasing side to preserve capacity for taker unwinds.
+
+        Returns (orders, remaining_buy_cap, remaining_sell_cap) so this function
+        can be called in any order relative to _fire_takers / _gap_exploit without
+        risking a position-limit breach — each caller chains the returned caps into
+        the next call, exactly like _fire_takers and _gap_exploit already do.
         """
         quote_buy  = min(buy_cap,  int(bid_size))
         quote_sell = min(sell_cap, int(ask_size))
@@ -374,7 +379,8 @@ class MMFirstStrategy(BaseStrategy):
             orders.append(Order(self.product, bid_price, quote_buy))
         if quote_sell > 0 and ask_price is not None:
             orders.append(Order(self.product, ask_price, -quote_sell))
-        return orders
+
+        return orders, buy_cap - quote_buy, sell_cap - quote_sell
 
     def _log_taker_fills(
         self,
@@ -462,7 +468,7 @@ class MMFirstStrategy(BaseStrategy):
         )
         
         # ── PASSIVE QUOTING ────────────────────────────────────────────
-        passive_orders = self._passive_quotes(
+        passive_orders, buy_cap, sell_cap = self._passive_quotes(
             bid_price, ask_price, bid_size, ask_size, buy_cap, sell_cap, position, limit
         )
 
@@ -474,6 +480,8 @@ class MMFirstStrategy(BaseStrategy):
             extras={
                 "position":   position,
                 "mid_smooth": round(mid_smooth, 2),
+                "bid_size":   int(bid_size),
+                "ask_size":   int(ask_size),
             },
         )
 

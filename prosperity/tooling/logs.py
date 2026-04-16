@@ -358,11 +358,12 @@ def _parse_taker_fills(runtime_logs: pd.DataFrame) -> pd.DataFrame:
                         "side": str(tick[1]).upper(),
                         "price": int(tick[2]),
                         "quantity": int(tick[3]),
+                        "gap_exploit": bool(tick[4]) if len(tick) > 4 else False,
                     })
                 except (TypeError, ValueError):
                     continue
     if not rows:
-        return pd.DataFrame(columns=["timestamp", "product", "side", "price", "quantity"])
+        return pd.DataFrame(columns=["timestamp", "product", "side", "price", "quantity", "gap_exploit"])
     return pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
 
 
