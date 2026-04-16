@@ -485,6 +485,37 @@ class MMFirstStrategy(BaseStrategy):
         memory["_zs_std"]  = std
         return z
 
+    def _zscore_size_factors(self, memory: Dict[str, Any]) -> Tuple[float, float]:
+        """Return (bid_factor, ask_factor) multipliers based on the current z-score.
+
+        Neutral  (|z| <= threshold):  both 1.0 — no adjustment.
+        z >  threshold (price high):  ask_factor > 1, bid_factor < 1  (lean short).
+        z < -threshold (price low):   bid_factor > 1, ask_factor < 1  (lean long).
+
+        Scale ramps linearly with excess z beyond the threshold, capped at zscore_max_scale.
+
+        Params:
+          zscore_threshold  — |z| must exceed this to trigger scaling (default 1.0)
+          zscore_size_scale — slope of scale vs excess z (default 0.5)
+          zscore_max_scale  — cap on the multiplier (default 3.0)
+        """
+        z = memory.get("zscore")
+        if z is None:
+            return 1.0, 1.0
+
+        threshold  = float(self.params.get("zscore_threshold",  1.0))
+        size_scale = float(self.params.get("zscore_size_scale", 0.5))
+        max_scale  = float(self.params.get("zscore_max_scale",  3.0))
+
+        excess = max(0.0, abs(z) - threshold)
+        scale  = min(max_scale, 1.0 + size_scale * excess)
+
+        if z > threshold:
+            return 1.0 / scale, scale      # lean short: boost ask, shrink bid
+        if z < -threshold:
+            return scale, 1.0 / scale      # lean long:  boost bid, shrink ask
+        return 1.0, 1.0
+
     def _compute_sizes(self, position: int, limit: int) -> Tuple[float, float]:
         """Inventory-adaptive bid/ask sizes.
 
@@ -769,6 +800,11 @@ class MMFirstStrategy(BaseStrategy):
         # ── DYNAMIC SIZING / Ideal order size ─────────────────────────────────────────────
         bid_size, ask_size = self._compute_sizes(position, limit)
 
+        # ── Z-SCORE SIZE TILT ─────────────────────────────────────────
+        bid_factor, ask_factor = self._zscore_size_factors(memory)
+        bid_size = max(0.0, bid_size * bid_factor)
+        ask_size = max(0.0, ask_size * ask_factor)
+
         # ── TAKER ORDERS ───────────────────────────────────────────────
         taker_orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px = self._fire_takers(
             order_depth, mid_smooth, bid_size, ask_size, buy_cap, sell_cap
@@ -828,9 +864,9 @@ PRODUCTS = {'ASH_COATED_OSMIUM': {'gap_trigger_confirm_ticks': 1,
                        'taker_sell_threshold': 10025,
                        'tighten_ticks': 1,
                        'ts_increment': 100,
-                       'zscore_max_scale': 3.0,
+                       'zscore_max_scale': 5.0,
                        'zscore_size_scale': 0.5,
-                       'zscore_threshold': 1.0,
+                       'zscore_threshold': 1,
                        'zscore_window': 50}}
 
 STRATEGY_CLASSES = {"mm_first_v2": MMFirstStrategy}
