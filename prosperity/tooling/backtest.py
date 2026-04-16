@@ -45,6 +45,7 @@ class TradeMatchingMode(str, Enum):
     worse    = "worse"
     none     = "none"
     realistic = "realistic"
+    live_exact = "live_exact"
 
 
 @dataclass
@@ -284,6 +285,13 @@ class BacktestEngine:
                 current_market_trades=current_market_trades,
                 timestamp=timestamp,
             )
+        if mode == TradeMatchingMode.live_exact:
+            return BacktestEngine._simulate_passive_fills_live_exact(
+                order_depth=order_depth,
+                pending_passive=pending_passive,
+                current_market_trades=current_market_trades,
+                timestamp=timestamp,
+            )
         return BacktestEngine._simulate_passive_fills_price_match(
             pending_passive=pending_passive,
             current_market_trades=current_market_trades,
@@ -459,6 +467,80 @@ class BacktestEngine:
                     aggressive=False,
                 ))
 
+        return fills
+
+    @staticmethod
+    def _simulate_passive_fills_live_exact(
+        order_depth: OrderDepth,
+        pending_passive: List[_PendingPassiveOrder],
+        current_market_trades: List[Trade],
+        timestamp: int,
+    ) -> List[Fill]:
+        """Live-calibrated fill model (see live_fill_model_calibration memory).
+
+        Calibrated from official log 170620 vs backtest realistic:
+          - At exact price: queue_ahead-aware fill (like realistic).
+          - Through trades: fill only `share * trade.qty`, not the full remaining.
+            share ~ 0.15 matches observed live/backtest ratio (336 passive live vs
+            ~2350 realistic backtest). Models the fact that we're one of many
+            quoters and only capture a fraction of each aggressor flow.
+          - NO free fills at worse prices (unlike realistic where a trade at old
+            best_bid is credited as hitting our improved best_bid+1).
+        """
+        share = 0.15
+        fills: List[Fill] = []
+        queue_ahead_cache: Dict[Tuple[bool, int], int] = {}
+        trade_remaining = [float(t.quantity) for t in current_market_trades]
+
+        for pending in BacktestEngine._sorted_pending_passive_orders(pending_passive):
+            order = pending.order
+            remaining = pending.remaining
+            if remaining <= 0:
+                continue
+            is_buy = order.quantity > 0
+            key = (is_buy, order.price)
+            if key not in queue_ahead_cache:
+                queue_ahead_cache[key] = BacktestEngine._queue_ahead_at_price(order_depth, order)
+            queue_ahead = queue_ahead_cache[key]
+
+            for i, trade in enumerate(current_market_trades):
+                if remaining <= 0:
+                    break
+                if trade_remaining[i] <= 0:
+                    continue
+                if is_buy:
+                    if trade.price > order.price:
+                        continue
+                    at_price = (trade.price == order.price)
+                else:
+                    if trade.price < order.price:
+                        continue
+                    at_price = (trade.price == order.price)
+
+                if at_price:
+                    consumed_by_queue = min(queue_ahead, trade_remaining[i])
+                    queue_ahead -= consumed_by_queue
+                    queue_ahead_cache[key] = queue_ahead
+                    avail = trade_remaining[i] - consumed_by_queue
+                    traded = int(min(remaining, avail))
+                    if traded <= 0:
+                        continue
+                    trade_remaining[i] -= traded + consumed_by_queue
+                else:
+                    avail = trade_remaining[i] * share
+                    traded = int(min(remaining, avail))
+                    if traded <= 0:
+                        continue
+                    trade_remaining[i] -= traded
+                remaining -= traded
+                fills.append(Fill(
+                    timestamp=timestamp,
+                    symbol=order.symbol,
+                    side="BUY" if is_buy else "SELL",
+                    price=order.price,
+                    quantity=traded,
+                    aggressive=False,
+                ))
         return fills
 
     @staticmethod
@@ -1392,7 +1474,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         "--match-trades",
         dest="execution_rule",
         default="queue",
-        choices=["queue", "all", "worse", "none", "realistic"],
+        choices=["queue", "all", "worse", "none", "realistic", "live_exact"],
         help=(
             "Passive fill mode against same-tick market trades. "
             "queue=one-iteration queue heuristic using displayed size ahead at your price, "

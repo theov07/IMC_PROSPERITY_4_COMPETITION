@@ -3939,6 +3939,161 @@ MEMBER_OVERRIDES["leo_osmium_only"] = {
 }
 
 
+MEMBER_OVERRIDES["leo_osmium_v9"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v9",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=1.0,
+            anchor_alpha=0.0,
+            tight_take_enabled=True,
+            tight_take_max_spread=8,
+            tight_take_imb_threshold=0.2,
+            tight_take_size=15,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v8"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v8",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=1.0,
+            anchor_alpha=0.0,
+            imb_skew_enabled=True,
+            imb_skew_threshold=0.4,
+            imb_skew_fade=0.0,
+            imb_skew_boost=1.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v7"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v7",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=1.0,
+            anchor_alpha=0.0,
+            imb_threshold=0.4,
+            imb_gain=3.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v6"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v6",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=0.6,
+            anchor_alpha=0.0,
+            imb_gain=2.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v5"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v5",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=0.6,
+            anchor_alpha=0.0,
+            layers_enabled=True,
+            layer_offsets=[2],
+            layer_sizes=[10],
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_zscore_v1"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_zscore_v1",
+            z_window=200,
+            z_k=40.0,
+            z_entry=0.3,
+            take_gap=5,
+            post_size=20,
+            min_std=0.5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v4"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v4",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=0.6,
+            anchor_alpha=0.0,
+            skew_enabled=True,
+            skew_mode="drop",
+            skew_deadband=1.0,
+            skew_widen_ticks=5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
 MEMBER_OVERRIDES["leo_osmium_v1"] = {
     1: {
         "ASH_COATED_OSMIUM": _override(
@@ -3951,10 +4106,73 @@ MEMBER_OVERRIDES["leo_osmium_v1"] = {
             trend_max_shift=5.0,
             trend_take_boost=0.2,
             trend_inv_target_per_tick=12.0,
-            ar_gain=0.6,
+            ar_gain=1.0,
             anchor_alpha=0.0,
         ),
         "INTARIAN_PEPPER_ROOT": MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v12"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v12",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=1.0,
+            micro_gain=0.5,
+            anchor_alpha=0.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v11"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v11",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=1.0,
+            l2gap_gain=0.37,
+            anchor_alpha=0.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_osmium_v10"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["theo_round1_v24"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_v10",
+            take_edge=1.75,
+            tighten_ticks=1,
+            unwind_take_edge=1.0,
+            trend_sensitivity=0.6,
+            trend_max_shift=5.0,
+            trend_take_boost=0.2,
+            trend_inv_target_per_tick=12.0,
+            ar_gain=1.0,
+            ar2_gain=0.6,
+            anchor_alpha=0.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
     },
 }
 

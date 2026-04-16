@@ -1340,8 +1340,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         if args.plotly:
             output_path = plot_symbol_review_plotly(log, symbol, args.outdir, edge=args.edge)
         else:
-            output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge)
-        output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge, group=args.group)
+            output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge, group=args.group)
         print(f"saved {output_path}")
 
     return 0

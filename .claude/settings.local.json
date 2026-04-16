@@ -91,7 +91,20 @@
       "Bash(python scripts/export_submission.py --member leo_fusion_b_v2 --round 1 --output artifacts/submissions/round_1/leo/best_root_only.py)",
       "Bash(python scripts/export_submission.py --member leo_osmium_only --round 1 --output artifacts/submissions/round_1/leo/best_osmium_only.py)",
       "Bash(python scripts/export_submission.py --member leo_osmium_v1 --round 1 --output artifacts/submissions/round_1/leo/best_combined_osmium_root.py)",
-      "Bash(ls -la artifacts/submissions/round_1/leo/best_*)"
+      "Bash(ls -la artifacts/submissions/round_1/leo/best_*)",
+      "Bash(python backtest.py --help)",
+      "Bash(python scripts/backtest_to_imc_log.py --member leo_osmium_only --round 1 --days -2 -1 0 --output artifacts/backtests/round_1/leo_osmium_only_imc.json)",
+      "Bash(PYTHONPATH=. python scripts/backtest_to_imc_log.py --member leo_osmium_only --round 1 --days -2 -1 0 --output artifacts/backtests/round_1/leo_osmium_only_imc.json)",
+      "Bash(tee /tmp/throughput.log)",
+      "Bash(python -m prosperity.tooling.data --help)",
+      "Bash(python research/visualizer/dashboard.py --help)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy leo_osmium_v4 --round 1 --days -2 -1 0 --execution-rule realistic --param \"ASH_COATED_OSMIUM.skew_deadband=1,3,5,8,12\" --param \"ASH_COATED_OSMIUM.skew_mode=drop,widen\" --param \"ASH_COATED_OSMIUM.skew_widen_ticks=3,8\" --top 20 --rank-by pnl)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy leo_osmium_v4 --round 1 --days -2 -1 0 --execution-rule realistic --param \"ASH_COATED_OSMIUM.skew_deadband=1,3,5,8,12,20\" --top 10 --rank-by pnl)",
+      "Bash(python backtest.py --strategy leo_osmium_zscore_v1 --round 1 --days -2 -1 0 --match-trades realistic)",
+      "Bash(python backtest.py --strategy leo_osmium_v5 --round 1 --days -2 --match-trades realistic)",
+      "Bash(python scripts/export_submission.py --member leo_osmium_v1 --round 1)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy leo_osmium_v9 --round 1 --days -2 --execution-rule realistic --param \"ASH_COATED_OSMIUM.tight_take_imb_threshold=0.99,0.2,0.4,0.6\" --param \"ASH_COATED_OSMIUM.tight_take_size=5,10,15\" --param \"ASH_COATED_OSMIUM.tight_take_max_spread=6,8\" --top 15 --rank-by pnl)",
+      "Bash(python scripts/analyze_osmium_horizons.py)"
     ]
   }
 }

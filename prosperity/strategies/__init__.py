@@ -68,6 +68,17 @@ def _load_registry():
     from prosperity.strategies.trend_carry_window import TrendCarryWindowStrategy
     from prosperity.strategies.osmium_mr import OsmiumMeanRevStrategy
     from prosperity.strategies.osmium_mr_v2 import OsmiumMeanRevV2Strategy
+    from prosperity.strategies.osmium_mr_v3 import OsmiumMeanRevV3Strategy
+    from prosperity.strategies.osmium_mr_v4 import OsmiumMeanRevV4Strategy
+    from prosperity.strategies.osmium_zscore_v1 import OsmiumZScoreV1Strategy
+    from prosperity.strategies.osmium_mr_v5 import OsmiumMeanRevV5Strategy
+    from prosperity.strategies.osmium_mr_v6 import OsmiumMeanRevV6Strategy
+    from prosperity.strategies.osmium_mr_v7 import OsmiumMeanRevV7Strategy
+    from prosperity.strategies.osmium_mr_v8 import OsmiumMeanRevV8Strategy
+    from prosperity.strategies.osmium_mr_v9 import OsmiumMeanRevV9Strategy
+    from prosperity.strategies.osmium_mr_v10 import OsmiumMeanRevV10Strategy
+    from prosperity.strategies.osmium_mr_v11 import OsmiumMeanRevV11Strategy
+    from prosperity.strategies.osmium_mr_v12 import OsmiumMeanRevV12Strategy
 
     _REGISTRY["market_maker"] = MarketMakerStrategy
     _REGISTRY["naive_tight_mm"] = NaiveTightMarketMakerStrategy
@@ -123,6 +134,17 @@ def _load_registry():
     _REGISTRY["trend_carry_window"] = TrendCarryWindowStrategy
     _REGISTRY["osmium_mr"] = OsmiumMeanRevStrategy
     _REGISTRY["osmium_mr_v2"] = OsmiumMeanRevV2Strategy
+    _REGISTRY["osmium_mr_v3"] = OsmiumMeanRevV3Strategy
+    _REGISTRY["osmium_mr_v4"] = OsmiumMeanRevV4Strategy
+    _REGISTRY["osmium_zscore_v1"] = OsmiumZScoreV1Strategy
+    _REGISTRY["osmium_mr_v5"] = OsmiumMeanRevV5Strategy
+    _REGISTRY["osmium_mr_v6"] = OsmiumMeanRevV6Strategy
+    _REGISTRY["osmium_mr_v7"] = OsmiumMeanRevV7Strategy
+    _REGISTRY["osmium_mr_v8"] = OsmiumMeanRevV8Strategy
+    _REGISTRY["osmium_mr_v9"] = OsmiumMeanRevV9Strategy
+    _REGISTRY["osmium_mr_v10"] = OsmiumMeanRevV10Strategy
+    _REGISTRY["osmium_mr_v11"] = OsmiumMeanRevV11Strategy
+    _REGISTRY["osmium_mr_v12"] = OsmiumMeanRevV12Strategy
     _LOADED = True
 
 
