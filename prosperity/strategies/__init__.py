@@ -1,138 +1,118 @@
-"""Strategy registry — maps strategy names to classes."""
+"""Strategy registry — maps strategy names to classes lazily."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Type
+import sys
+from importlib import import_module, util
+from pathlib import Path
+from typing import Any, Dict, Tuple, Type
 
-from prosperity.strategies.base import BaseStrategy
+from prosperity.strategies.base.base import BaseStrategy
 
 _REGISTRY: Dict[str, Type[BaseStrategy]] = {}
-_LOADED = False
+
+_STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
+    "market_maker": ("prosperity.strategies.base.market_maker", "MarketMakerStrategy"),
+    "naive_tight_mm": ("prosperity.strategies.round_1.naive_tight_mm", "NaiveTightMarketMakerStrategy"),
+    "naive_tight_mm_v2": ("prosperity.strategies.naive_tight_mm_v2", "NaiveTightMarketMakerV2Strategy"),
+    "naive_tight_mm_v3": ("prosperity.strategies.naive_tight_mm_v3", "NaiveTightMarketMakerV3Strategy"),
+    "naive_tight_mm_v4": ("prosperity.strategies.naive_tight_mm_v4", "NaiveTightMarketMakerV4Strategy"),
+    "naive_tight_mm_v5": ("prosperity.strategies.naive_tight_mm_v5", "NaiveTightMarketMakerV5Strategy"),
+    "naive_tight_mm_v6": ("prosperity.strategies.naive_tight_mm_v6", "NaiveTightMarketMakerV6Strategy"),
+    "naive_tight_mm_v7": ("prosperity.strategies.naive_tight_mm_v7", "NaiveTightMarketMakerV7Strategy"),
+    "naive_tight_mm_v8": ("prosperity.strategies.naive_tight_mm_v8", "NaiveTightMarketMakerV8Strategy"),
+    "naive_tight_mm_v9": ("prosperity.strategies.naive_tight_mm_v9", "NaiveTightMarketMakerV9Strategy"),
+    "naive_tight_mm_v10": ("prosperity.strategies.naive_tight_mm_v10", "NaiveTightMarketMakerV10Strategy"),
+    "naive_tight_mm_v11": ("prosperity.strategies.naive_tight_mm_v11", "NaiveTightMarketMakerV11Strategy"),
+    "naive_tight_mm_v12": ("prosperity.strategies.naive_tight_mm_v12", "NaiveTightMarketMakerV12Strategy"),
+    "naive_tight_mm_v14": ("prosperity.strategies.naive_tight_mm_v14", "NaiveTightMarketMakerV14Strategy"),
+    "naive_tight_mm_v15": ("prosperity.strategies.naive_tight_mm_v15", "NaiveTightMarketMakerV15Strategy"),
+    "naive_tight_mm_v16": ("prosperity.strategies.naive_tight_mm_v16", "NaiveTightMarketMakerV16Strategy"),
+    "naive_tight_mm_v17": ("prosperity.strategies.naive_tight_mm_v17", "NaiveTightMarketMakerV17Strategy"),
+    "trend_biased_mm_v18": ("prosperity.strategies.naive_tight_mm_v18", "TrendBiasedMMV18Strategy"),
+    "book_following_trend_mm_v19": ("prosperity.strategies.naive_tight_mm_v19", "BookFollowingTrendMMV19Strategy"),
+    "book_following_trend_mm_v20": ("prosperity.strategies.naive_tight_mm_v20", "BookFollowingTrendMMV20Strategy"),
+    "book_following_trend_mm_v21": ("prosperity.strategies.naive_tight_mm_v21", "BookFollowingTrendMMV21Strategy"),
+    "naive_tight_mm_v23": ("prosperity.strategies.naive_tight_mm_v23", "NaiveTightMarketMakerV23Strategy"),
+    "naive_tight_mm_v24": ("prosperity.strategies.naive_tight_mm_v24", "NaiveTightMarketMakerV24Strategy"),
+    "trend_carry_mm_v25": ("prosperity.strategies.naive_tight_mm_v25", "TrendCarryMMV25Strategy"),
+    "trend_carry_mm_v26": ("prosperity.strategies.naive_tight_mm_v26", "TrendCarryMMV26Strategy"),
+    "trend_carry_mm_v34": ("prosperity.strategies.round_1.naive_tight_mm_v34", "TrendCarryMMV34Strategy"),
+    "trend_carry_mm_v37": ("prosperity.strategies.round_1.naive_tight_mm_v37", "TrendCarryMMV37Strategy"),
+    "trend_carry_mm_v38": ("prosperity.strategies.round_1.naive_tight_mm_v38", "TrendCarryMMV38Strategy"),
+    "trend_carry_mm_v41": ("prosperity.strategies.round_1.naive_tight_mm_v41", "TrendCarryMMV41Strategy"),
+    "round1_regression_top_book": ("prosperity.strategies.round_1.regression_top_book", "Round1RegressionTopBookStrategy"),
+    "round1_regression_mm_v3": ("prosperity.strategies.round_1.regression_mm_v3", "Round1RegressionMMV3Strategy"),
+    "round1_regression_mm_v4": ("prosperity.strategies.round_1.regression_mm_v4", "Round1RegressionMMV4Strategy"),
+    "round1_regression_mm_v5": ("prosperity.strategies.round_1.regression_mm_v5", "Round1RegressionMMV5Strategy"),
+    "leo_fusion_a": ("prosperity.strategies.round_1.leo_fusion_a", "LeoFusionAStrategy"),
+    "leo_fusion_b": ("prosperity.strategies.round_1.leo_fusion_b", "LeoFusionBStrategy"),
+    "leo_fusion_b_v3": ("prosperity.strategies.round_1.leo_fusion_b_v3", "LeoFusionBV3Strategy"),
+    "leo_fusion_b_v4": ("prosperity.strategies.round_1.leo_fusion_b_v4", "LeoFusionBV4Strategy"),
+    "leo_fusion_b_v5": ("prosperity.strategies.round_1.leo_fusion_b_v5", "LeoFusionBV5Strategy"),
+    "leo_fusion_b_v6": ("prosperity.strategies.round_1.leo_fusion_b_v6", "LeoFusionBV6Strategy"),
+    "leo_fusion_b_v7": ("prosperity.strategies.round_1.leo_fusion_b_v7", "LeoFusionBV7Strategy"),
+    "leo_fusion_b_v8": ("prosperity.strategies.round_1.leo_fusion_b_v8", "LeoFusionBV8Strategy"),
+    "leo_fusion_b_v10": ("prosperity.strategies.round_1.leo_fusion_b_v10", "LeoFusionBV10Strategy"),
+    "osmium_mr_artifact": ("prosperity.strategies.round_1.osmium_mr_artifact", "OsmiumMeanRevStrategy"),
+    "leo_fusion_c": ("prosperity.strategies.round_1.leo_fusion_c", "LeoFusionCStrategy"),
+    "leo_fusion_d": ("prosperity.strategies.round_1.leo_fusion_d", "LeoFusionDStrategy"),
+    "avellaneda_stoikov": ("prosperity.strategies.base.avellaneda_stoikov", "AvellanedaStoikovStrategy"),
+    "mm_first": ("prosperity.strategies.metal_winner.mm_first", "MMFirstStrategy"),
+    "mean_reversion": ("prosperity.strategies.round_1.mean_reversion", "MeanReversionStrategy"),
+    "zscore": ("prosperity.strategies.metal_winner.zscore", "ZScoreStrategy"),
+    "buy_and_hold": ("prosperity.strategies.base.buy_and_hold", "BuyAndHoldStrategy"),
+    "stat_arb": ("prosperity.strategies.base.stat_arb", "StatArbStrategy"),
+    "black_scholes": ("prosperity.strategies.base.black_scholes", "BlackScholesStrategy"),
+    "conversion_arb": ("prosperity.strategies.base.conversion_arb", "ConversionArbStrategy"),
+    "signal_trader": ("prosperity.strategies.signal_trader", "SignalTraderStrategy"),
+    "trend_carry_window": ("prosperity.strategies.round_1.trend_carry_window", "TrendCarryWindowStrategy"),
+    "trend_carry_window_v2": ("prosperity.strategies.trend_carry_window_v2", "TrendCarryWindowV2Strategy"),
+    "osmium_mr": ("prosperity.strategies.metal_winner.osmium_mr", "OsmiumMeanRevStrategy"),
+    "osmium_mr_v2": ("prosperity.strategies.osmium_mr_v2", "OsmiumMeanRevV2Strategy"),
+}
 
 
-def _load_registry():
-    global _LOADED
-    if _LOADED:
-        return
-    from prosperity.strategies.market_maker import MarketMakerStrategy
-    from prosperity.strategies.naive_tight_mm import NaiveTightMarketMakerStrategy
-    from prosperity.strategies.naive_tight_mm_v2 import NaiveTightMarketMakerV2Strategy
-    from prosperity.strategies.naive_tight_mm_v3 import NaiveTightMarketMakerV3Strategy
-    from prosperity.strategies.naive_tight_mm_v4 import NaiveTightMarketMakerV4Strategy
-    from prosperity.strategies.naive_tight_mm_v5 import NaiveTightMarketMakerV5Strategy
-    from prosperity.strategies.naive_tight_mm_v6 import NaiveTightMarketMakerV6Strategy
-    from prosperity.strategies.naive_tight_mm_v7 import NaiveTightMarketMakerV7Strategy
-    from prosperity.strategies.naive_tight_mm_v8 import NaiveTightMarketMakerV8Strategy
-    from prosperity.strategies.naive_tight_mm_v9 import NaiveTightMarketMakerV9Strategy
-    from prosperity.strategies.naive_tight_mm_v10 import NaiveTightMarketMakerV10Strategy
-    from prosperity.strategies.naive_tight_mm_v11 import NaiveTightMarketMakerV11Strategy
-    from prosperity.strategies.naive_tight_mm_v12 import NaiveTightMarketMakerV12Strategy
-    from prosperity.strategies.naive_tight_mm_v14 import NaiveTightMarketMakerV14Strategy
-    from prosperity.strategies.naive_tight_mm_v15 import NaiveTightMarketMakerV15Strategy
-    from prosperity.strategies.naive_tight_mm_v16 import NaiveTightMarketMakerV16Strategy
-    from prosperity.strategies.naive_tight_mm_v17 import NaiveTightMarketMakerV17Strategy
-    from prosperity.strategies.naive_tight_mm_v18 import TrendBiasedMMV18Strategy
-    from prosperity.strategies.naive_tight_mm_v20 import BookFollowingTrendMMV20Strategy
-    from prosperity.strategies.naive_tight_mm_v21 import BookFollowingTrendMMV21Strategy
-    from prosperity.strategies.naive_tight_mm_v23 import NaiveTightMarketMakerV23Strategy
-    from prosperity.strategies.naive_tight_mm_v24 import NaiveTightMarketMakerV24Strategy
-    from prosperity.strategies.naive_tight_mm_v25 import TrendCarryMMV25Strategy
-    from prosperity.strategies.naive_tight_mm_v26 import TrendCarryMMV26Strategy
-    from prosperity.strategies.naive_tight_mm_v34 import TrendCarryMMV34Strategy
-    from prosperity.strategies.naive_tight_mm_v37 import TrendCarryMMV37Strategy
-    from prosperity.strategies.naive_tight_mm_v38 import TrendCarryMMV38Strategy
-    from prosperity.strategies.naive_tight_mm_v41 import TrendCarryMMV41Strategy
-    from prosperity.strategies.round_1.regression_top_book import Round1RegressionTopBookStrategy
-    from prosperity.strategies.round_1.regression_mm_v3 import Round1RegressionMMV3Strategy
-    from prosperity.strategies.round_1.regression_mm_v4 import Round1RegressionMMV4Strategy
-    from prosperity.strategies.round_1.regression_mm_v5 import Round1RegressionMMV5Strategy
-    from prosperity.strategies.round_1.leo_fusion_a import LeoFusionAStrategy
-    from prosperity.strategies.round_1.leo_fusion_b import LeoFusionBStrategy
-    from prosperity.strategies.round_1.leo_fusion_b_v3 import LeoFusionBV3Strategy
-    from prosperity.strategies.round_1.leo_fusion_b_v4 import LeoFusionBV4Strategy
-    from prosperity.strategies.round_1.leo_fusion_b_v5 import LeoFusionBV5Strategy
-    from prosperity.strategies.round_1.leo_fusion_b_v6 import LeoFusionBV6Strategy
-    from prosperity.strategies.round_1.leo_fusion_b_v7 import LeoFusionBV7Strategy
-    from prosperity.strategies.round_1.leo_fusion_c import LeoFusionCStrategy
-    from prosperity.strategies.round_1.leo_fusion_d import LeoFusionDStrategy
-    from prosperity.strategies.avellaneda_stoikov import AvellanedaStoikovStrategy
-    from prosperity.strategies.round_1.mm_first import MMFirstStrategy
-    from prosperity.strategies.round_1.mean_reversion import MeanReversionStrategy
-    from prosperity.strategies.zscore import ZScoreStrategy
-    from prosperity.strategies.buy_and_hold import BuyAndHoldStrategy
-    from prosperity.strategies.stat_arb import StatArbStrategy
-    from prosperity.strategies.black_scholes import BlackScholesStrategy
-    from prosperity.strategies.conversion_arb import ConversionArbStrategy
-    from prosperity.strategies.naive_tight_mm_v19 import BookFollowingTrendMMV19Strategy
-    from prosperity.strategies.signal_trader import SignalTraderStrategy
-    from prosperity.strategies.trend_carry_window import TrendCarryWindowStrategy
-    from prosperity.strategies.trend_carry_window_v2 import TrendCarryWindowV2Strategy
-    from prosperity.strategies.metal_winner.osmium_mr import OsmiumMeanRevStrategy
-    from prosperity.strategies.osmium_mr_v2 import OsmiumMeanRevV2Strategy
+def _package_dir(module_path: str) -> Path:
+    parts = module_path.split(".")
+    if len(parts) < 3 or parts[:2] != ["prosperity", "strategies"]:
+        raise ModuleNotFoundError(module_path)
+    package_parts = parts[2:-1]
+    return Path(__file__).resolve().parent.joinpath(*package_parts)
 
-    _REGISTRY["market_maker"] = MarketMakerStrategy
-    _REGISTRY["naive_tight_mm"] = NaiveTightMarketMakerStrategy
-    _REGISTRY["naive_tight_mm_v2"] = NaiveTightMarketMakerV2Strategy
-    _REGISTRY["naive_tight_mm_v3"] = NaiveTightMarketMakerV3Strategy
-    _REGISTRY["naive_tight_mm_v4"] = NaiveTightMarketMakerV4Strategy
-    _REGISTRY["naive_tight_mm_v5"] = NaiveTightMarketMakerV5Strategy
-    _REGISTRY["naive_tight_mm_v6"] = NaiveTightMarketMakerV6Strategy
-    _REGISTRY["naive_tight_mm_v7"] = NaiveTightMarketMakerV7Strategy
-    _REGISTRY["naive_tight_mm_v8"] = NaiveTightMarketMakerV8Strategy
-    _REGISTRY["naive_tight_mm_v9"] = NaiveTightMarketMakerV9Strategy
-    _REGISTRY["naive_tight_mm_v10"] = NaiveTightMarketMakerV10Strategy
-    _REGISTRY["naive_tight_mm_v11"] = NaiveTightMarketMakerV11Strategy
-    _REGISTRY["naive_tight_mm_v12"] = NaiveTightMarketMakerV12Strategy
-    _REGISTRY["naive_tight_mm_v14"] = NaiveTightMarketMakerV14Strategy
-    _REGISTRY["naive_tight_mm_v15"] = NaiveTightMarketMakerV15Strategy
-    _REGISTRY["naive_tight_mm_v16"] = NaiveTightMarketMakerV16Strategy
-    _REGISTRY["naive_tight_mm_v17"] = NaiveTightMarketMakerV17Strategy
-    _REGISTRY["trend_biased_mm_v18"] = TrendBiasedMMV18Strategy
-    _REGISTRY["book_following_trend_mm_v20"] = BookFollowingTrendMMV20Strategy
-    _REGISTRY["book_following_trend_mm_v21"] = BookFollowingTrendMMV21Strategy
-    _REGISTRY["naive_tight_mm_v23"] = NaiveTightMarketMakerV23Strategy
-    _REGISTRY["naive_tight_mm_v24"] = NaiveTightMarketMakerV24Strategy
-    _REGISTRY["trend_carry_mm_v25"] = TrendCarryMMV25Strategy
-    _REGISTRY["trend_carry_mm_v26"] = TrendCarryMMV26Strategy
-    _REGISTRY["trend_carry_mm_v34"] = TrendCarryMMV34Strategy
-    _REGISTRY["trend_carry_mm_v37"] = TrendCarryMMV37Strategy
-    _REGISTRY["trend_carry_mm_v38"] = TrendCarryMMV38Strategy
-    _REGISTRY["trend_carry_mm_v41"] = TrendCarryMMV41Strategy
-    _REGISTRY["round1_regression_top_book"] = Round1RegressionTopBookStrategy
-    _REGISTRY["round1_regression_mm_v3"] = Round1RegressionMMV3Strategy
-    _REGISTRY["round1_regression_mm_v4"] = Round1RegressionMMV4Strategy
-    _REGISTRY["round1_regression_mm_v5"] = Round1RegressionMMV5Strategy
-    _REGISTRY["leo_fusion_a"] = LeoFusionAStrategy
-    _REGISTRY["leo_fusion_b"] = LeoFusionBStrategy
-    _REGISTRY["leo_fusion_b_v3"] = LeoFusionBV3Strategy
-    _REGISTRY["leo_fusion_b_v4"] = LeoFusionBV4Strategy
-    _REGISTRY["leo_fusion_b_v5"] = LeoFusionBV5Strategy
-    _REGISTRY["leo_fusion_b_v6"] = LeoFusionBV6Strategy
-    _REGISTRY["leo_fusion_b_v7"] = LeoFusionBV7Strategy
-    _REGISTRY["leo_fusion_c"] = LeoFusionCStrategy
-    _REGISTRY["leo_fusion_d"] = LeoFusionDStrategy
-    _REGISTRY["avellaneda_stoikov"] = AvellanedaStoikovStrategy
-    _REGISTRY["mm_first"] = MMFirstStrategy
-    _REGISTRY["mean_reversion"] = MeanReversionStrategy
-    _REGISTRY["zscore"] = ZScoreStrategy
-    _REGISTRY["buy_and_hold"] = BuyAndHoldStrategy
-    _REGISTRY["stat_arb"] = StatArbStrategy
-    _REGISTRY["black_scholes"] = BlackScholesStrategy
-    _REGISTRY["conversion_arb"] = ConversionArbStrategy
-    _REGISTRY["book_following_trend_mm_v19"] = BookFollowingTrendMMV19Strategy
-    _REGISTRY["signal_trader"] = SignalTraderStrategy
-    _REGISTRY["trend_carry_window"] = TrendCarryWindowStrategy
-    _REGISTRY["trend_carry_window_v2"] = TrendCarryWindowV2Strategy
-    _REGISTRY["osmium_mr"] = OsmiumMeanRevStrategy
-    _REGISTRY["osmium_mr_v2"] = OsmiumMeanRevV2Strategy
-    _LOADED = True
+
+def _import_with_pyc_fallback(module_path: str):
+    try:
+        return import_module(module_path)
+    except ModuleNotFoundError as exc:
+        package_dir = _package_dir(module_path)
+        module_name = module_path.rsplit(".", 1)[-1]
+        pyc_name = f"{module_name}.cpython-{sys.version_info.major}{sys.version_info.minor}.pyc"
+        pyc_path = package_dir / "__pycache__" / pyc_name
+        if not pyc_path.exists():
+            raise exc
+        spec = util.spec_from_file_location(module_path, pyc_path)
+        if spec is None or spec.loader is None:
+            raise exc
+        module = util.module_from_spec(spec)
+        sys.modules[module_path] = module
+        spec.loader.exec_module(module)
+        return module
 
 
 def get_strategy_class(name: str) -> Type[BaseStrategy]:
-    _load_registry()
-    if name not in _REGISTRY:
-        raise ValueError(f"Unknown strategy: {name!r}. Available: {list(_REGISTRY.keys())}")
-    return _REGISTRY[name]
+    if name in _REGISTRY:
+        return _REGISTRY[name]
+    if name not in _STRATEGY_SPECS:
+        raise ValueError(f"Unknown strategy: {name!r}. Available: {list(_STRATEGY_SPECS.keys())}")
+    module_path, class_name = _STRATEGY_SPECS[name]
+    module = _import_with_pyc_fallback(module_path)
+    try:
+        cls = getattr(module, class_name)
+    except AttributeError as exc:
+        raise AttributeError(f"{module_path} does not define {class_name}") from exc
+    _REGISTRY[name] = cls
+    return cls
 
 
 def build_strategy(name: str, product: str, params: Dict[str, Any]) -> BaseStrategy:
