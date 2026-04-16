@@ -318,15 +318,17 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 mid_smooth_half_life=10,
                 taker_buy_threshold=9990,
                 taker_sell_threshold=10025,
-                gap_trigger_min=10,
-                gap_trigger_max_vol_pct=0.1,
-                gap_trigger_confirm_ticks=1,
 
                 zscore_window=50,
                 zscore_threshold=1,
                 zscore_size_scale=0.5,
                 zscore_max_scale=5.0,
 
+                gap_trigger_min=10,
+                gap_trigger_max_vol_pct=0.1,
+                gap_trigger_confirm_ticks=1,
+                zscore_gap_gate=1.5,
+                
                 ts_increment=100,
                 last_ts_value=99900,
                 log_flush_ts=1000,
@@ -347,6 +349,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 zscore_threshold=1.0,
                 zscore_size_scale=0.5,
                 zscore_max_scale=3.0,
+                zscore_gap_gate=1.0,
                 ts_increment=100,
                 last_ts_value=99900,
                 log_flush_ts=1000,
