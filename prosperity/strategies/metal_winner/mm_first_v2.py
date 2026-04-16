@@ -39,7 +39,7 @@ class MMFirstStrategy(BaseStrategy):
         self,
         book: BookSnapshot,
         inventory_ratio: float,
-        step_threshold: float,
+        mid_smooth: float,
     ) -> Tuple[Optional[int], Optional[int], str]:
         """Select L1/L2 passive prices + apply crossing prevention.
 
@@ -54,26 +54,97 @@ class MMFirstStrategy(BaseStrategy):
         ask_price: Optional[int] = (book.best_ask - 1) if book.best_ask is not None else None
         level = "L1"
 
-        if inventory_ratio >= step_threshold:
-            # Long: ease off buying, stay aggressive on selling
-            if book.best_bid is not None:
-                bid_price = book.best_bid       # join, no improvement
-            level = "L2"
-        elif inventory_ratio <= -step_threshold:
-            # Short: ease off selling, stay aggressive on buying
-            if book.best_ask is not None:
-                ask_price = book.best_ask       # join, no improvement
-            level = "L2"
+        # if inventory_ratio >= step_threshold:
+        #     # Long: ease off buying, stay aggressive on selling
+        #     if book.best_bid is not None:
+        #         bid_price = book.best_bid       # join, no improvement
+        #     level = "L2"
+        # elif inventory_ratio <= -step_threshold:
+        #     # Short: ease off selling, stay aggressive on buying
+        #     if book.best_ask is not None:
+        #         ask_price = book.best_ask       # join, no improvement
+        #     level = "L2"
 
         # Crossing prevention
-        if bid_price is not None and book.best_ask is not None:
-            bid_price = min(bid_price, book.best_ask - 1)
-        if ask_price is not None and book.best_bid is not None:
-            ask_price = max(ask_price, book.best_bid + 1)
-        if bid_price is not None and ask_price is not None and ask_price <= bid_price:
-            ask_price = bid_price + 1
+        # if bid_price is not None and book.best_ask is not None:
+        #     bid_price = min(bid_price, mid_smooth - 1)
+        # if ask_price is not None and book.best_bid is not None:
+        #     ask_price = max(ask_price, mid_smooth + 1)
+        # if bid_price is not None and ask_price is not None and ask_price <= bid_price:
+        #     ask_price = bid_price + 1
 
         return bid_price, ask_price, level
+
+    def _compute_zscore(self, mid: float, memory: Dict[str, Any]) -> Optional[float]:
+        """Rolling z-score of mid price.
+
+        z = (mid - rolling_mean) / rolling_std  over the last zscore_window ticks.
+        Returns None until the warm-up period completes (window // 4 samples),
+        or when std ~ 0 (flat price series).
+
+        Stored values (all accessible via memory):
+          memory["zscore"]    — current z  (None if not ready)
+          memory["_zs_mean"]  — rolling mean (for band overlay in dashboard)
+          memory["_zs_std"]   — rolling std
+
+        Params:
+          zscore_window — rolling window size (default 50)
+        """
+        window = int(self.params.get("zscore_window", 50))
+        buf: List[float] = memory.setdefault("_zscore_buf", [])
+        buf.append(mid)
+        if len(buf) > window:
+            buf[:] = buf[-window:]
+
+        if len(buf) < max(3, window // 4):
+            memory["zscore"] = None
+            return None
+
+        n    = len(buf)
+        mean = sum(buf) / n
+        var  = sum((x - mean) ** 2 for x in buf) / max(n - 1, 1)  # sample variance
+        std  = var ** 0.5
+
+        if std < 1e-9:
+            memory["zscore"] = None
+            return None
+
+        z = (mid - mean) / std
+        memory["zscore"]   = z
+        memory["_zs_mean"] = mean
+        memory["_zs_std"]  = std
+        return z
+
+    def _zscore_size_factors(self, memory: Dict[str, Any]) -> Tuple[float, float]:
+        """Return (bid_factor, ask_factor) multipliers based on the current z-score.
+
+        Neutral  (|z| <= threshold):  both 1.0 — no adjustment.
+        z >  threshold (price high):  ask_factor > 1, bid_factor < 1  (lean short).
+        z < -threshold (price low):   bid_factor > 1, ask_factor < 1  (lean long).
+
+        Scale ramps linearly with excess z beyond the threshold, capped at zscore_max_scale.
+
+        Params:
+          zscore_threshold  — |z| must exceed this to trigger scaling (default 1.0)
+          zscore_size_scale — slope of scale vs excess z (default 0.5)
+          zscore_max_scale  — cap on the multiplier (default 3.0)
+        """
+        z = memory.get("zscore")
+        if z is None:
+            return 1.0, 1.0
+
+        threshold  = float(self.params.get("zscore_threshold",  1.0))
+        size_scale = float(self.params.get("zscore_size_scale", 0.5))
+        max_scale  = float(self.params.get("zscore_max_scale",  3.0))
+
+        excess = max(0.0, abs(z) - threshold)
+        scale  = min(max_scale, 1.0 + size_scale * excess)
+
+        if z > threshold:
+            return 1.0 / scale, scale      # lean short: boost ask, shrink bid
+        if z < -threshold:
+            return scale, 1.0 / scale      # lean long:  boost bid, shrink ask
+        return 1.0, 1.0
 
     def _compute_sizes(self, position: int, limit: int) -> Tuple[float, float]:
         """Inventory-adaptive bid/ask sizes.
@@ -122,7 +193,7 @@ class MMFirstStrategy(BaseStrategy):
             abs_signal = taker_buy_threshold is not None and ask_p <= taker_buy_threshold
             if not (mid_signal or abs_signal) or buy_cap <= 0:
                 break
-            qty = min(available, buy_cap, int(bid_size * 0.3))
+            qty = min(available, buy_cap, int(bid_size * 0.3)) # TODO could set the threshold with zscore
             if qty > 0:
                 orders.append(Order(self.product, ask_p, qty))
                 taker_buy_px.add(ask_p)
@@ -330,35 +401,43 @@ class MMFirstStrategy(BaseStrategy):
         memory: Dict[str, Any],
     ) -> Tuple[List[Order], int]:
 
-        if book.best_bid is None and book.best_ask is None:        #TODO: better empty book handling than just skipping the tick — maybe anchor passives around last known mid or something
-            return [], 0
+        if book.best_bid is None and book.best_ask is None:
+            if memory.get("_last_mid") is None:
+                return [], 0   # no price reference at all yet — skip tick
+            # fall through with stale mid so passive anchoring still runs
 
-        mid = book.mid_price or float(book.best_bid or book.best_ask or 0)
+        raw_mid = book.mid_price
+        if raw_mid is None and book.best_bid is not None:
+            raw_mid = float(book.best_bid)
+        if raw_mid is None and book.best_ask is not None:
+            raw_mid = float(book.best_ask)
+        mid = raw_mid if raw_mid is not None else memory["_last_mid"]
+        if raw_mid is not None:
+            memory["_last_mid"] = raw_mid
+
         mid_smooth = self._smooth_mid(mid, memory)
+        self._compute_zscore(mid, memory)  # result stored in memory["zscore"]
 
         limit     = self.position_limit()
         inventory_ratio = position / float(limit) if limit else 0.0
-        step_thr  = float(self.params.get("inv_step_threshold", 0.8))
 
         # ── QUOTE LEVEL SELECTION ──────────────────────────────────────
-        bid_price, ask_price, quote_level = self._compute_quote_prices(
-            book, inventory_ratio, step_thr
-        )
+        bid_price, ask_price, _ = self._compute_quote_prices(book, inventory_ratio, mid_smooth)
 
         buy_cap  = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
 
-        # ── DYNAMIC SIZING ─────────────────────────────────────────────
+        # ── DYNAMIC SIZING / Ideal order size ─────────────────────────────────────────────
         bid_size, ask_size = self._compute_sizes(position, limit)
+
+        # ── Z-SCORE SIZE TILT ─────────────────────────────────────────
+        bid_factor, ask_factor = self._zscore_size_factors(memory)
+        bid_size = max(0.0, bid_size * bid_factor)
+        ask_size = max(0.0, ask_size * ask_factor)
 
         # ── TAKER ORDERS ───────────────────────────────────────────────
         taker_orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px = self._fire_takers(
             order_depth, mid_smooth, bid_size, ask_size, buy_cap, sell_cap
-        )
-
-        # ── TAKER PASSIVE RE-ANCHOR ────────────────────────────────────
-        bid_price, ask_price = self._reanchor_passive(
-            order_depth, bid_price, ask_price, taker_buy_px, taker_sell_px
         )
 
         # ── GAP EXPLOIT TAKERS ─────────────────────────────────────────
@@ -367,6 +446,11 @@ class MMFirstStrategy(BaseStrategy):
             bid_price, ask_price, buy_cap, sell_cap
         )
 
+        # ── TAKER PASSIVE RE-ANCHOR ────────────────────────────────────
+        bid_price, ask_price = self._reanchor_passive(
+            order_depth, bid_price, ask_price, taker_buy_px, taker_sell_px
+        )
+        
         # ── PASSIVE QUOTING ────────────────────────────────────────────
         passive_orders = self._passive_quotes(
             bid_price, ask_price, bid_size, ask_size, buy_cap, sell_cap, position, limit
@@ -380,7 +464,6 @@ class MMFirstStrategy(BaseStrategy):
             extras={
                 "position":   position,
                 "mid_smooth": round(mid_smooth, 2),
-                "level":      quote_level,
             },
         )
 
