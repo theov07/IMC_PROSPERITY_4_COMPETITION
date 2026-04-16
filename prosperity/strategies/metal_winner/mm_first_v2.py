@@ -275,6 +275,16 @@ class MMFirstStrategy(BaseStrategy):
         gap_max_vol = int(gap_vol_pct * limit) if limit else 0
         gap_confirm = int(self.params.get("gap_trigger_confirm_ticks", 1))
 
+        # Z-score gate: suppress gap exploit when price is already stretched
+        # against the direction of the sweep.
+        #   Bid-side = SELL → don't sell when z already strongly negative
+        #   Ask-side = BUY  → don't buy  when z already strongly positive
+        # z=None (warm-up) → no gate, allow through.
+        z         = memory.get("zscore")
+        gap_gate  = float(self.params.get("zscore_gap_gate", self.params.get("zscore_threshold", 1.0)))
+        bid_z_ok  = z is None or z >= -gap_gate   # ok to sell unless price already stretched low
+        ask_z_ok  = z is None or z <=  gap_gate   # ok to buy  unless price already stretched high
+
         orders: List[Order] = []
 
         if not (gap_min > 0 and gap_max_vol > 0):
@@ -301,7 +311,7 @@ class MMFirstStrategy(BaseStrategy):
         bid_streak = memory.get("_gap_bid_streak", 0)
         bid_streak = bid_streak + 1 if bid_gap_ok else 0
         memory["_gap_bid_streak"] = bid_streak
-        if bid_streak >= gap_confirm and bid_gap_ok and sell_cap > 0:
+        if bid_streak >= gap_confirm and bid_gap_ok and sell_cap > 0 and bid_z_ok:
             qty = min(bid1_vol, sell_cap, int(ask_size))
             if qty > 0:
                 orders.append(Order(self.product, bid1, -qty))
@@ -321,7 +331,7 @@ class MMFirstStrategy(BaseStrategy):
         ask_streak = memory.get("_gap_ask_streak", 0)
         ask_streak = ask_streak + 1 if ask_gap_ok else 0
         memory["_gap_ask_streak"] = ask_streak
-        if ask_streak >= gap_confirm and ask_gap_ok and buy_cap > 0:
+        if ask_streak >= gap_confirm and ask_gap_ok and buy_cap > 0 and ask_z_ok:
             qty = min(ask1_vol, buy_cap, int(bid_size))
             if qty > 0:
                 orders.append(Order(self.product, ask1, qty))
