@@ -105,7 +105,8 @@
       "Bash(python scripts/export_submission.py --member leo_osmium_v1 --round 1)",
       "Bash(python -m prosperity.tooling.grid_search --strategy leo_osmium_v9 --round 1 --days -2 --execution-rule realistic --param \"ASH_COATED_OSMIUM.tight_take_imb_threshold=0.99,0.2,0.4,0.6\" --param \"ASH_COATED_OSMIUM.tight_take_size=5,10,15\" --param \"ASH_COATED_OSMIUM.tight_take_max_spread=6,8\" --top 15 --rank-by pnl)",
       "Bash(python scripts/analyze_osmium_horizons.py)",
-      "Bash(python scripts/ou_garch_analysis.py)"
+      "Bash(python scripts/ou_garch_analysis.py)",
+      "Bash(python backtest.py --strategy leo_osmium_v1 --round 1 --days -2 -1 0 --match-trades realistic)"
     ]
   }
 }
