@@ -1,9 +1,9 @@
-"""Backtester entrypoint — leo_fusion_b_v2."""
+"""Backtester entrypoint — leo_fusion_b_v8."""
 
 from prosperity.config import get_round_config
 from prosperity.persistence import dump_state, load_state
 from prosperity.strategies import build_strategy
-from prosperity.strategies.base import BaseStrategy
+from prosperity.strategies.base.base import BaseStrategy
 
 from datamodel import Order, TradingState
 from typing import Dict, List
@@ -11,7 +11,7 @@ from typing import Dict, List
 
 class Trader:
     def __init__(self):
-        config = get_round_config(1, "leo_fusion_b_v2")
+        config = get_round_config(1, "leo_fusion_b_v8")
         self.strategies: Dict[str, BaseStrategy] = {}
         for symbol, pc in config.items():
             merged = {"position_limit": pc.position_limit, **pc.params}
