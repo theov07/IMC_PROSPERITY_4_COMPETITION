@@ -799,19 +799,15 @@ def participant_aware_summary(log: OfficialLog, symbol: str) -> dict:
 
 
 def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, edge: float = 1.0, group: str | None = None) -> Path:
-    symbol_activities = log.activities.loc[log.activities["product"] == symbol].copy()
-    if symbol_activities.empty:
-        raise ValueError(f"No activity rows found for product {symbol}")
-
-    symbol_activities = _compute_activity_features(symbol_activities.sort_values("timestamp"))
-    symbol_trades = _submission_trades(log.trades, symbol)
+    symbol_activities, symbol_trades, position_plot, buy_opportunities, sell_opportunities = _prepare_symbol_review_data(
+        log,
+        symbol,
+        edge,
+    )
 
     # Strategy-side features (fair_value, trend_ticks, residual_z, inv_target ...)
     strategy_quotes = _parse_lambda_logs(log.runtime_logs)
     strategy_quotes = strategy_quotes.loc[strategy_quotes["product"] == symbol].copy()
-
-    buy_opportunities = symbol_activities["ask_price_1"] <= symbol_activities["fair"] - edge
-    sell_opportunities = symbol_activities["bid_price_1"] >= symbol_activities["fair"] + edge
 
     figure, (price_ax, pos_ax, cash_ax, exec_ax) = plt.subplots(
         4,
@@ -1006,7 +1002,7 @@ def plot_symbol_review(log: OfficialLog, symbol: str, output_dir: str | Path, ed
     return output_path
 
 
-def plot_symbol_review_plotly(log: OfficialLog, symbol: str, output_dir: str | Path, edge: float = 1.0) -> Path:
+def plot_symbol_review_plotly(log: OfficialLog, symbol: str, output_dir: str | Path, edge: float = 1.0, group: str | None = None) -> Path:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 
@@ -1243,7 +1239,9 @@ def plot_symbol_review_plotly(log: OfficialLog, symbol: str, output_dir: str | P
         margin={"l": 60, "r": 60, "t": 80, "b": 50},
     )
 
-    output_path = Path(output_dir) / log.analysis_group / f"{log.submission_id}_{symbol}_review.html"
+    group_name = group if group is not None else log.analysis_group
+    group_dir = Path(output_dir) / group_name if group_name else Path(output_dir)
+    output_path = group_dir / f"{log.submission_id}_{symbol}_review.html"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.write_html(output_path, include_plotlyjs=True, full_html=True)
     return output_path
@@ -1338,10 +1336,9 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
             ]
             print(f"{symbol} participant_summary={compact}")
         if args.plotly:
-            output_path = plot_symbol_review_plotly(log, symbol, args.outdir, edge=args.edge)
+            output_path = plot_symbol_review_plotly(log, symbol, args.outdir, edge=args.edge, group=args.group)
         else:
-            output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge)
-        output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge, group=args.group)
+            output_path = plot_symbol_review(log, symbol, args.outdir, edge=args.edge, group=args.group)
         print(f"saved {output_path}")
 
     return 0

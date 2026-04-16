@@ -50,6 +50,9 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "leo_fusion_a": ("prosperity/strategies/round_1/leo_fusion_a.py", "LeoFusionAStrategy"),
     "leo_fusion_b": ("prosperity/strategies/round_1/leo_fusion_b.py", "LeoFusionBStrategy"),
     "leo_fusion_b_v3": ("prosperity/strategies/round_1/leo_fusion_b_v3.py", "LeoFusionBV3Strategy"),
+    "leo_fusion_b_v8": ("prosperity/strategies/round_1/leo_fusion_b_v8.py", "LeoFusionBV8Strategy"),
+    "leo_fusion_b_v10": ("prosperity/strategies/round_1/leo_fusion_b_v10.py", "LeoFusionBV10Strategy"),
+    "osmium_mr_artifact": ("prosperity/strategies/round_1/osmium_mr_artifact.py", "OsmiumMeanRevStrategy"),
     "leo_fusion_c": ("prosperity/strategies/round_1/leo_fusion_c.py", "LeoFusionCStrategy"),
     "leo_fusion_d": ("prosperity/strategies/round_1/leo_fusion_d.py", "LeoFusionDStrategy"),
     "naive_tight_mm_v10": ("prosperity/strategies/naive_tight_mm_v10.py", "NaiveTightMarketMakerV10Strategy"),
@@ -89,7 +92,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
 CORE_MODULES = [
     "prosperity/market.py",
     "prosperity/persistence.py",
-    "prosperity/strategies/base.py",
+    "prosperity/strategies/base/base.py",
 ]
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).
@@ -97,6 +100,8 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "leo_fusion_a": ["round1_regression_mm_v5"],
     "leo_fusion_b": ["round1_regression_mm_v5"],
     "leo_fusion_b_v3": ["round1_regression_mm_v5"],
+    "leo_fusion_b_v8": ["round1_regression_mm_v5"],
+    "leo_fusion_b_v10": ["round1_regression_mm_v5"],
     "leo_fusion_c": ["round1_regression_mm_v5"],
     "leo_fusion_d": ["round1_regression_mm_v5"],
     "osmium_mr": ["naive_tight_mm_v10"],
