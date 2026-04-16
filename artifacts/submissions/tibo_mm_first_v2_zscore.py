@@ -339,7 +339,6 @@ class BaseStrategy(ABC):
         side: str,
         price: int,
         quantity: int,
-        gap_exploit: bool = False,
     ) -> None:
         """Accumulate a taker fill and flush when the buffer is full enough.
 
@@ -352,17 +351,13 @@ class BaseStrategy(ABC):
 
         Log format emitted to stdout:
           {"product": "...", "trace": "taker_fills", "chunk_end": ts,
-           "log": [[ts, side, price, qty], ...]}           # regular taker
-           "log": [[ts, side, price, qty, 1], ...]}         # gap exploit (5th element=1)
+           "log": [[ts, side, price, qty], ...]}
         """
         if not self.runtime_trace_enabled():
             return
 
         taker_log = memory.setdefault("_taker_log", [])
-        entry = [int(state.timestamp), side, price, quantity]
-        if gap_exploit:
-            entry.append(1)
-        taker_log.append(entry)
+        taker_log.append([int(state.timestamp), side, price, quantity])
 
         flush_ts = int(self.params.get("log_flush_ts", 10000))
         ts_increment = int(self.params.get("ts_increment", 100))

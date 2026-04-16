@@ -262,6 +262,32 @@ def _trade_markers(fig, df: pd.DataFrame, row: int, prefix: str = ""):
 
 C_TILT_BUY  = "#f9e2af"   # yellow diamond — tilted buy fill
 C_TILT_SELL = "#89dceb"   # cyan diamond  — tilted sell fill
+C_GAP_BUY   = "#a6e3a1"   # green square  — gap exploit buy
+C_GAP_SELL  = "#f38ba8"   # coral square  — gap exploit sell
+
+
+def _gap_exploit_markers(fig, df: pd.DataFrame, row: int) -> None:
+    """Square markers for gap exploit fills (subset of aggressive fills)."""
+    if df.empty or "gap_exploit" not in df.columns:
+        return
+    gap_df = df[df["gap_exploit"].fillna(False).astype(bool)]
+    if gap_df.empty:
+        return
+    mkw = dict(line=dict(width=1.2, color="#212529"))
+    for side, color, label in [
+        ("BUY",  C_GAP_BUY,  "Gap buy"),
+        ("SELL", C_GAP_SELL, "Gap sell"),
+    ]:
+        subset = gap_df[gap_df["side"].str.upper() == side]
+        if subset.empty:
+            continue
+        fig.add_trace(go.Scatter(
+            x=subset["timestamp"], y=subset["price"], mode="markers",
+            name=label,
+            marker=dict(symbol="square", color=color, size=11, **mkw),
+            text=[f"qty={q}  px={p}  (gap exploit)" for q, p in zip(subset["quantity"], subset["price"])],
+            hoverinfo="text+name",
+        ), row=row, col=1)
 
 
 def _trade_markers_tilted(fig, df: pd.DataFrame, row: int) -> None:
@@ -503,6 +529,16 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         sym_trades["aggressive"] = sym_trades.apply(
             lambda r: (int(r["price"]), str(r["side"]).upper()) in taker_price_side, axis=1,
         )
+        # Gap exploit annotation — subset of takers flagged in the logged trace
+        _gap_col = sym_takers.get("gap_exploit", pd.Series(False, index=sym_takers.index)).fillna(False)
+        _gap_takers = sym_takers[_gap_col.astype(bool)]
+        if not _gap_takers.empty:
+            gap_price_side = set(zip(_gap_takers["price"].astype(int), _gap_takers["side"].str.upper()))
+            sym_trades["gap_exploit"] = sym_trades.apply(
+                lambda r: (int(r["price"]), str(r["side"]).upper()) in gap_price_side, axis=1,
+            )
+        else:
+            sym_trades["gap_exploit"] = False
 
     pos_df = _position_series(sym_trades)
     market_flow_df = official_market_trade_flow(log, symbol)
@@ -549,15 +585,22 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
 
     # Price (with optional EWMA smoothing)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["bid_price_1"], smooth_n),
+        customdata=act["bid_volume_1"].values,
         name="Best Bid", mode=_mode, marker=dict(**_marker, color=C_BID),
-        line=dict(color=C_BID, width=1, shape=line_shape)), row=1, col=1)
+        line=dict(color=C_BID, width=1, shape=line_shape),
+        hovertemplate="%{y} ×%{customdata}<extra>Best Bid</extra>",
+        ), row=1, col=1)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["ask_price_1"], smooth_n),
+        customdata=act["ask_volume_1"].values,
         name="Best Ask", mode=_mode, marker=dict(**_marker, color=C_ASK),
-        line=dict(color=C_ASK, width=1, shape=line_shape)), row=1, col=1)
+        line=dict(color=C_ASK, width=1, shape=line_shape),
+        hovertemplate="%{y} ×%{customdata}<extra>Best Ask</extra>",
+        ), row=1, col=1)
     fig.add_trace(go.Scatter(x=act["timestamp"], y=_smooth(act["fair"], smooth_n),
         name="Fair (EWM)", mode=_mode, marker=dict(**_marker, color=C_FAIR),
         line=dict(color=C_FAIR, width=1.3, shape=line_shape)), row=1, col=1)
     _trade_markers(fig, sym_trades, row=1)
+    _gap_exploit_markers(fig, sym_trades, row=1)
 
     # Strategy lambda logs: reservation price + MM quotes (no smoothing on discrete prices)
     if not lambda_sym.empty:
@@ -579,13 +622,23 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         bid_data = lambda_sym.dropna(subset=["bid_price"])
         ask_data = lambda_sym.dropna(subset=["ask_price"])
         if not bid_data.empty:
+            _lbd_bid_sizes = bid_data["bid_size"].values if "bid_size" in bid_data.columns else None
             fig.add_trace(go.Scatter(x=bid_data["timestamp"], y=bid_data["bid_price"],
+                customdata=_lbd_bid_sizes,
                 name="MM Bid (log)", mode=_mode, marker=dict(**_marker, color=C_QUOTE_BID),
-                line=dict(color=C_QUOTE_BID, width=1, shape=line_shape)), row=1, col=1)
+                line=dict(color=C_QUOTE_BID, width=1, shape=line_shape),
+                hovertemplate=("%{y} ×%{customdata}<extra>MM Bid (log)</extra>"
+                               if _lbd_bid_sizes is not None else "%{y}<extra>MM Bid (log)</extra>"),
+                ), row=1, col=1)
         if not ask_data.empty:
+            _lbd_ask_sizes = ask_data["ask_size"].values if "ask_size" in ask_data.columns else None
             fig.add_trace(go.Scatter(x=ask_data["timestamp"], y=ask_data["ask_price"],
+                customdata=_lbd_ask_sizes,
                 name="MM Ask (log)", mode=_mode, marker=dict(**_marker, color=C_QUOTE_ASK),
-                line=dict(color=C_QUOTE_ASK, width=1, shape=line_shape)), row=1, col=1)
+                line=dict(color=C_QUOTE_ASK, width=1, shape=line_shape),
+                hovertemplate=("%{y} ×%{customdata}<extra>MM Ask (log)</extra>"
+                               if _lbd_ask_sizes is not None else "%{y}<extra>MM Ask (log)</extra>"),
+                ), row=1, col=1)
 
     # Spread
     fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",
@@ -829,12 +882,18 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
         if not sym_mkt.empty:
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"],
                 y=_smooth(sym_mkt["bid_price_1"], smooth_n),
+                customdata=sym_mkt["bid_volume_1"].values,
                 name="Best Bid", mode=_mode, marker=dict(**_marker, color=C_BID),
-                line=dict(color=C_BID, width=1, shape=line_shape)), row=price_row, col=1)
+                line=dict(color=C_BID, width=1, shape=line_shape),
+                hovertemplate="%{y} ×%{customdata}<extra>Best Bid</extra>",
+                ), row=price_row, col=1)
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"],
                 y=_smooth(sym_mkt["ask_price_1"], smooth_n),
+                customdata=sym_mkt["ask_volume_1"].values,
                 name="Best Ask", mode=_mode, marker=dict(**_marker, color=C_ASK),
-                line=dict(color=C_ASK, width=1, shape=line_shape)), row=price_row, col=1)
+                line=dict(color=C_ASK, width=1, shape=line_shape),
+                hovertemplate="%{y} ×%{customdata}<extra>Best Ask</extra>",
+                ), row=price_row, col=1)
             mid = (sym_mkt["bid_price_1"] + sym_mkt["ask_price_1"]) / 2
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=_smooth(mid, smooth_n),
                 name="Mid", mode=_mode, marker=dict(**_marker, color=C_FAIR),
@@ -845,16 +904,24 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
             bid_q = sym_quotes.dropna(subset=["bid"])
             ask_q = sym_quotes.dropna(subset=["ask"])
             if not bid_q.empty:
+                _bid_sizes = bid_q["bid_size"].values if "bid_size" in bid_q.columns else None
                 fig.add_trace(go.Scatter(
                     x=bid_q["timestamp"], y=bid_q["bid"],
+                    customdata=_bid_sizes,
                     name="MM Bid Quote", mode=_mode, marker=dict(**_marker, color=C_QUOTE_BID),
                     line=dict(color=C_QUOTE_BID, width=1, shape=line_shape),
+                    hovertemplate=("%{y} ×%{customdata}<extra>MM Bid Quote</extra>"
+                                  if _bid_sizes is not None else "%{y}<extra>MM Bid Quote</extra>"),
                 ), row=price_row, col=1)
             if not ask_q.empty:
+                _ask_sizes = ask_q["ask_size"].values if "ask_size" in ask_q.columns else None
                 fig.add_trace(go.Scatter(
                     x=ask_q["timestamp"], y=ask_q["ask"],
+                    customdata=_ask_sizes,
                     name="MM Ask Quote", mode=_mode, marker=dict(**_marker, color=C_QUOTE_ASK),
                     line=dict(color=C_QUOTE_ASK, width=1, shape=line_shape),
+                    hovertemplate=("%{y} ×%{customdata}<extra>MM Ask Quote</extra>"
+                                  if _ask_sizes is not None else "%{y}<extra>MM Ask Quote</extra>"),
                 ), row=price_row, col=1)
 
         # Strategy feature price lines (e.g. reservation price) on price chart
@@ -883,8 +950,10 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
             _neutral = _merged[~_merged.index.isin(_tilted.index)]
             _trade_markers(fig, _neutral, row=price_row, prefix="")
             _trade_markers_tilted(fig, _tilted, row=price_row)
+            _gap_exploit_markers(fig, _merged, row=price_row)
         else:
             _trade_markers(fig, sym_fills, row=price_row)
+            _gap_exploit_markers(fig, sym_fills, row=price_row)
 
     # Position
     pos_df = _position_series(sym_fills)

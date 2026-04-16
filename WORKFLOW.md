@@ -13,6 +13,15 @@ python research/visualizer/dashboard.py
 # → Opens http://localhost:8050
 ```
 
+```bash
+python scripts/analyze_backtest.py --log logs/round_1/tibo_mm/182179.json --day 2 --outdir artifacts/analysis/round_1/tibo
+```
+
+```bash
+python scripts/analyze_log.py --log logs/round_1/tibo_mm/182179.json --outdir artifacts/analysis/round_1/tibo --plotly     
+```
+
+
 ### `Backtesting`
 ```bash
 python -m prosperity.tooling.backtest --strategy tibo_AvSt --round 0 --data-dir data --json-out artifacts/backtest_results/new_AvSt.json 
