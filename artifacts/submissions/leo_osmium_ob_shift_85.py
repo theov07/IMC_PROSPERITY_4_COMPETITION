@@ -729,7 +729,7 @@ class OsmiumMeanRevStrategy(NaiveTightMarketMakerV10Strategy):
         # of the strategy run normally on the side that still has orders.
         ob_shift_orders: List[Order] = []
         if book.best_bid is None or book.best_ask is None:
-            ob_shift = 75
+            ob_shift = 85
             last_bid = memory.get("_last_best_bid")
             last_ask = memory.get("_last_best_ask")
             if last_bid is None and book.best_ask is not None:
