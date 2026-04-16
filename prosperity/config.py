@@ -328,7 +328,8 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 gap_trigger_max_vol_pct=0.1,
                 gap_trigger_confirm_ticks=1,
                 zscore_gap_gate=1.5,
-                
+
+                quote_trace_enabled=True,
                 ts_increment=100,
                 last_ts_value=99900,
                 log_flush_ts=1000,
@@ -350,6 +351,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 zscore_size_scale=0.5,
                 zscore_max_scale=3.0,
                 zscore_gap_gate=1.0,
+                quote_trace_enabled=True,
                 ts_increment=100,
                 last_ts_value=99900,
                 log_flush_ts=1000,
