@@ -166,7 +166,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         "--match-trades",
         dest="execution_rule",
         default="queue",
-        choices=["queue", "all", "worse", "none", "realistic"],
+        choices=["queue", "all", "worse", "none", "realistic", "live_exact"],
         help="Passive fill rule to use during the sweep.",
     )
     parser.add_argument("--top", type=int, default=10, help="Show top N results")

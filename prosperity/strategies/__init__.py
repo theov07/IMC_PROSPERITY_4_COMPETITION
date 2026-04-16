@@ -79,6 +79,11 @@ def _load_registry():
     from prosperity.strategies.osmium_mr_v10 import OsmiumMeanRevV10Strategy
     from prosperity.strategies.osmium_mr_v11 import OsmiumMeanRevV11Strategy
     from prosperity.strategies.osmium_mr_v12 import OsmiumMeanRevV12Strategy
+    from prosperity.strategies.osmium_mr_v13 import OsmiumMeanRevV13Strategy
+    from prosperity.strategies.osmium_mr_v14 import OsmiumMeanRevV14Strategy
+    from prosperity.strategies.osmium_mr_v15 import OsmiumMeanRevV15Strategy
+    from prosperity.strategies.osmium_mr_v16 import OsmiumMeanRevV16Strategy
+    from prosperity.strategies.osmium_mr_v17 import OsmiumMeanRevV17Strategy
 
     _REGISTRY["market_maker"] = MarketMakerStrategy
     _REGISTRY["naive_tight_mm"] = NaiveTightMarketMakerStrategy
@@ -145,6 +150,11 @@ def _load_registry():
     _REGISTRY["osmium_mr_v10"] = OsmiumMeanRevV10Strategy
     _REGISTRY["osmium_mr_v11"] = OsmiumMeanRevV11Strategy
     _REGISTRY["osmium_mr_v12"] = OsmiumMeanRevV12Strategy
+    _REGISTRY["osmium_mr_v13"] = OsmiumMeanRevV13Strategy
+    _REGISTRY["osmium_mr_v14"] = OsmiumMeanRevV14Strategy
+    _REGISTRY["osmium_mr_v15"] = OsmiumMeanRevV15Strategy
+    _REGISTRY["osmium_mr_v16"] = OsmiumMeanRevV16Strategy
+    _REGISTRY["osmium_mr_v17"] = OsmiumMeanRevV17Strategy
     _LOADED = True
 
 
