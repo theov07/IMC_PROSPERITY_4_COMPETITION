@@ -588,39 +588,6 @@ class MMFirstStrategy(BaseStrategy):
 
         return orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px
 
-    def _reanchor_passive(
-        self,
-        order_depth: OrderDepth,
-        bid_price: Optional[int],
-        ask_price: Optional[int],
-        taker_buy_px: Set[int],
-        taker_sell_px: Set[int],
-    ) -> Tuple[Optional[int], Optional[int]]:
-        """Re-anchor passive prices after taker sweeps.
-
-        The pre-computed passive price is stale once a taker sweeps that level.
-        Re-anchor to the first level NOT swept by this tick's taker orders.
-        """
-        if taker_buy_px:
-            new_best_ask = next(
-                (p for p in sorted(order_depth.sell_orders) if p not in taker_buy_px),
-                None,
-            )
-            if new_best_ask is not None:
-                ask_price = new_best_ask - 1
-            # else: all ask levels cleared — gap exploit will handle it
-
-        if taker_sell_px:
-            new_best_bid = next(
-                (p for p in sorted(order_depth.buy_orders, reverse=True) if p not in taker_sell_px),
-                None,
-            )
-            if new_best_bid is not None:
-                bid_price = new_best_bid + 1
-            # else: all bid levels cleared — gap exploit will handle it
-
-        return bid_price, ask_price
-
     def _gap_exploit(
         self,
         order_depth: OrderDepth,
@@ -632,88 +599,120 @@ class MMFirstStrategy(BaseStrategy):
         ask_price: Optional[int],
         buy_cap: int,
         sell_cap: int,
+        taker_buy_px: Set[int],
+        taker_sell_px: Set[int],
     ) -> Tuple[List[Order], int, int, Optional[int], Optional[int]]:
-        """Sweep a thin L1 when the gap to L2 is large.
+        """Re-anchor passive prices and optionally sweep a thin level when the gap is large.
 
-        After clearing L1, normal passive quoting re-enters just above the new best,
-        capturing the gap spread from any participant who then hits our quote.
+        Step 1 — Re-anchor (absorbs the old _reanchor_passive):
+          Build the effective remaining book by filtering out levels already swept
+          by this tick's taker orders.  Passive prices are always updated to the
+          first remaining level ±1; if a side is completely cleared, the passive
+          is anchored far from the last known best (advantageous pricing for us).
 
-        Mitigation: gap_trigger_confirm_ticks — only fire after the condition has
-        held for N consecutive ticks, filtering transient thin levels.
+        Step 2 — Gap check on effective book:
+          If effective L1 is thin AND gap to effective L2 is ≥ gap_trigger_min,
+          sweep L1 aggressively and re-anchor the passive to L2 ±1.
 
-        Also handles an empty book by anchoring passives far from last known best.
+        Z-score gate: suppress gap sweeps when price is already stretched against
+        the sweep direction.
 
         Returns (orders, buy_cap, sell_cap, bid_price, ask_price).
         """
         gap_min     = float(self.params.get("gap_trigger_min", 10))
+        shift     = float(self.params.get("OB_cleared_shift", 10))
         gap_vol_pct = float(self.params.get("gap_trigger_max_vol_pct", 0.10))
         gap_max_vol = int(gap_vol_pct * limit) if limit else 0
         gap_confirm = int(self.params.get("gap_trigger_confirm_ticks", 1))
 
-        # Z-score gate: suppress gap exploit when price is already stretched
-        # against the direction of the sweep.
-        #   Bid-side = SELL → don't sell when z already strongly negative
-        #   Ask-side = BUY  → don't buy  when z already strongly positive
-        # z=None (warm-up) → no gate, allow through.
-        z         = memory.get("zscore")
-        gap_gate  = float(self.params.get("zscore_gap_gate", self.params.get("zscore_threshold", 1.0)))
-        bid_z_ok  = z is None or z >= -gap_gate   # ok to sell unless price already stretched low
-        ask_z_ok  = z is None or z <=  gap_gate   # ok to buy  unless price already stretched high
+        z        = memory.get("zscore")
+        gap_gate = float(self.params.get("zscore_gap_gate", self.params.get("zscore_threshold", 1.0)))
+        bid_z_ok = z is None or z >= -gap_gate   # ok to sell unless price already stretched low
+        ask_z_ok = z is None or z <=  gap_gate   # ok to buy  unless price already stretched high
 
         orders: List[Order] = []
+        memory["_gap_buy_px"]  = []
+        memory["_gap_sell_px"] = []
 
-        if not (gap_min > 0 and gap_max_vol > 0):
-            return orders, buy_cap, sell_cap, bid_price, ask_price
-
-        # Track last known best bid/ask for empty-book anchoring
-        bids = sorted(order_depth.buy_orders.keys(), reverse=True)
-        asks = sorted(order_depth.sell_orders.keys())
-        if bids:
-            memory["_last_best_bid"] = bids[0]
-        if asks:
-            memory["_last_best_ask"] = asks[0]
+        # Track last known market best from the original book (before our actions)
+        all_bids = sorted(order_depth.buy_orders.keys(), reverse=True)
+        all_asks = sorted(order_depth.sell_orders.keys())
+        if all_bids:
+            memory["_last_best_bid"] = all_bids[0]
+        if all_asks:
+            memory["_last_best_ask"] = all_asks[0]
         last_best_bid = memory.get("_last_best_bid")
         last_best_ask = memory.get("_last_best_ask")
 
-        # Bid side: sell into thin best bid when gap to L2 is large
-        bid_gap_ok = False
-        bid1 = bid2 = bid1_vol = None
-        if len(bids) >= 2:
-            bid1, bid2 = bids[0], bids[1]
-            bid1_vol = order_depth.buy_orders[bid1]
-            bid_gap_ok = (bid1 - bid2) >= gap_min and bid1_vol <= gap_max_vol
-        # 1-level case: no L2 to measure gap against → skip aggressive clearing
-        bid_streak = memory.get("_gap_bid_streak", 0)
-        bid_streak = bid_streak + 1 if bid_gap_ok else 0
-        memory["_gap_bid_streak"] = bid_streak
-        if bid_streak >= gap_confirm and bid_gap_ok and sell_cap > 0 and bid_z_ok:
-            qty = min(bid1_vol, sell_cap, int(ask_size))
-            if qty > 0:
-                orders.append(Order(self.product, bid1, -qty))
-                sell_cap -= qty
-                bid_price = (bid2 + 1) if bid2 is not None else (bid1 - int(gap_min))
-        elif len(bids) == 0 and last_best_bid is not None:
-            bid_price = last_best_bid - int(gap_min)
+        # Effective remaining book: exclude levels swept by this tick's takers
+        remaining_bids = [p for p in all_bids if p not in taker_sell_px]
+        remaining_asks = [p for p in all_asks if p not in taker_buy_px]
 
-        # Ask side: buy into thin best ask when gap to L2 is large
-        ask_gap_ok = False
-        ask1 = ask2 = ask1_vol = None
-        if len(asks) >= 2:
-            ask1, ask2 = asks[0], asks[1]
-            ask1_vol = -order_depth.sell_orders[ask1]
-            ask_gap_ok = (ask2 - ask1) >= gap_min and ask1_vol <= gap_max_vol
-        # 1-level case: no L2 to measure gap against → skip aggressive clearing
-        ask_streak = memory.get("_gap_ask_streak", 0)
-        ask_streak = ask_streak + 1 if ask_gap_ok else 0
-        memory["_gap_ask_streak"] = ask_streak
-        if ask_streak >= gap_confirm and ask_gap_ok and buy_cap > 0 and ask_z_ok:
-            qty = min(ask1_vol, buy_cap, int(bid_size))
-            if qty > 0:
-                orders.append(Order(self.product, ask1, qty))
-                buy_cap -= qty
-                ask_price = (ask2 - 1) if ask2 is not None else (ask1 + int(gap_min))
-        elif len(asks) == 0 and last_best_ask is not None:
-            ask_price = last_best_ask + int(gap_min)
+        # Which levels gap exploit fully clears (tracked so re-anchor uses the true final book)
+        gap_swept_bids: Set[int] = set()
+        gap_swept_asks: Set[int] = set()
+
+        # ── GAP CHECK ON EFFECTIVE (POST-TAKER) BOOK ──────────────────
+        if gap_min > 0 and gap_max_vol > 0:
+
+            # Bid side: sell into thin effective L1 when gap to L2 is large
+            bid_gap_ok = False
+            bid1 = bid2 = bid1_vol = None
+            if len(remaining_bids) >= 2:
+                bid1, bid2 = remaining_bids[0], remaining_bids[1]
+                bid1_vol = order_depth.buy_orders[bid1]
+                bid_gap_ok = (bid1 - bid2) >= gap_min and bid1_vol <= gap_max_vol
+
+            bid_streak = memory.get("_gap_bid_streak", 0)
+            bid_streak = bid_streak + 1 if bid_gap_ok else 0
+            memory["_gap_bid_streak"] = bid_streak
+
+            if bid_streak >= gap_confirm and bid_gap_ok and sell_cap > 0 and bid_z_ok:
+                qty = min(bid1_vol, sell_cap, int(ask_size))
+                if qty > 0:
+                    orders.append(Order(self.product, bid1, -qty))
+                    sell_cap -= qty
+                    memory["_gap_sell_px"].append(bid1)
+                    if qty >= bid1_vol:      # fully cleared → exclude from final remaining
+                        gap_swept_bids.add(bid1)
+
+            # Ask side: buy into thin effective L1 when gap to L2 is large
+            ask_gap_ok = False
+            ask1 = ask2 = ask1_vol = None
+            if len(remaining_asks) >= 2:
+                ask1, ask2 = remaining_asks[0], remaining_asks[1]
+                ask1_vol = -order_depth.sell_orders[ask1]
+                ask_gap_ok = (ask2 - ask1) >= gap_min and ask1_vol <= gap_max_vol
+
+            ask_streak = memory.get("_gap_ask_streak", 0)
+            ask_streak = ask_streak + 1 if ask_gap_ok else 0
+            memory["_gap_ask_streak"] = ask_streak
+
+            if ask_streak >= gap_confirm and ask_gap_ok and buy_cap > 0 and ask_z_ok:
+                qty = min(ask1_vol, buy_cap, int(bid_size))
+                if qty > 0:
+                    orders.append(Order(self.product, ask1, qty))
+                    buy_cap -= qty
+                    memory["_gap_buy_px"].append(ask1)
+                    if qty >= ask1_vol:      # fully cleared → exclude from final remaining
+                        gap_swept_asks.add(ask1)
+
+        # ── RE-ANCHOR: post-taker AND post-gap effective book ──────────
+        # Done last so it reflects all sweeps this tick.  When a side is fully
+        # empty we post `shift` ticks away from the last known market price —
+        # an advantageous quote that captures a wide spread if anyone hits it.
+        final_remaining_bids = [p for p in remaining_bids if p not in gap_swept_bids]
+        final_remaining_asks = [p for p in remaining_asks if p not in gap_swept_asks]
+
+        if final_remaining_asks:
+            ask_price = final_remaining_asks[0] - 1
+        elif last_best_ask is not None:
+            ask_price = last_best_ask + int(shift)   # empty book: post far above
+
+        if final_remaining_bids:
+            bid_price = final_remaining_bids[0] + 1
+        elif last_best_bid is not None:
+            bid_price = last_best_bid - int(shift)   # empty book: post far below
 
         return orders, buy_cap, sell_cap, bid_price, ask_price
 
@@ -727,11 +726,16 @@ class MMFirstStrategy(BaseStrategy):
         sell_cap: int,
         position: int,
         limit: int,
-    ) -> List[Order]:
+    ) -> Tuple[List[Order], int, int]:
         """Size and emit passive bid/ask orders with a hard inventory stop.
 
         Hard stop: when |position| >= limit * (1 - pct_kept_for_takers), suppress
         the inventory-increasing side to preserve capacity for taker unwinds.
+
+        Returns (orders, remaining_buy_cap, remaining_sell_cap) so this function
+        can be called in any order relative to _fire_takers / _gap_exploit without
+        risking a position-limit breach — each caller chains the returned caps into
+        the next call, exactly like _fire_takers and _gap_exploit already do.
         """
         quote_buy  = min(buy_cap,  int(bid_size))
         quote_sell = min(sell_cap, int(ask_size))
@@ -749,7 +753,8 @@ class MMFirstStrategy(BaseStrategy):
             orders.append(Order(self.product, bid_price, quote_buy))
         if quote_sell > 0 and ask_price is not None:
             orders.append(Order(self.product, ask_price, -quote_sell))
-        return orders
+
+        return orders, buy_cap - quote_buy, sell_cap - quote_sell
 
     def _log_taker_fills(
         self,
@@ -758,11 +763,20 @@ class MMFirstStrategy(BaseStrategy):
         this_taker_buy_px: Set[int],
         this_taker_sell_px: Set[int],
     ) -> None:
-        """Detect and log taker fills by comparing own_trades against last tick's taker prices."""
+        """Detect and log taker fills by comparing own_trades against last tick's taker prices.
+
+        Gap-exploit fills are identified by cross-referencing against the gap prices
+        recorded by _gap_exploit on the previous tick (T-1 prices fill as own_trades on T).
+        """
         prev_taker_buy_px  = set(memory.get("_taker_buy_px",  []))
         prev_taker_sell_px = set(memory.get("_taker_sell_px", []))
-        memory["_taker_buy_px"]  = list(this_taker_buy_px)
-        memory["_taker_sell_px"] = list(this_taker_sell_px)
+        prev_gap_buy_px    = set(memory.get("_gap_buy_px_prev",  []))
+        prev_gap_sell_px   = set(memory.get("_gap_sell_px_prev", []))
+
+        memory["_taker_buy_px"]     = list(this_taker_buy_px)
+        memory["_taker_sell_px"]    = list(this_taker_sell_px)
+        memory["_gap_buy_px_prev"]  = list(memory.get("_gap_buy_px",  []))
+        memory["_gap_sell_px_prev"] = list(memory.get("_gap_sell_px", []))
 
         for trade in state.own_trades.get(self.product, []):
             if trade.buyer == "SUBMISSION":
@@ -770,9 +784,14 @@ class MMFirstStrategy(BaseStrategy):
             else:
                 side, is_taker = "SELL", trade.price in prev_taker_sell_px
             if is_taker:
+                is_gap = (
+                    (side == "BUY"  and trade.price in prev_gap_buy_px) or
+                    (side == "SELL" and trade.price in prev_gap_sell_px)
+                )
                 self.log_taker_fill(
                     state=state, memory=memory,
                     side=side, price=trade.price, quantity=trade.quantity,
+                    gap_exploit=is_gap,
                 )
 
     # ── order construction ───────────────────────────────────────────────
@@ -825,19 +844,18 @@ class MMFirstStrategy(BaseStrategy):
             order_depth, mid_smooth, bid_size, ask_size, buy_cap, sell_cap
         )
 
-        # ── GAP EXPLOIT TAKERS ─────────────────────────────────────────
+        # ── GAP EXPLOIT + PASSIVE RE-ANCHOR ───────────────────────────
+        # _gap_exploit absorbs the old _reanchor_passive: it builds the effective
+        # remaining book (excluding taker-swept levels), always re-anchors passive
+        # prices, then optionally sweeps a thin level if the gap is large enough.
         gap_orders, buy_cap, sell_cap, bid_price, ask_price = self._gap_exploit(
             order_depth, memory, limit, bid_size, ask_size,
-            bid_price, ask_price, buy_cap, sell_cap
+            bid_price, ask_price, buy_cap, sell_cap,
+            taker_buy_px, taker_sell_px,
         )
 
-        # ── TAKER PASSIVE RE-ANCHOR ────────────────────────────────────
-        bid_price, ask_price = self._reanchor_passive(
-            order_depth, bid_price, ask_price, taker_buy_px, taker_sell_px
-        )
-        
         # ── PASSIVE QUOTING ────────────────────────────────────────────
-        passive_orders = self._passive_quotes(
+        passive_orders, buy_cap, sell_cap = self._passive_quotes(
             bid_price, ask_price, bid_size, ask_size, buy_cap, sell_cap, position, limit
         )
 
@@ -864,7 +882,8 @@ class MMFirstStrategy(BaseStrategy):
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-PRODUCTS = {'ASH_COATED_OSMIUM': {'gap_trigger_confirm_ticks': 1,
+PRODUCTS = {'ASH_COATED_OSMIUM': {'OB_cleared_shift': 85,
+                       'gap_trigger_confirm_ticks': 1,
                        'gap_trigger_max_vol_pct': 0.1,
                        'gap_trigger_min': 10,
                        'last_ts_value': 99900,
