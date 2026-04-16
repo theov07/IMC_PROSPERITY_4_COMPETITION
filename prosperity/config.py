@@ -1811,6 +1811,19 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
 }
 
 
+# Trend-carry window v2: same params as tibo_trend when that member exists.
+if "tibo_trend" in MEMBER_OVERRIDES:
+    MEMBER_OVERRIDES["tibo_trend_v2"] = {
+        1: {
+            "ASH_COATED_OSMIUM": None,
+            "INTARIAN_PEPPER_ROOT": _override(
+                MEMBER_OVERRIDES["tibo_trend"][1]["INTARIAN_PEPPER_ROOT"],
+                strategy="trend_carry_window_v2",
+            ),
+        },
+    }
+
+
 # ── V2 variants (block_size=200, R^2 ~0.99; rebalanced trend/residual weights
 #    so residual_z can drive sells on spikes instead of being dominated by trend).
 for _base in ("leo_fusion_a", "leo_fusion_b", "leo_fusion_c", "leo_fusion_d"):
@@ -1908,6 +1921,65 @@ MEMBER_OVERRIDES["leo_fusion_b_v7"] = {
 }
 
 
+MEMBER_OVERRIDES["leo_fusion_b_v8"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v8",
+            startup_target=80,
+            trend_inventory_cap=80,
+            trend_inv_per_tick=18.0,
+            resid_inv_per_z=12.0,
+            strong_trend_ticks=0.8,
+            very_strong_trend_ticks=1.5,
+            max_bid_extra_ticks=3,
+            take_buy_edge_bull=-10.0,
+            fastfill_target=80,
+            fastfill_end_ts=12000,
+            fastfill_buy_edge_boost=2.0,
+            fastfill_min_passive_buy=20,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v9"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v8",
+            startup_target=80,
+            trend_inventory_cap=80,
+            trend_inv_per_tick=16.0,
+            resid_inv_per_z=14.0,
+            strong_trend_ticks=0.9,
+            very_strong_trend_ticks=1.6,
+            max_bid_extra_ticks=2,
+            take_buy_edge_bull=-8.0,
+            fastfill_target=80,
+            fastfill_end_ts=12000,
+            fastfill_buy_edge_boost=0.0,
+            fastfill_min_passive_buy=10,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["leo_fusion_b_v10"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v9"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="leo_fusion_b_v10",
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+        ),
+    },
+}
+
+
 MEMBER_OVERRIDES["leo_osmium_only"] = {
     1: {
         "ASH_COATED_OSMIUM": _override(
@@ -1924,6 +1996,17 @@ MEMBER_OVERRIDES["leo_osmium_only"] = {
             anchor_alpha=0.0,
         ),
         "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["champion_theo_all"] = {
+    1: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["leo_osmium_only"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_mr_artifact",
+        ),
+        "INTARIAN_PEPPER_ROOT": MEMBER_OVERRIDES["leo_fusion_b_v10"][1]["INTARIAN_PEPPER_ROOT"],
     },
 }
 
