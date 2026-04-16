@@ -75,10 +75,6 @@ jobs:
                       name: "Commit Message",
                       value: messageText
                     },
-                    {
-                      name: "Files Changed",
-                      value: filesText.slice(0, 1024)
-                    }
                   ],
                   footer: {
                     text: "GitHub → Discord"
