@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import importlib.util
+import io
+import os
 import re
 import sys
 from pathlib import Path
@@ -206,7 +209,10 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         strategy_file=official_log.submission_source_path,
         round_num=round_num,
     )
-    summary = engine.run_day(resolved_day, mode=TradeMatchingMode(args.execution_rule))
+    # Exported submissions always print quote/taker traces to stdout (runtime_trace_enabled
+    # is hardcoded True). Redirect during replay so the terminal stays clean.
+    with contextlib.redirect_stdout(io.StringIO()):
+        summary = engine.run_day(resolved_day, mode=TradeMatchingMode(args.execution_rule))
     backtest_log = _build_backtest_log(official_log, summary, round_num, resolved_day, args.data_dir)
 
     symbols = args.symbol or sorted(backtest_log.activities["product"].dropna().unique())

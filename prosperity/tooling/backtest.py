@@ -1380,6 +1380,106 @@ def aggregate_day_summaries(summaries: List[DaySummary]) -> Dict[str, object]:
     }
 
 
+def _format_results_table(summaries: List[DaySummary], aggregate: Dict[str, object]) -> str:
+    """Format backtest results as a compact table grouped by product."""
+    COLS   = ["pnl", "trades", "volume", "max_pos", "end_pos", "make", "take", "inv"]
+    HEADS  = ["pnl", "trades", "vol", "max", "end", "make", "take", "inv"]
+
+    def ps_cells(ps: ProductSummary) -> List[str]:
+        return [
+            f"{ps.pnl:,.0f}",
+            str(ps.trades),
+            str(ps.traded_volume),
+            str(ps.max_abs_position),
+            str(ps.ending_position),
+            str(ps.robustness.passive_qty),
+            str(ps.robustness.aggressive_qty),
+            f"{ps.robustness.avg_abs_position_ratio:.3f}",
+        ]
+
+    def sub_cells(pss: List[ProductSummary]) -> List[str]:
+        """Aggregate a list of per-day ProductSummaries for one product."""
+        return [
+            f"{sum(p.pnl for p in pss):,.0f}",
+            str(sum(p.trades for p in pss)),
+            str(sum(p.traded_volume for p in pss)),
+            str(max(p.max_abs_position for p in pss)),
+            str(pss[-1].ending_position),
+            str(sum(p.robustness.passive_qty for p in pss)),
+            str(sum(p.robustness.aggressive_qty for p in pss)),
+            f"{sum(p.robustness.avg_abs_position_ratio for p in pss) / len(pss):.3f}",
+        ]
+
+    def total_cells(agg: Dict) -> List[str]:
+        r = agg["robustness"]
+        return [
+            f"{agg['total_pnl']:,.0f}",
+            str(r["passive_trades"] + r["aggressive_trades"]),
+            str(r["traded_volume"]),
+            "-",
+            "-",
+            str(r["passive_qty"]),
+            str(r["aggressive_qty"]),
+            f"{r['avg_abs_position_ratio']:.3f}",
+        ]
+
+    # Collect all symbols in order
+    symbols = list(dict.fromkeys(
+        sym for s in summaries for sym in s.product_summaries
+    ))
+
+    # Build display rows: (label_col, day_col, cells, is_subtotal)
+    rows: List[tuple] = []
+    for sym in symbols:
+        per_day = [s.product_summaries[sym] for s in summaries if sym in s.product_summaries]
+        for i, (summary, ps) in enumerate(
+            [(s, s.product_summaries[sym]) for s in summaries if sym in s.product_summaries]
+        ):
+            label = sym if i == 0 else ""
+            rows.append((label, f"day {summary.day}", ps_cells(ps), False))
+        rows.append(("subtotal", "", sub_cells(per_day), True))
+
+    rows.append(("TOTAL", f"{len(summaries)} day(s)", total_cells(aggregate), True))
+
+    # Column widths
+    lbl_w  = max(len(r[0]) for r in rows)
+    day_w  = max(len(r[1]) for r in rows)
+    col_ws = [max(len(HEADS[i]), max(len(r[2][i]) for r in rows)) for i in range(len(COLS))]
+
+    def sep(char="─", mid="┼") -> str:
+        parts = [char * (lbl_w + 2), char * (day_w + 2)]
+        parts += [char * (w + 2) for w in col_ws]
+        return "┼".join(parts) if mid == "┼" else "╪".join(parts)
+
+    def fmt_row(label, day, cells, bold=False) -> str:
+        parts = [f" {label:<{lbl_w}} ", f" {day:<{day_w}} "]
+        parts += [f" {c:>{w}} " for c, w in zip(cells, col_ws)]
+        return "│".join(parts)
+
+    lines: List[str] = []
+    # header
+    lines.append(sep())
+    lines.append(fmt_row("product", "day", HEADS))
+    lines.append(sep("═", "╪"))
+
+    prev_sym = None
+    for label, day, cells, is_sub in rows:
+        cur_sym = label if label not in ("", "subtotal", "TOTAL") else prev_sym
+        # separator between products (before subtotal of previous group)
+        if is_sub and label == "subtotal":
+            lines.append(fmt_row("  └ subtotal", "", cells))
+            lines.append(sep())
+            prev_sym = None
+            continue
+        if label == "TOTAL":
+            lines.append(fmt_row("TOTAL", day, cells))
+            continue
+        prev_sym = cur_sym or prev_sym
+        lines.append(fmt_row(label, day, cells))
+
+    return "\n".join(lines)
+
+
 def run_cli(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prosperity backtest runner (any round)")
     parser.add_argument("--strategy", required=True, help="Module or alias: champion/leo/theo/pietro")
@@ -1413,28 +1513,8 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
 
     summaries = [engine.run_day(day, mode=mode) for day in days]
 
-    for summary in summaries:
-        print(
-            f"day {summary.day}: pnl={summary.pnl:.2f} "
-            f"dd={summary.robustness.max_drawdown or 0.0:.2f} "
-            f"fill_eff={summary.robustness.fill_efficiency:.3f}"
-        )
-        for ps in summary.product_summaries.values():
-            print(
-                f"  {ps.symbol}: pnl={ps.pnl:.2f}, trades={ps.trades}, volume={ps.traded_volume}, "
-                f"max_pos={ps.max_abs_position}, end_pos={ps.ending_position}, "
-                f"make={ps.robustness.passive_qty}, take={ps.robustness.aggressive_qty}, "
-                f"inv={ps.robustness.avg_abs_position_ratio:.3f}"
-            )
-
     aggregate = aggregate_day_summaries(summaries)
-    robustness = aggregate["robustness"]
-    print(
-        f"TOTAL pnl={aggregate['total_pnl']:.2f} over {len(summaries)} day(s) "
-        f"dd={robustness['max_drawdown'] or 0.0:.2f} "
-        f"fill_eff={robustness['fill_efficiency']:.3f} "
-        f"inv={robustness['avg_abs_position_ratio']:.3f}"
-    )
+    print(_format_results_table(summaries, aggregate))
 
     if args.json_out:
         payload = {

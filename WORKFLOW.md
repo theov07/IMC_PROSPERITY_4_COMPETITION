@@ -302,7 +302,7 @@ python -m prosperity.tooling.backtest --strategy tibo_AvSt --round 0 --data-dir 
 run dashboard:
 
 ```bash
-python -m prosperity.tooling.dashboard --backtest-json artifacts/backtest_results.json --data-dir data
+python -m prosperity.tooling.dashboard --backtest-json artifacts/backtest_results/round_1/tibo_mm_first_v2.json --data-dir data
 ```
 
 
