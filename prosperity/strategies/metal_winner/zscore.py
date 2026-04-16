@@ -125,14 +125,14 @@ class ZScoreStrategy(BaseStrategy):
         ask_price: int | None = (book.best_ask - 1) if book.best_ask is not None else memory.get("_last_ask_price")
         quote_level = "L1"
 
-        if inventory_ratio >= step_threshold:
-            if book.best_bid is not None:
-                bid_price = book.best_bid
-            quote_level = "L2"
-        elif inventory_ratio <= -step_threshold:
-            if book.best_ask is not None:
-                ask_price = book.best_ask
-            quote_level = "L2"
+        # if inventory_ratio >= step_threshold:
+        #     if book.best_bid is not None:
+        #         bid_price = book.best_bid
+        #     quote_level = "L2"
+        # elif inventory_ratio <= -step_threshold:
+        #     if book.best_ask is not None:
+        #         ask_price = book.best_ask
+        #     quote_level = "L2"
 
         # Crossing prevention  (mid_smooth is float → cast to int before arithmetic)
         if bid_price is not None and book.best_ask is not None:
