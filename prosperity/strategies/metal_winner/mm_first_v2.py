@@ -193,7 +193,7 @@ class MMFirstStrategy(BaseStrategy):
             abs_signal = taker_buy_threshold is not None and ask_p <= taker_buy_threshold
             if not (mid_signal or abs_signal) or buy_cap <= 0:
                 break
-            qty = min(available, buy_cap, int(bid_size * 0.3)) # TODO could set the threshold with zscore
+            qty = min(available, buy_cap, int(bid_size * 0.3))
             if qty > 0:
                 orders.append(Order(self.product, ask_p, qty))
                 taker_buy_px.add(ask_p)
