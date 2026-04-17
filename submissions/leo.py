@@ -1,6 +1,6 @@
 """Submission entrypoint — Leo's variant."""
 
-from prosperity.strategies.trader import CURRENT_ROUND
+from prosperity.strategies.round_1.trader import CURRENT_ROUND
 from prosperity.config import get_round_config
 from prosperity.persistence import dump_state, load_state
 from prosperity.strategies import build_strategy

@@ -15,7 +15,9 @@ When you add a new strategy:
 
 import argparse
 import ast
+import contextlib
 import importlib.util
+import io
 import sys
 import time
 import traceback
@@ -87,6 +89,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "trend_carry_window": ("prosperity/strategies/round_1/trend_carry_window.py", "TrendCarryWindowStrategy"),
     "trend_carry_window_v2": ("prosperity/strategies/trend_carry_window_v2.py", "TrendCarryWindowV2Strategy"),
     "osmium_mr":          ("prosperity/strategies/osmium_mr.py",          "OsmiumMeanRevStrategy"),
+    "theo_best_generalized": ("prosperity/strategies/round_1/theo_best_generalized.py", "TheoGeneralizedStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -106,6 +109,7 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "leo_fusion_c": ["round1_regression_mm_v5"],
     "leo_fusion_d": ["round1_regression_mm_v5"],
     "osmium_mr": ["naive_tight_mm_v10"],
+    "theo_best_generalized": ["round1_regression_mm_v5"],
 }
 
 
@@ -283,10 +287,11 @@ def _validate(output_path: Path, products: dict) -> bool:
         traceback.print_exc(limit=5)
         return False
 
-    # 4. Functional test — one tick
+    # 4. Functional test — one tick (stdout suppressed: strategies print trace JSON)
     try:
         state = _build_test_state(products, timestamp=0)
-        result = trader.run(state)
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = trader.run(state)
         if not isinstance(result, tuple) or len(result) < 3:
             raise ValueError(f"run() must return (orders, conversions, traderData), got: {result!r}")
         orders_dict, _, _ = result[0], result[1], result[2]
@@ -297,14 +302,15 @@ def _validate(output_path: Path, products: dict) -> bool:
         traceback.print_exc(limit=5)
         return False
 
-    # 5. Runtime benchmark over _BENCH_TICKS ticks
+    # 5. Runtime benchmark over _BENCH_TICKS ticks (stdout suppressed)
     try:
         trader_data = result[2]
         durations = []
         for i in range(_BENCH_TICKS):
             state = _build_test_state(products, timestamp=i * 100, trader_data=trader_data)
             t0 = time.perf_counter()
-            out = trader.run(state)
+            with contextlib.redirect_stdout(io.StringIO()):
+                out = trader.run(state)
             durations.append((time.perf_counter() - t0) * 1000)
             trader_data = out[2]
 
