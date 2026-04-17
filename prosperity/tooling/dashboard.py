@@ -545,35 +545,44 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     lambda_df = _parse_lambda_logs(log.runtime_logs)
     lambda_sym = lambda_df[lambda_df["product"] == symbol] if not lambda_df.empty else pd.DataFrame()
 
-    # Detect vol-scale columns in lambda logs (e.g. "sigma", "half_spread")
+    # Detect vol-scale and zscore columns in lambda logs
     _skip = {"timestamp", "product", "bid_price", "ask_price", "reservation", "position"}
     _lambda_extra = [c for c in lambda_sym.columns if c not in _skip] if not lambda_sym.empty else []
-    _vol_cols = [c for c in _lambda_extra if "sigma" in c.lower() or "vol" in c.lower()]
-    has_vol = bool(_vol_cols)
+    _vol_cols  = [c for c in _lambda_extra if "sigma" in c.lower() or "vol" in c.lower()]
+    has_vol    = bool(_vol_cols)
+    has_zscore = "zscore" in _lambda_extra and not lambda_sym.empty
+
+    # Row layout: price + spread + flow + position (4 fixed), then optional vol/zscore, then pnl
+    flow_row     = 3
+    position_row = 4
+    next_row     = 5
+    n_rows  = 4
+    heights = [0.46, 0.08, 0.10, 0.10]
+    titles  = ["Price & Trades", "Spread (Market vs Quote)", "Trade Flow", "Position & Imbalance"]
+    vol_row    = None
+    zscore_row = None
 
     if has_vol:
-        n_rows  = 6
-        heights = [0.46, 0.08, 0.10, 0.10, 0.08, 0.18]
-        titles  = ["Price & Trades", "Spread", "Position & Imbalance", "Volatility (σ)", "PnL"]
-        vol_row = 4
-        pnl_row = 5
-        titles = ["Price & Trades", "Spread (Market vs Quote)", "Trade Flow", "Position & Imbalance", "Volatility (sigma)", "PnL"]
-        flow_row = 3
-        position_row = 4
-        vol_row = 5
-        pnl_row = 6
-    else:
-        n_rows  = 5
-        heights = [0.50, 0.10, 0.12, 0.10, 0.18]
-        titles  = ["Price & Trades", "Spread", "Position & Imbalance", "PnL"]
-        vol_row = None
-        pnl_row = 4
-        titles = ["Price & Trades", "Spread (Market vs Quote)", "Trade Flow", "Position & Imbalance", "PnL"]
-        flow_row = 3
-        position_row = 4
-        pnl_row = 5
+        vol_row = next_row
+        heights.append(0.18)
+        titles.append("Volatility (σ)")
+        next_row += 1
+        n_rows   += 1
 
-    height = 1040 if has_vol else 940
+    if has_zscore:
+        zscore_row = next_row
+        heights.append(0.18)
+        titles.append("Z-score")
+        next_row += 1
+        n_rows   += 1
+
+    # PnL is always last
+    pnl_row = next_row
+    heights.append(0.18)
+    titles.append("PnL")
+    n_rows += 1
+
+    height = 940 + 120 * int(has_vol) + 120 * int(has_zscore)
     heights, height = _apply_price_height_inc(heights, height, price_height_inc)
 
     fig = make_subplots(
@@ -602,8 +611,17 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     _trade_markers(fig, sym_trades, row=1)
     _gap_exploit_markers(fig, sym_trades, row=1)
 
-    # Strategy lambda logs: reservation price + MM quotes (no smoothing on discrete prices)
+    # Strategy lambda logs: reservation price, mid_smooth, and MM quotes (no smoothing on discrete prices)
     if not lambda_sym.empty:
+        if "mid_smooth" in lambda_sym.columns:
+            ms_data = lambda_sym.dropna(subset=["mid_smooth"])
+            if not ms_data.empty:
+                fig.add_trace(go.Scatter(
+                    x=ms_data["timestamp"], y=ms_data["mid_smooth"],
+                    name="MidSmooth", mode=_mode,
+                    marker=dict(**_marker, color=C_FEATURE_PALETTE[0]),
+                    line=dict(color=C_FEATURE_PALETTE[0], width=1.2, shape=line_shape, dash="dot"),
+                ), row=1, col=1)
         if "fair_value" in lambda_sym.columns:
             fv_data = lambda_sym.dropna(subset=["fair_value"])
             if not fv_data.empty:
@@ -695,6 +713,19 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
                 name=feat, mode=_mode, marker=dict(**_marker, color=color),
                 line=dict(color=color, width=1.3, shape=line_shape),
             ), row=vol_row, col=1)
+
+    # Z-score subplot
+    if zscore_row is not None and not lambda_sym.empty:
+        z_data = lambda_sym[["timestamp", "zscore"]].dropna(subset=["zscore"]).sort_values("timestamp")
+        if not z_data.empty:
+            fig.add_trace(go.Scatter(
+                x=z_data["timestamp"], y=z_data["zscore"],
+                name="Z-score", mode=_mode, marker=dict(**_marker, color=C_FEATURE_PALETTE[2]),
+                line=dict(color=C_FEATURE_PALETTE[2], width=1.3, shape=line_shape),
+            ), row=zscore_row, col=1)
+            for level, dash in [(1.0, "dash"), (-1.0, "dash"), (2.0, "dot"), (-2.0, "dot")]:
+                fig.add_hline(y=level, line_dash=dash, line_color="rgba(255,255,255,0.25)",
+                              line_width=1, row=zscore_row, col=1)
 
     # PnL — per-product areas + total line
     pnl_df = _imc_per_product_pnl(log)
