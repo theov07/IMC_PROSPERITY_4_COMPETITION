@@ -207,6 +207,49 @@ class MMFirstStrategy(BaseStrategy):
             return 0, ticks   # price low  → tighten sell bar only
         return 0, 0
 
+    def _dynamic_take_edge(self, memory: Dict[str, Any]) -> float:
+        """Linearly interpolate take_edge with current volatility.
+
+        Maps sigma linearly from [take_edge_vol_lo, take_edge_vol_hi]
+        to  [take_edge_lo, take_edge_hi], clamped at both ends:
+
+          sigma <= vol_lo  →  take_edge = take_edge_lo   (calm market)
+          sigma >= vol_hi  →  take_edge = take_edge_hi   (turbulent market)
+          in between       →  linear interpolation
+
+        Falls back to the fixed `take_edge` param when `take_edge_lo` or
+        `take_edge_hi` are absent — zero impact on existing behaviour.
+
+        Params:
+          take_edge        — fixed fallback (default 1.0)
+          take_edge_lo     — edge floor applied at low vol (None = disabled)
+          take_edge_hi     — edge ceiling applied at high vol (None = disabled)
+          take_edge_vol_lo — sigma lower bound (default 2.0)
+          take_edge_vol_hi — sigma upper bound (default 5.0)
+        """
+        lo = self.params.get("take_edge_lo")
+        hi = self.params.get("take_edge_hi")
+
+        if lo is None or hi is None:
+            return float(self.params.get("take_edge", 1.0))
+
+        sigma = memory.get("sigma_smoothed")
+        if sigma is None:
+            return float(lo)
+
+        vol_lo = float(self.params.get("take_edge_vol_lo", 2.0))
+        vol_hi = float(self.params.get("take_edge_vol_hi", 5.0))
+        edge_lo = float(lo)
+        edge_hi = float(hi)
+
+        if sigma <= vol_lo:
+            return edge_lo
+        if sigma >= vol_hi:
+            return edge_hi
+
+        t = (sigma - vol_lo) / (vol_hi - vol_lo)
+        return edge_lo + t * (edge_hi - edge_lo)
+
     def _fire_takers(
         self,
         order_depth: OrderDepth,
@@ -217,6 +260,7 @@ class MMFirstStrategy(BaseStrategy):
         sell_cap: int,
         buy_extra_ticks: int = 0,
         sell_extra_ticks: int = 0,
+        take_edge: Optional[float] = None,
     ) -> Tuple[List[Order], int, int, Set[int], Set[int]]:
         """Emit aggressive taker orders when price vs fair-value edge is sufficient.
 
@@ -228,11 +272,13 @@ class MMFirstStrategy(BaseStrategy):
 
         buy_extra_ticks / sell_extra_ticks: additional ticks of required edge,
         injected by _zscore_taker_adjust (default 0 = no change to existing logic).
+        take_edge: override from _dynamic_take_edge; falls back to params if None.
 
         Size is capped at 30% of the inventory-adaptive quote size.
         Returns (orders, remaining_buy_cap, remaining_sell_cap, buy_px_set, sell_px_set).
         """
-        take_edge            = float(self.params.get("take_edge", 1.0))
+        if take_edge is None:
+            take_edge = float(self.params.get("take_edge", 1.0))
         taker_buy_threshold  = self.params.get("taker_buy_threshold")
         taker_sell_threshold = self.params.get("taker_sell_threshold")
 
@@ -563,6 +609,11 @@ class MMFirstStrategy(BaseStrategy):
         bid_size = max(0.0, bid_size * bid_factor)
         ask_size = max(0.0, ask_size * ask_factor)
 
+        # ── DYNAMIC TAKE EDGE (optional) ──────────────────────────────
+        # Returns fixed take_edge when take_edge_lo/hi not in params — zero impact.
+        # Remove this line and the kwarg below to disable entirely.
+        effective_take_edge = self._dynamic_take_edge(memory)
+
         # ── Z-SCORE TAKER GATE (optional) ─────────────────────────────
         # Returns (0, 0) when inactive — zero impact on existing behaviour.
         # Remove this line (or stop passing the values) to disable entirely.
@@ -571,6 +622,7 @@ class MMFirstStrategy(BaseStrategy):
         # ── TAKER ORDERS ───────────────────────────────────────────────
         taker_orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px = self._fire_takers(
             order_depth, mid_smooth, bid_size, ask_size, buy_cap, sell_cap,
+            take_edge=effective_take_edge,
         #    buy_extra_ticks=buy_extra_ticks, sell_extra_ticks=sell_extra_ticks,
         )
 
