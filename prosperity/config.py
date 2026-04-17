@@ -312,6 +312,11 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 ROUND_1["ASH_COATED_OSMIUM"],
                 strategy="mm_first_v2",
                 take_edge=1,
+                take_edge_lo=0.7,       # edge when sigma <= 2
+                take_edge_hi=1,       # edge when sigma >= 5
+                take_edge_vol_lo=2.0,   # sigma lower bound
+                take_edge_vol_hi=5.0,   # sigma upper bound
+
                 maker_size_base_pct=0.5,
                 pct_kept_for_takers=0.1,
                 mid_smooth_window=50,

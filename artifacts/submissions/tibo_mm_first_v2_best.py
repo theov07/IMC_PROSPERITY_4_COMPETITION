@@ -534,6 +534,97 @@ class MMFirstStrategy(BaseStrategy):
         ask_size = base * (1.0 + position / limit)
         return bid_size, ask_size
 
+    def _zscore_taker_adjust(
+        self,
+        memory: Dict[str, Any],
+    ) -> Tuple[int, int]:
+        """Return (buy_extra_ticks, sell_extra_ticks) to add on top of take_edge.
+
+        When z > zscore_taker_threshold (price stretched high, expect fall):
+          → raise the bar for aggressive buys by buy_extra_ticks
+            (only buy if ask <= mid_smooth - take_edge - buy_extra_ticks)
+        When z < -zscore_taker_threshold (price stretched low, expect rise):
+          → raise the bar for aggressive sells by sell_extra_ticks
+            (only sell if bid >= mid_smooth + take_edge + sell_extra_ticks)
+
+        The opposite side is left untouched: a falling-price signal does not
+        loosen the sell threshold, and vice versa.
+
+        Vol gate: suppress when sigma >= zscore_taker_vol_cap (high-vol makes
+        the mean-reversion signal unreliable and adds adverse selection risk).
+
+        Params:
+          zscore_taker_threshold — |z| to activate; defaults to zscore_threshold
+          zscore_taker_ticks     — extra ticks to require beyond take_edge (default 1)
+          zscore_taker_vol_cap   — suppress when sigma >= this (default None = no cap)
+
+        Returns (0, 0) when inactive so calling this and passing the result to
+        _fire_takers has absolutely zero effect on existing behaviour.
+        """
+        z = memory.get("zscore")
+        if z is None:
+            return 0, 0
+
+        vol_cap = self.params.get("zscore_taker_vol_cap")
+        if vol_cap is not None:
+            sigma = memory.get("sigma_smoothed")
+            if sigma is not None and sigma >= float(vol_cap):
+                return 0, 0
+
+        threshold = float(self.params.get(
+            "zscore_taker_threshold", 1.0
+        ))
+        ticks = int(self.params.get("zscore_taker_ticks", 1))
+
+        if z > threshold:
+            return ticks, 0   # price high → tighten buy bar only
+        if z < -threshold:
+            return 0, ticks   # price low  → tighten sell bar only
+        return 0, 0
+
+    def _dynamic_take_edge(self, memory: Dict[str, Any]) -> float:
+        """Linearly interpolate take_edge with current volatility.
+
+        Maps sigma linearly from [take_edge_vol_lo, take_edge_vol_hi]
+        to  [take_edge_lo, take_edge_hi], clamped at both ends:
+
+          sigma <= vol_lo  →  take_edge = take_edge_lo   (calm market)
+          sigma >= vol_hi  →  take_edge = take_edge_hi   (turbulent market)
+          in between       →  linear interpolation
+
+        Falls back to the fixed `take_edge` param when `take_edge_lo` or
+        `take_edge_hi` are absent — zero impact on existing behaviour.
+
+        Params:
+          take_edge        — fixed fallback (default 1.0)
+          take_edge_lo     — edge floor applied at low vol (None = disabled)
+          take_edge_hi     — edge ceiling applied at high vol (None = disabled)
+          take_edge_vol_lo — sigma lower bound (default 2.0)
+          take_edge_vol_hi — sigma upper bound (default 5.0)
+        """
+        lo = self.params.get("take_edge_lo")
+        hi = self.params.get("take_edge_hi")
+
+        if lo is None or hi is None:
+            return float(self.params.get("take_edge", 1.0))
+
+        sigma = memory.get("sigma_smoothed")
+        if sigma is None:
+            return float(lo)
+
+        vol_lo = float(self.params.get("take_edge_vol_lo", 2.0))
+        vol_hi = float(self.params.get("take_edge_vol_hi", 5.0))
+        edge_lo = float(lo)
+        edge_hi = float(hi)
+
+        if sigma <= vol_lo:
+            return edge_lo
+        if sigma >= vol_hi:
+            return edge_hi
+
+        t = (sigma - vol_lo) / (vol_hi - vol_lo)
+        return edge_lo + t * (edge_hi - edge_lo)
+
     def _fire_takers(
         self,
         order_depth: OrderDepth,
@@ -542,19 +633,27 @@ class MMFirstStrategy(BaseStrategy):
         ask_size: float,
         buy_cap: int,
         sell_cap: int,
+        buy_extra_ticks: int = 0,
+        sell_extra_ticks: int = 0,
+        take_edge: Optional[float] = None,
     ) -> Tuple[List[Order], int, int, Set[int], Set[int]]:
         """Emit aggressive taker orders when price vs fair-value edge is sufficient.
 
         Two OR-conditions trigger a taker:
-          1. mid_smooth edge:    ask <= mid_smooth - take_edge  (buy)
-                                 bid >= mid_smooth + take_edge  (sell)
+          1. mid_smooth edge:    ask <= mid_smooth - take_edge - buy_extra_ticks  (buy)
+                                 bid >= mid_smooth + take_edge + sell_extra_ticks (sell)
           2. absolute threshold: ask <= taker_buy_threshold     (buy, optional)
                                  bid >= taker_sell_threshold    (sell, optional)
+
+        buy_extra_ticks / sell_extra_ticks: additional ticks of required edge,
+        injected by _zscore_taker_adjust (default 0 = no change to existing logic).
+        take_edge: override from _dynamic_take_edge; falls back to params if None.
 
         Size is capped at 30% of the inventory-adaptive quote size.
         Returns (orders, remaining_buy_cap, remaining_sell_cap, buy_px_set, sell_px_set).
         """
-        take_edge            = float(self.params.get("take_edge", 1.0))
+        if take_edge is None:
+            take_edge = float(self.params.get("take_edge", 1.0))
         taker_buy_threshold  = self.params.get("taker_buy_threshold")
         taker_sell_threshold = self.params.get("taker_sell_threshold")
 
@@ -564,7 +663,7 @@ class MMFirstStrategy(BaseStrategy):
 
         for ask_p in sorted(order_depth.sell_orders):
             available  = -order_depth.sell_orders[ask_p]
-            mid_signal = ask_p <= mid_smooth - take_edge
+            mid_signal = ask_p <= mid_smooth - take_edge - buy_extra_ticks
             abs_signal = taker_buy_threshold is not None and ask_p <= taker_buy_threshold
             if not (mid_signal or abs_signal) or buy_cap <= 0:
                 break
@@ -576,7 +675,7 @@ class MMFirstStrategy(BaseStrategy):
 
         for bid_p in sorted(order_depth.buy_orders, reverse=True):
             volume     = order_depth.buy_orders[bid_p]
-            mid_signal = bid_p >= mid_smooth + take_edge
+            mid_signal = bid_p >= mid_smooth + take_edge + sell_extra_ticks
             abs_signal = taker_sell_threshold is not None and bid_p >= taker_sell_threshold
             if not (mid_signal or abs_signal) or sell_cap <= 0:
                 break
@@ -885,9 +984,21 @@ class MMFirstStrategy(BaseStrategy):
         bid_size = max(0.0, bid_size * bid_factor)
         ask_size = max(0.0, ask_size * ask_factor)
 
+        # ── DYNAMIC TAKE EDGE (optional) ──────────────────────────────
+        # Returns fixed take_edge when take_edge_lo/hi not in params — zero impact.
+        # Remove this line and the kwarg below to disable entirely.
+        effective_take_edge = self._dynamic_take_edge(memory)
+
+        # ── Z-SCORE TAKER GATE (optional) ─────────────────────────────
+        # Returns (0, 0) when inactive — zero impact on existing behaviour.
+        # Remove this line (or stop passing the values) to disable entirely.
+        #buy_extra_ticks, sell_extra_ticks = self._zscore_taker_adjust(memory)
+
         # ── TAKER ORDERS ───────────────────────────────────────────────
         taker_orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px = self._fire_takers(
-            order_depth, mid_smooth, bid_size, ask_size, buy_cap, sell_cap
+            order_depth, mid_smooth, bid_size, ask_size, buy_cap, sell_cap,
+            take_edge=effective_take_edge,
+        #    buy_extra_ticks=buy_extra_ticks, sell_extra_ticks=sell_extra_ticks,
         )
 
         # ── GAP EXPLOIT + PASSIVE RE-ANCHOR ───────────────────────────
@@ -901,7 +1012,7 @@ class MMFirstStrategy(BaseStrategy):
         )
 
         # ── Z-SCORE PRICE SKEW ────────────────────────────────────────
-        bid_price, ask_price = self._zscore_price_skew(bid_price, ask_price, memory)
+        #bid_price, ask_price = self._zscore_price_skew(bid_price, ask_price, memory)
 
         # ── PASSIVE QUOTING ────────────────────────────────────────────
         passive_orders, buy_cap, sell_cap = self._passive_quotes(
@@ -940,7 +1051,7 @@ class MMFirstStrategy(BaseStrategy):
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-PRODUCTS = {'ASH_COATED_OSMIUM': {'OB_cleared_shift': 85,
+PRODUCTS = {'ASH_COATED_OSMIUM': {'OB_cleared_shift': 89,
                        'gap_trigger_confirm_ticks': 1,
                        'gap_trigger_max_vol_pct': 0.1,
                        'gap_trigger_min': 10,
@@ -954,7 +1065,11 @@ PRODUCTS = {'ASH_COATED_OSMIUM': {'OB_cleared_shift': 85,
                        'position_limit': 80,
                        'quote_trace_enabled': True,
                        'strategy': 'mm_first_v2',
-                       'take_edge': 0.5,
+                       'take_edge': 1,
+                       'take_edge_hi': 1,
+                       'take_edge_lo': 0.7,
+                       'take_edge_vol_hi': 5.0,
+                       'take_edge_vol_lo': 2.0,
                        'taker_buy_threshold': 9990,
                        'taker_sell_threshold': 10025,
                        'tighten_ticks': 1,
