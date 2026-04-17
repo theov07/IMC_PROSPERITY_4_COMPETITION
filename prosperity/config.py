@@ -311,7 +311,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
             "ASH_COATED_OSMIUM": _override(
                 ROUND_1["ASH_COATED_OSMIUM"],
                 strategy="mm_first_v2",
-                take_edge=.5,
+                take_edge=1,
                 maker_size_base_pct=0.5,
                 pct_kept_for_takers=0.1,
                 mid_smooth_window=50,
@@ -325,7 +325,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 zscore_max_scale=5.0,
 
                 gap_trigger_min=10,
-                OB_cleared_shift=85,
+                OB_cleared_shift=89,
                 gap_trigger_max_vol_pct=0.1,
                 gap_trigger_confirm_ticks=1,
                 zscore_gap_gate=1.5,
