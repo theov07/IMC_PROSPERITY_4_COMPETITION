@@ -1,0 +1,52 @@
+python -m prosperity.tooling.grid_search --strategy tibo_AvSt --round 0 --days -2 -1 \
+  --param "EMERALDS.gamma=0.1,0.2,0.4" \
+  --param "EMERALDS.kappa=1.0,2.0" \
+  --param "EMERALDS.sigma_window=50,100" \
+  --param "EMERALDS.maker_size=8,14" \
+  --param "EMERALDS.take_edge=0.5,1.5" \
+  --param "TOMATOES.gamma=0.1,0.2,0.4" \
+ --param  "TOMATOES.sigma_window=50,100" \
+  --param "TOMATOES.kappa=1.0,2.0" \
+  --param "TOMATOES.maker_size=8,14" \
+  --param "TOMATOES.take_edge=0.5,1.5"
+
+============================================================
+Grid search complete in 5244.2s — top 10 results:
+============================================================
+  #1: pnl=   3234.50  [EMERALDS=1298.0, TOMATOES=1936.5]  EMERALDS.gamma=0.1, EMERALDS.kappa=1.0, EMERALDS.sigma_window=50.0, EMERALDS.maker_size=8.0, EMERALDS.take_edge=1.5, TOMATOES.gamma=0.2, TOMATOES.sigma_window=100.0, TOMATOES.kappa=1.0, TOMATOES.maker_size=8.0, TOMATOES.take_edge=0.5
+  #2: pnl=   3234.50  [EMERALDS=1298.0, TOMATOES=1936.5]  EMERALDS.gamma=0.1, EMERALDS.kappa=1.0, EMERALDS.sigma_window=50.0, EMERALDS.maker_size=8.0, EMERALDS.take_edge=1.5, TOMATOES.gamma=0.2, TOMATOES.sigma_window=100.0, TOMATOES.kappa=1.0, TOMATOES.maker_size=14.0, TOMATOES.take_edge=0.5
+  #3: pnl=   3234.50  [EMERALDS=1298.0, TOMATOES=1936.5]  EMERALDS.gamma=0.1, EMERALDS.kappa=1.0, EMERALDS.sigma_window=50.0, EMERALDS.maker_size=14.0, EMERALDS.take_edge=1.5, TOMATOES.gamma=0.2, TOMATOES.sigma_window=100.0, TOMATOES.kappa=1.0, TOMATOES.maker_size=8.0, TOMATOES.take_edge=0.5
+  #4: pnl=   3234.50  [EMERALDS=1298.0, TOMATOES=1936.5]  EMERALDS.gamma=0.1, EMERALDS.kappa=1.0, EMERALDS.sigma_window=50.0, EMERALDS.maker_size=14.0, EMERALDS.take_edge=1.5, TOMATOES.gamma=0.2, TOMATOES.sigma_window=100.0, TOMATOES.kappa=1.0, TOMATOES.maker_size=14.0, TOMATOES.take_edge=0.5
+  #5: pnl=   3232.50  [EMERALDS=1296.0, TOMATOES=1936.5]  EMERALDS.gamma=0.1, EMERALDS.kappa=1.0, EMERALDS.sigma_window=100.0, EMERALDS.maker_size=8.0, EMERALDS.take_edge=0.5, TOMATOES.gamma=0.2, TOMATOES.sigma_window=100.0, TOMATOES.kappa=1.0, TOMATOES.maker_size=8.0, TOMATOES.take_edge=0.5
+  #6: pnl=   3232.50  [EMERALDS=1296.0, TOMATOES=1936.5]  EMERALDS.gamma=0.1, EMERALDS.kappa=1.0, EMERALDS.sigma_window=100.0, EMERALDS.maker_size=8.0, EMERALDS.take_edge=0.5, TOMATOES.gamma=0.2, TOMATOES.sigma_window=100.0, TOMATOES.kappa=1.0, TOMATOES.maker_size=14.0, TOMATOES.take_edge=0.5
+  #7: pnl=   3232.50  [EMERALDS=1296.0, TOMATOES=1936.5]  EMERALDS.gamma=0.1, EMERALDS.kappa=1.0, EMERALDS.sigma_window=100.0, EMERALDS.maker_size=14.0, EMERALDS.take_edge=0.5, TOMATOES.gamma=0.2, TOMATOES.sigma_window=100.0, TOMATOES.kappa=1.0, TOMATOES.maker_size=8.0, TOMATOES.take_edge=0.5
+  #8: pnl=   3232.50  [EMERALDS=1296.0, TOMATOES=1936.5]  EMERALDS.gamma=0.1, EMERALDS.kappa=1.0, EMERALDS.sigma_window=100.0, EMERALDS.maker_size=14.0, EMERALDS.take_edge=0.5, TOMATOES.gamma=0.2, TOMATOES.sigma_window=100.0, TOMATOES.kappa=1.0, TOMATOES.maker_size=14.0, TOMATOES.take_edge=0.5
+
+
+  python -m prosperity.tooling.grid_search \
+  --strategy tibo_AvSt --round 0 --days -2 \
+  --match-trades realistic \
+  --param "TOMATOES.gamma=0.05,0.1,0.20" \
+  --param "TOMATOES.kappa=1,2" \
+ --param "TOMATOES.maker_size_base_pct=0.15,0.3,0.45" \
+--param "TOMATOES.pct_kept_for_takers=.3,.1" \
+--param "TOMATOES.mid_smooth_window=20,50,100" \
+--param "TOMATOES.mid_smooth_half_life=8,20,30" \
+--param "TOMATOES.sigma_window=150, 200, 250" \
+--param "TOMATOES.sigma_half_life=50,80"
+
+
+Grid search: 1944 combinations, 1 day(s)
+
+Grid search complete in 3917.3s - top 10 results (rank_by=pnl):
+============================================================
+  #1: pnl=  10927.50 dd=  414.00 fill_eff= 0.003 inv= 0.181 [EMERALDS=5401.0, TOMATOES=5526.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.15, TOMATOES.pct_kept_for_takers=0.3, TOMATOES.mid_smooth_window=50.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=150.0, TOMATOES.sigma_half_life=50.0
+  #2: pnl=  10927.50 dd=  414.00 fill_eff= 0.003 inv= 0.181 [EMERALDS=5401.0, TOMATOES=5526.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.15, TOMATOES.pct_kept_for_takers=0.1, TOMATOES.mid_smooth_window=50.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=150.0, TOMATOES.sigma_half_life=50.0
+  #3: pnl=  10927.50 dd=  414.00 fill_eff= 0.002 inv= 0.181 [EMERALDS=5401.0, TOMATOES=5526.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.3, TOMATOES.pct_kept_for_takers=0.3, TOMATOES.mid_smooth_window=50.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=150.0, TOMATOES.sigma_half_life=50.0
+  #4: pnl=  10927.50 dd=  414.00 fill_eff= 0.002 inv= 0.181 [EMERALDS=5401.0, TOMATOES=5526.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.3, TOMATOES.pct_kept_for_takers=0.1, TOMATOES.mid_smooth_window=50.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=150.0, TOMATOES.sigma_half_life=50.0
+  #5: pnl=  10927.50 dd=  414.00 fill_eff= 0.002 inv= 0.181 [EMERALDS=5401.0, TOMATOES=5526.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.45, TOMATOES.pct_kept_for_takers=0.3, TOMATOES.mid_smooth_window=50.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=150.0, TOMATOES.sigma_half_life=50.0
+  #6: pnl=  10927.50 dd=  414.00 fill_eff= 0.002 inv= 0.181 [EMERALDS=5401.0, TOMATOES=5526.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.45, TOMATOES.pct_kept_for_takers=0.1, TOMATOES.mid_smooth_window=50.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=150.0, TOMATOES.sigma_half_life=50.0
+  #7: pnl=  10908.50 dd=  406.00 fill_eff= 0.003 inv= 0.177 [EMERALDS=5401.0, TOMATOES=5507.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.15, TOMATOES.pct_kept_for_takers=0.3, TOMATOES.mid_smooth_window=100.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=250.0, TOMATOES.sigma_half_life=50.0
+  #8: pnl=  10908.50 dd=  406.00 fill_eff= 0.003 inv= 0.177 [EMERALDS=5401.0, TOMATOES=5507.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.15, TOMATOES.pct_kept_for_takers=0.3, TOMATOES.mid_smooth_window=100.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=250.0, TOMATOES.sigma_half_life=80.0
+  #9: pnl=  10908.50 dd=  406.00 fill_eff= 0.003 inv= 0.177 [EMERALDS=5401.0, TOMATOES=5507.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.15, TOMATOES.pct_kept_for_takers=0.1, TOMATOES.mid_smooth_window=100.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=250.0, TOMATOES.sigma_half_life=50.0
+  #10: pnl=  10908.50 dd=  406.00 fill_eff= 0.003 inv= 0.177 [EMERALDS=5401.0, TOMATOES=5507.5]  TOMATOES.gamma=0.05, TOMATOES.kappa=2.0, TOMATOES.maker_size_base_pct=0.15, TOMATOES.pct_kept_for_takers=0.1, TOMATOES.mid_smooth_window=100.0, TOMATOES.mid_smooth_half_life=8.0, TOMATOES.sigma_window=250.0, TOMATOES.sigma_half_life=80.0
