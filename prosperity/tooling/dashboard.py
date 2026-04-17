@@ -443,6 +443,14 @@ def _bt_per_product_pnl(backtest_data: dict, market_df_raw: pd.DataFrame | None)
             fill_idx = 0
             carry = pnl_carry.get(sym, 0.0)
 
+            # MidSmooth lookup from feature_ticks (smoother fair value for MTM)
+            _ft_smooth: dict[int, float] = {}
+            for ft in day.get("feature_ticks", []):
+                if ft.get("symbol") == sym:
+                    ms = ft.get("MidSmooth")
+                    if ms is not None:
+                        _ft_smooth[int(ft["timestamp"])] = float(ms)
+
             for ts in timestamps:
                 while fill_idx < len(fill_records) and fill_records[fill_idx]["timestamp"] <= ts:
                     cash += fill_records[fill_idx]["cash_delta"]
@@ -454,11 +462,17 @@ def _bt_per_product_pnl(backtest_data: dict, market_df_raw: pd.DataFrame | None)
                     if not mkt_row.empty:
                         bid = mkt_row["bid_price_1"].iloc[0]
                         ask = mkt_row["ask_price_1"].iloc[0]
-                        mid = ((bid + ask) / 2.0 if pd.notna(bid) and pd.notna(ask)
-                               else float(bid if pd.notna(bid) else ask if pd.notna(ask) else 0))
+                        raw_mid = ((bid + ask) / 2.0 if pd.notna(bid) and pd.notna(ask)
+                                   else float(bid if pd.notna(bid) else ask if pd.notna(ask) else 0))
                     else:
-                        mid = 0.0
-                    intraday_pnl = cash + position * mid
+                        raw_mid = 0.0
+                    # Prefer strategy's smoothed fair value (MidSmooth) over raw mid
+                    fair = _ft_smooth.get(ts, raw_mid)
+                    intraday_pnl = cash + position * fair
+                elif _ft_smooth:
+                    # No market CSV but we have MidSmooth from strategy feature_ticks
+                    fair = _ft_smooth.get(ts)
+                    intraday_pnl = cash + position * fair if fair is not None else cash
                 else:
                     intraday_pnl = cash  # realized only
 
@@ -859,44 +873,37 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                         if c not in _vol_feat_cols
                         and c != _zscore_col
                         and c not in _zfactor_cols]
-    has_vol    = has_market and bool(_vol_feat_cols)
-    has_zscore = bool(_zscore_col) and bool(_zfactor_cols)
+    has_vol    = bool(_vol_feat_cols)             # show vol when features present, even without market CSV
+    has_zscore = bool(_zscore_col)               # show Z-score when "Z" feature present (no BidFactor required)
 
-    if has_market and has_vol and has_zscore:
-        n_rows  = 5
-        heights = [0.32, 0.12, 0.11, 0.16, 0.29]
-        titles  = ["Price & Fills", "Position", "Volatility (σ)", "Z-score & Tilt", "Equity PnL"]
-        vol_row    = 3
-        zscore_row = 4
-        pnl_row    = 5
-    elif has_market and has_zscore:
-        n_rows  = 4
-        heights = [0.38, 0.14, 0.18, 0.30]
-        titles  = ["Price & Fills", "Position", "Z-score & Tilt", "Equity PnL"]
-        vol_row    = None
-        zscore_row = 3
-        pnl_row    = 4
-    elif has_market and has_vol:
-        n_rows  = 4
-        heights = [0.40, 0.15, 0.12, 0.33]
-        titles  = ["Price & Fills", "Position", "Volatility (σ)", "Equity PnL"]
-        vol_row    = 3
-        zscore_row = None
-        pnl_row    = 4
-    elif has_market:
-        n_rows  = 3
-        heights = [0.45, 0.20, 0.35]
-        titles  = ["Price & Fills", "Position", "Equity PnL"]
-        vol_row    = None
-        zscore_row = None
-        pnl_row    = 3
-    else:
-        n_rows  = 2
-        heights = [0.35, 0.65]
-        titles  = ["Position", "Equity PnL"]
-        vol_row    = None
-        zscore_row = None
-        pnl_row    = 2
+    # Dynamic layout builder: price + position (base), then optional vol/zscore, then pnl
+    price_row = 1 if has_market else None
+    pos_row   = 2 if has_market else 1
+    next_row  = pos_row + 1
+    n_rows    = 2 if has_market else 1
+    heights   = [0.38, 0.13] if has_market else [0.20]
+    titles    = ["Price & Fills", "Position"] if has_market else ["Position"]
+    vol_row    = None
+    zscore_row = None
+
+    if has_vol:
+        vol_row = next_row
+        heights.append(0.13)
+        titles.append("Volatility (σ)")
+        next_row += 1
+        n_rows   += 1
+
+    if has_zscore:
+        zscore_row = next_row
+        heights.append(0.16)
+        titles.append("Z-score")
+        next_row += 1
+        n_rows   += 1
+
+    pnl_row = next_row
+    heights.append(0.20)
+    titles.append("Equity PnL")
+    n_rows += 1
 
     height = 800
     heights, height = _apply_price_height_inc(heights, height, price_height_inc)
@@ -968,9 +975,9 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                     line=dict(color=color, width=1.3, shape=line_shape),
                 ), row=price_row, col=1)
 
-        # Tilted-fill-aware markers: when z-score data is present, split fills into
-        # tilted (|z| > threshold, i.e. BidFactor or AskFactor != 1) vs neutral.
-        if has_zscore and not sym_fills.empty and not sym_features.empty:
+        # Tilted-fill-aware markers: only when BidFactor/AskFactor columns are present
+        # (legacy ZScoreStrategy). For strategies that only export "Z", fall through to plain markers.
+        if has_zscore and bool(_zfactor_cols) and not sym_fills.empty and not sym_features.empty:
             _zf_cols = ["timestamp"] + [c for c in ("Z", "BidFactor", "AskFactor") if c in sym_features.columns]
             _zf_data = sym_features[_zf_cols].dropna(subset=["BidFactor"]).sort_values("timestamp")
             _merged  = pd.merge_asof(sym_fills.sort_values("timestamp"), _zf_data, on="timestamp")
@@ -1006,34 +1013,21 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 line=dict(color=color, width=1.3, shape=line_shape),
             ), row=vol_row, col=1)
 
-    # Z-score & Tilt subplot — only when ZScoreStrategy feature columns are present
+    # Z-score subplot
     if zscore_row is not None and not sym_features.empty and _zscore_col is not None:
         z_data = sym_features[["timestamp", "Z"]].dropna(subset=["Z"]).sort_values("timestamp")
         if not z_data.empty:
-            # Auto-detect threshold: smallest |z| where factors are != 1
-            threshold_val = None
-            if "BidFactor" in sym_features.columns:
-                _tilted_mask = (sym_features["BidFactor"].fillna(1.0) - 1.0).abs() > 0.01
-                _tilted_z = sym_features.loc[_tilted_mask, "Z"].dropna().abs()
-                if not _tilted_z.empty:
-                    threshold_val = float(_tilted_z.min())
-
-            # Z-score line
             fig.add_trace(go.Scatter(
                 x=z_data["timestamp"], y=z_data["Z"],
-                name="Z-score", line=dict(color="#cba6f7", width=1.4),
+                name="Z-score", mode=_mode, marker=dict(**_marker, color="#cba6f7"),
+                line=dict(color="#cba6f7", width=1.4, shape=line_shape),
             ), row=zscore_row, col=1)
-
-            # Threshold lines
-            if threshold_val is not None:
-                fig.add_hline(y= threshold_val, line_color="rgba(243,139,168,0.7)",
-                              line_dash="dash", line_width=1, row=zscore_row, col=1)
-                fig.add_hline(y=-threshold_val, line_color="rgba(166,227,161,0.7)",
-                              line_dash="dash", line_width=1, row=zscore_row, col=1)
+            for level, dash in [(1.0, "dash"), (-1.0, "dash"), (2.0, "dot"), (-2.0, "dot")]:
+                fig.add_hline(y=level, line_dash=dash, line_color="rgba(255,255,255,0.25)",
+                              line_width=1, row=zscore_row, col=1)
             fig.add_hline(y=0, line_color="rgba(150,150,150,0.4)",
                           line_dash="dot", line_width=1, row=zscore_row, col=1)
-
-            # BidFactor / AskFactor lines (dotted, secondary signal)
+            # BidFactor / AskFactor overlay when present (legacy ZScoreStrategy)
             for col_name, color, label in [
                 ("BidFactor", "#a6e3a1", "Bid factor"),
                 ("AskFactor", "#f38ba8", "Ask factor"),
@@ -1043,7 +1037,8 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                     if not fd.empty:
                         fig.add_trace(go.Scatter(
                             x=fd["timestamp"], y=fd[col_name],
-                            name=label, line=dict(color=color, width=1, dash="dot"),
+                            name=label, mode=_mode, marker=dict(**_marker, color=color),
+                            line=dict(color=color, width=1, dash="dot", shape=line_shape),
                         ), row=zscore_row, col=1)
 
     # Equity PnL — per-product stacked areas + total line
@@ -1175,6 +1170,14 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
     # Pre-load raw market data (shared by both backtests — same round assumed)
     market_df_raw: pd.DataFrame | None = None
     _active_bt = backtest_data or backtest_data2
+    if _active_bt and data_dir is None:
+        # Auto-detect the data directory from the project root
+        from pathlib import Path as _Path
+        for _candidate in ("data", "../data"):
+            if _Path(_candidate).exists():
+                data_dir = _candidate
+                print(f"Auto-detected market data directory: {_candidate}")
+                break
     if data_dir and _active_bt:
         from prosperity.tooling.data import MarketDataLoader
         loader = MarketDataLoader(data_dir)
