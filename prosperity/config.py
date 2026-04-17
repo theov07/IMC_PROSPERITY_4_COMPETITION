@@ -325,7 +325,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 zscore_max_scale=5.0,
 
                 gap_trigger_min=10,
-                OB_cleared_shift=75,
+                OB_cleared_shift=85,
                 gap_trigger_max_vol_pct=0.1,
                 gap_trigger_confirm_ticks=1,
                 zscore_gap_gate=1.5,

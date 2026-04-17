@@ -820,7 +820,8 @@ class MMFirstStrategy(BaseStrategy):
             memory["_last_mid"] = raw_mid
 
         mid_smooth = self._smooth_mid(mid, memory)
-        self._compute_zscore(mid, memory)  # result stored in memory["zscore"]
+        self._compute_zscore(mid, memory)       # result stored in memory["zscore"]
+        sigma      = self._update_volatility(mid, memory)  # result stored in memory["sigma_smoothed"]
 
         limit     = self.position_limit()
         inventory_ratio = position / float(limit) if limit else 0.0
@@ -861,6 +862,7 @@ class MMFirstStrategy(BaseStrategy):
 
         # ── LOGGING ────────────────────────────────────────────────────
         self._log_taker_fills(state, memory, taker_buy_px, taker_sell_px)
+        z = memory.get("zscore")
         self.log_quote_snapshot(
             state=state, memory=memory,
             bid_price=bid_price, ask_price=ask_price,
@@ -869,6 +871,8 @@ class MMFirstStrategy(BaseStrategy):
                 "mid_smooth": round(mid_smooth, 2),
                 "bid_size":   int(bid_size),
                 "ask_size":   int(ask_size),
+                "zscore":     round(z, 4) if z is not None else None,
+                "sigma":      round(sigma, 4),
             },
         )
 
@@ -878,11 +882,17 @@ class MMFirstStrategy(BaseStrategy):
         out: Dict[str, float] = {}
         if (m := memory.get("mid_smoothed")) is not None:
             out["MidSmooth"] = m
+        z = memory.get("zscore")
+        if z is not None:
+            out["Z"] = float(z)
+        sigma = memory.get("sigma_smoothed")
+        if sigma is not None:
+            out["sigma"] = float(sigma)
         return out
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-PRODUCTS = {'ASH_COATED_OSMIUM': {'OB_cleared_shift': 85,
+PRODUCTS = {'ASH_COATED_OSMIUM': {'OB_cleared_shift': 89,
                        'gap_trigger_confirm_ticks': 1,
                        'gap_trigger_max_vol_pct': 0.1,
                        'gap_trigger_min': 10,
