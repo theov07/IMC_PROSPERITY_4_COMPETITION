@@ -330,6 +330,10 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 gap_trigger_confirm_ticks=1,
                 zscore_gap_gate=1.5,
 
+                zscore_skew_threshold=1.5,
+                zscore_skew_ticks=1,
+                zscore_skew_vol_cap=3,
+
                 quote_trace_enabled=True,
                 ts_increment=100,
                 last_ts_value=99900,
