@@ -1405,8 +1405,13 @@ def aggregate_day_summaries(summaries: List[DaySummary]) -> Dict[str, object]:
     }
 
 
-def _format_results_table(summaries: List[DaySummary], aggregate: Dict[str, object]) -> str:
-    """Format backtest results as a compact table grouped by product."""
+def _format_results_table(summaries: List[DaySummary], aggregate: Dict[str, object],
+                          display_product: str | None = None) -> str:
+    """Format backtest results as a compact table grouped by product.
+
+    display_product — if set, only rows for that symbol are shown (TOTAL row still
+    shows the single-product subtotal rather than the multi-product aggregate).
+    """
     COLS   = ["pnl", "trades", "volume", "max_pos", "end_pos", "make", "take", "inv"]
     HEADS  = ["pnl", "trades", "vol", "max", "end", "make", "take", "inv"]
 
@@ -1448,10 +1453,12 @@ def _format_results_table(summaries: List[DaySummary], aggregate: Dict[str, obje
             f"{r['avg_abs_position_ratio']:.3f}",
         ]
 
-    # Collect all symbols in order
+    # Collect all symbols in order (optionally filtered)
     symbols = list(dict.fromkeys(
         sym for s in summaries for sym in s.product_summaries
     ))
+    if display_product is not None:
+        symbols = [s for s in symbols if s == display_product]
 
     # Build display rows: (label_col, day_col, cells, is_subtotal)
     rows: List[tuple] = []
@@ -1464,7 +1471,13 @@ def _format_results_table(summaries: List[DaySummary], aggregate: Dict[str, obje
             rows.append((label, f"day {summary.day}", ps_cells(ps), False))
         rows.append(("subtotal", "", sub_cells(per_day), True))
 
-    rows.append(("TOTAL", f"{len(summaries)} day(s)", total_cells(aggregate), True))
+    if display_product is not None and symbols:
+        # Show per-product total instead of multi-product aggregate
+        sym = symbols[0]
+        per_day_all = [s.product_summaries[sym] for s in summaries if sym in s.product_summaries]
+        rows.append(("TOTAL", f"{len(summaries)} day(s)", sub_cells(per_day_all), True))
+    else:
+        rows.append(("TOTAL", f"{len(summaries)} day(s)", total_cells(aggregate), True))
 
     # Column widths
     lbl_w  = max(len(r[0]) for r in rows)
@@ -1512,6 +1525,8 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--days", nargs="*", help="Days to run, e.g. -2 -1")
     parser.add_argument("--data-dir", default="data", help="Data root or per-round directory with CSV files")
     parser.add_argument("--json-out", help="Optional JSON output file")
+    parser.add_argument("--display-product", default=None,
+                        help="Only show this product's rows in the results table (e.g. ASH_COATED_OSMIUM)")
     parser.add_argument(
         "--execution-rule",
         "--match-trades",
@@ -1539,7 +1554,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     summaries = [engine.run_day(day, mode=mode) for day in days]
 
     aggregate = aggregate_day_summaries(summaries)
-    print(_format_results_table(summaries, aggregate))
+    print(_format_results_table(summaries, aggregate, display_product=args.display_product))
 
     if args.json_out:
         payload = {
