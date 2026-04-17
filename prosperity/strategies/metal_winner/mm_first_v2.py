@@ -341,6 +341,51 @@ class MMFirstStrategy(BaseStrategy):
 
         return orders, buy_cap, sell_cap, bid_price, ask_price
 
+    def _zscore_price_skew(
+        self,
+        bid_price: Optional[int],
+        ask_price: Optional[int],
+        memory: Dict[str, Any],
+    ) -> Tuple[Optional[int], Optional[int]]:
+        """Skew passive quote levels ±1 tick in the mean-reversion direction.
+
+        When |zscore| > zscore_skew_threshold (default 2.0), nudge both quotes
+        by zscore_skew_ticks (default 1) toward fair value:
+          z >  threshold → price is high, expect fall → shift DOWN (bid-1, ask-1)
+          z < -threshold → price is low,  expect rise → shift UP   (bid+1, ask+1)
+
+        Suppressed when sigma >= zscore_skew_vol_cap: in high-vol regimes a 1-tick
+        skew is noise and adverse selection risk outweighs the edge.
+
+        Params:
+          zscore_skew_threshold — |z| to trigger skew (default 2.0)
+          zscore_skew_ticks     — ticks to shift (default 1)
+          zscore_skew_vol_cap   — suppress skew when sigma >= this value (default None = no cap)
+        """
+        z = memory.get("zscore")
+        if z is None:
+            return bid_price, ask_price
+
+        vol_cap = self.params.get("zscore_skew_vol_cap")
+        if vol_cap is not None:
+            sigma = memory.get("sigma_smoothed")
+            if sigma is not None and sigma >= float(vol_cap):
+                return bid_price, ask_price
+
+        threshold = float(self.params.get("zscore_skew_threshold", 4.5))
+        ticks     = int(self.params.get("zscore_skew_ticks", 1))
+
+        if z > threshold:
+            shift = -ticks
+        elif z < -threshold:
+            shift = ticks
+        else:
+            return bid_price, ask_price
+
+        new_bid = (bid_price + shift) if bid_price is not None else None
+        new_ask = (ask_price + shift) if ask_price is not None else None
+        return new_bid, new_ask
+
     def _passive_quotes(
         self,
         bid_price: Optional[int],
@@ -479,6 +524,9 @@ class MMFirstStrategy(BaseStrategy):
             bid_price, ask_price, buy_cap, sell_cap,
             taker_buy_px, taker_sell_px,
         )
+
+        # ── Z-SCORE PRICE SKEW ────────────────────────────────────────
+        bid_price, ask_price = self._zscore_price_skew(bid_price, ask_price, memory)
 
         # ── PASSIVE QUOTING ────────────────────────────────────────────
         passive_orders, buy_cap, sell_cap = self._passive_quotes(
