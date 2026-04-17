@@ -92,7 +92,9 @@
       "Bash(python scripts/export_submission.py --member leo_osmium_only --round 1 --output artifacts/submissions/round_1/leo/best_osmium_only.py)",
       "Bash(python scripts/export_submission.py --member leo_osmium_v1 --round 1 --output artifacts/submissions/round_1/leo/best_combined_osmium_root.py)",
       "Bash(ls -la artifacts/submissions/round_1/leo/best_*)",
-      "Bash(python backtest.py --strategy theo_best_generalized --round 1 --days -2 --match-trades realistic)"
+      "Bash(python backtest.py --strategy theo_best_generalized --round 1 --days -2 --match-trades realistic)",
+      "Bash(python -c \"from prosperity.tooling.dashboard import build_backtest_figure, build_imc_figure; print\\('OK'\\)\")",
+      "Bash(python -c \"from prosperity.strategies.metal_winner.mm_first_v2 import MMFirstStrategy; print\\('OK'\\)\")"
     ]
   }
 }
