@@ -87,6 +87,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "trend_carry_window": ("prosperity/strategies/round_1/trend_carry_window.py", "TrendCarryWindowStrategy"),
     "trend_carry_window_v2": ("prosperity/strategies/trend_carry_window_v2.py", "TrendCarryWindowV2Strategy"),
     "osmium_mr":          ("prosperity/strategies/osmium_mr.py",          "OsmiumMeanRevStrategy"),
+    "theo_best_generalized": ("prosperity/strategies/round_1/theo_best_generalized.py", "TheoGeneralizedStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -106,6 +107,7 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "leo_fusion_c": ["round1_regression_mm_v5"],
     "leo_fusion_d": ["round1_regression_mm_v5"],
     "osmium_mr": ["naive_tight_mm_v10"],
+    "theo_best_generalized": ["round1_regression_mm_v5"],
 }
 
 
