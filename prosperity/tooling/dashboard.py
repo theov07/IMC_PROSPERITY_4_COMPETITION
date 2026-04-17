@@ -506,6 +506,28 @@ def _add_pnl_traces(fig, pnl_df: pd.DataFrame, color_map: dict[str, str], row: i
         ), row=row, col=1)
 
 
+C_DIVERGENCE = "rgba(180, 100, 255, 0.14)"   # light purple — trade-divergence bands
+
+
+def _add_divergence_bands(fig: go.Figure, divergent_ts: set, row: int, col: int = 1) -> None:
+    """Add a light-purple full-height band for every timestamp in *this* panel
+    that is absent from the comparison panel (i.e. unique trades here)."""
+    if not divergent_ts:
+        return
+    for ts in sorted(divergent_ts):
+        fig.add_shape(
+            type="rect",
+            x0=ts - 50, x1=ts + 50,
+            y0=0, y1=1,
+            yref="y domain",
+            xref="x",
+            fillcolor=C_DIVERGENCE,
+            line_width=0,
+            layer="below",
+            row=row, col=col,
+        )
+
+
 # ── IMC figure ─────────────────────────────────────────────────────────────
 
 def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -522,7 +544,7 @@ def _imc_sym_trades(trades: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return df.sort_values("timestamp")
 
 
-def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, line_shape: str = "linear", price_height_inc: int = 0) -> go.Figure:
+def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, line_shape: str = "linear", price_height_inc: int = 0, divergent_ts: set | None = None) -> go.Figure:
     _mode = "lines+markers" if line_shape == "hv" else "lines"
     _marker = dict(size=3) if line_shape == "hv" else {}
     from prosperity.tooling.logs import _compute_activity_features, _parse_lambda_logs, official_market_trade_flow
@@ -624,6 +646,8 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         line=dict(color=C_FAIR, width=1.3, shape=line_shape)), row=1, col=1)
     _trade_markers(fig, sym_trades, row=1)
     _gap_exploit_markers(fig, sym_trades, row=1)
+    if divergent_ts:
+        _add_divergence_bands(fig, divergent_ts, row=1)
 
     # Strategy lambda logs: reservation price, mid_smooth, and MM quotes (no smoothing on discrete prices)
     if not lambda_sym.empty:
@@ -837,7 +861,8 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                           smooth_n: int = 0, line_shape: str = "linear",
                           price_height_inc: int = 0,
                           _precomputed: tuple | None = None,
-                          _per_prod_pnl: pd.DataFrame | None = None) -> go.Figure:
+                          _per_prod_pnl: pd.DataFrame | None = None,
+                          divergent_ts: set | None = None) -> go.Figure:
     _mode = "lines+markers" if line_shape == "hv" else "lines"
     _marker = dict(size=3) if line_shape == "hv" else {}
     if _precomputed is not None:
@@ -992,6 +1017,8 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
         else:
             _trade_markers(fig, sym_fills, row=price_row)
             _gap_exploit_markers(fig, sym_fills, row=price_row)
+        if divergent_ts:
+            _add_divergence_bands(fig, divergent_ts, row=price_row)
 
     # Position
     pos_df = _position_series(sym_fills)
@@ -1402,13 +1429,68 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
     def update_charts(theme, symbol, smooth_value, smooth_n_raw, step_value):
         smooth_n = int(smooth_n_raw or 0) if smooth_value else 0
         line_shape = "hv" if step_value else "linear"
+
+        # ── Trade-divergence: timestamps where panels differ ──────────────
+        # A timestamp is "divergent" in panel A when:
+        #   - panel A traded there but panel B didn't, OR
+        #   - both traded but with different price or quantity on any fill.
+        # We compare the full set of (side, price, qty) tuples per timestamp.
+
+        def _trade_dict(df: pd.DataFrame) -> dict:
+            """Build {timestamp: frozenset of (side, price, qty)} from a fills/trades df."""
+            result: dict = {}
+            for row in df.itertuples(index=False):
+                ts  = int(row.timestamp)
+                key = (str(row.side).upper(), int(row.price), int(row.quantity))
+                if ts in result:
+                    result[ts] = result[ts] | {key}
+                else:
+                    result[ts] = frozenset({key})
+            # freeze all sets
+            return {ts: frozenset(v) for ts, v in result.items()}
+
+        def _bt_trade_dict(fills_df: pd.DataFrame) -> dict:
+            if fills_df is None or fills_df.empty:
+                return {}
+            sub = fills_df[fills_df["symbol"] == symbol]
+            return _trade_dict(sub) if not sub.empty else {}
+
+        def _imc_trade_dict(log_obj) -> dict:
+            trades = _imc_sym_trades(log_obj.trades, symbol)
+            return _trade_dict(trades) if not trades.empty else {}
+
+        def _divergent_ts(dict_a: dict, dict_b: dict) -> tuple[set, set]:
+            """Return (only_or_diff_in_a, only_or_diff_in_b)."""
+            all_ts = set(dict_a) | set(dict_b)
+            diff_a, diff_b = set(), set()
+            for ts in all_ts:
+                a, b = dict_a.get(ts), dict_b.get(ts)
+                if a != b:
+                    if a is not None:
+                        diff_a.add(ts)
+                    if b is not None:
+                        diff_b.add(ts)
+            return diff_a, diff_b
+
+        div_log1: set = set()
+        div_log2: set = set()
+        if log and log2:
+            div_log1, div_log2 = _divergent_ts(_imc_trade_dict(log), _imc_trade_dict(log2))
+
+        div_bt1: set = set()
+        div_bt2: set = set()
+        if backtest_data and backtest_data2 and bt_precomputed and bt2_precomputed:
+            div_bt1, div_bt2 = _divergent_ts(_bt_trade_dict(bt_precomputed[0]), _bt_trade_dict(bt2_precomputed[0]))
+
         children = []
         if log:
             children += [
                 _section_header("IMC Simulation Results", theme),
                 html.Div(
                     dcc.Graph(id="imc-chart",
-                              figure=build_imc_figure(log, symbol, theme, smooth_n=smooth_n, line_shape=line_shape, price_height_inc=price_height_inc),
+                              figure=build_imc_figure(log, symbol, theme, smooth_n=smooth_n, line_shape=line_shape,
+                                                      price_height_inc=price_height_inc,
+                                                      divergent_ts=div_log1 or None),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
                 ),
@@ -1420,7 +1502,9 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
                 _section_header(f"IMC Simulation #2 · {log2.submission_id}", theme),
                 html.Div(
                     dcc.Graph(id="bt-chart",
-                              figure=build_imc_figure(log2, symbol, theme, smooth_n=smooth_n, line_shape=line_shape, price_height_inc=price_height_inc),
+                              figure=build_imc_figure(log2, symbol, theme, smooth_n=smooth_n, line_shape=line_shape,
+                                                      price_height_inc=price_height_inc,
+                                                      divergent_ts=div_log2 or None),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
                 ),
@@ -1440,6 +1524,7 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
                                   price_height_inc=price_height_inc,
                                   _precomputed=bt_precomputed,
                                   _per_prod_pnl=bt_per_prod_pnl,
+                                  divergent_ts=div_bt1 or None,
                               ),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
@@ -1455,6 +1540,7 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
                                   price_height_inc=price_height_inc,
                                   _precomputed=bt2_precomputed,
                                   _per_prod_pnl=bt2_per_prod_pnl,
+                                  divergent_ts=div_bt2 or None,
                               ),
                               config=_GRAPH_CONFIG),
                     style=_card_style(theme),
@@ -1479,6 +1565,62 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
                 ),
             ]
         return children
+
+    # ── Divergence band zoom-scaling (clientside, fires on every pan/zoom) ──
+    # Identifies divergence shapes by their fillcolor string, then scales their
+    # x-width proportionally to the current x-range — capped at 2× the base
+    # half-width of 50 data units.
+    # refRange = 30 000 data units (≈ 300 ticks): below this the bands stay at
+    # their base width; above (zoomed out) they scale up linearly to 2×.
+    _DIV_COLOR_FRAG = "180, 100, 255"   # substring of C_DIVERGENCE rgba string
+    _ZOOM_SCALE_JS = f"""
+    function(relayoutData, figure) {{
+        if (!figure || !relayoutData) return window.dash_clientside.no_update;
+        var shapes = (figure.layout || {{}}).shapes;
+        if (!shapes || !shapes.some(function(s) {{
+            return s.fillcolor && s.fillcolor.indexOf('{_DIV_COLOR_FRAG}') !== -1;
+        }})) return window.dash_clientside.no_update;
+
+        var xRange;
+        if (relayoutData['xaxis.autorange'] === true) {{
+            // full reset — treat as maximally zoomed out
+            xRange = 999900;
+        }} else if (relayoutData['xaxis.range[0]'] !== undefined) {{
+            xRange = relayoutData['xaxis.range[1]'] - relayoutData['xaxis.range[0]'];
+        }} else {{
+            return window.dash_clientside.no_update;
+        }}
+
+        var refRange  = 30000;   // ~300 ticks: transition point 1× → 4×
+        var baseHalf  = 50;      // half-width at 1× (matches _add_divergence_bands)
+        var scale     = Math.min(4.0, Math.max(1.0, xRange / refRange));
+        var halfWidth = baseHalf * scale;
+
+        var changed = false;
+        var newShapes = shapes.map(function(s) {{
+            if (!s.fillcolor || s.fillcolor.indexOf('{_DIV_COLOR_FRAG}') === -1) return s;
+            var center = (parseFloat(s.x0) + parseFloat(s.x1)) / 2;
+            var newX0 = center - halfWidth;
+            var newX1 = center + halfWidth;
+            if (newX0 === s.x0 && newX1 === s.x1) return s;
+            changed = true;
+            return Object.assign({{}}, s, {{ x0: newX0, x1: newX1 }});
+        }});
+
+        if (!changed) return window.dash_clientside.no_update;
+        return Object.assign({{}}, figure, {{
+            layout: Object.assign({{}}, figure.layout, {{ shapes: newShapes }})
+        }});
+    }}
+    """
+    for _gid in ("imc-chart", "bt-chart", "bt-chart2"):
+        app.clientside_callback(
+            _ZOOM_SCALE_JS,
+            Output(_gid, "figure", allow_duplicate=True),
+            Input(_gid, "relayoutData"),
+            State(_gid, "figure"),
+            prevent_initial_call=True,
+        )
 
     host = "127.0.0.1"
     _cleanup_dashboard_port(TOOLING_DASHBOARD_PORT, "tooling dashboard")
