@@ -2107,6 +2107,88 @@ MEMBER_OVERRIDES["leo_osmium_v2"] = {
 }
 
 
+MEMBER_OVERRIDES["theo_best_generalized"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            ROUND_1["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_generalized",
+            # Block OLS signal
+            block_size=200,
+            min_completed_blocks=5,
+            seed_slope=0.1015,
+            reg_horizon=25,
+            reg_r2_floor=0.85,
+            reg_r2_cap=0.98,
+            reg_rmse_floor=1.0,
+            reg_residual_reversion=0.25,
+            bootstrap_confidence=0.55,
+            # Inventory model
+            trend_inv_per_tick=16.0,
+            resid_inv_per_z=14.0,
+            trend_inventory_cap=80,
+            target_gap_scale=26.0,
+            trend_buy_boost_per_tick=0.24,
+            trend_sell_boost_per_tick=0.20,
+            cheap_buy_boost_per_z=0.18,
+            rich_sell_boost_per_z=0.14,
+            aggravate_cut=0.04,
+            one_sided_target_gap=24,
+            startup_target=80,
+            startup_end_ts=30000,
+            # Regime thresholds
+            bull_threshold=1.0,
+            bear_threshold=-1.0,
+            strong_trend_ticks=0.9,
+            very_strong_trend_ticks=1.6,
+            cheap_residual_z=0.9,
+            rich_residual_z=1.0,
+            max_bid_extra_ticks=2,
+            max_ask_relax_ticks=2,
+            # Quote spreads
+            bid_spread_bull=1.0,
+            ask_spread_bull=9.0,
+            neut_spread_bid=2.0,
+            neut_spread_ask=5.0,
+            # Build phase
+            fastfill_target=80,
+            fastfill_end_ts=12000,
+            fastfill_min_passive_buy=10,
+            fastfill_buy_edge_boost=0.0,
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+            build_bid_offset=1,
+            build_block_counter_edge=1_000_000.0,
+            # Taker edges
+            take_buy_edge_bull=-8.0,
+            take_sell_edge_bull=6.0,
+            take_buy_edge_neut=2.0,
+            take_sell_edge_neut=2.0,
+            unwind_take_edge=10.0,
+            # Trim system
+            short_alpha=0.15,
+            trim_start_position=80,
+            trim_floor_position=79,
+            trim_stretch_threshold=1.5,
+            trim_sell_size=1,
+            trim_cooldown_ticks=20,
+            trim_ask_mid_offset=5.0,
+            trim_take_enabled=False,
+            trim_take_stretch=999.0,
+            trim_take_sell_size=1,
+            rebuy_block_ticks=3,
+            # Sizing
+            maker_size=80,
+            # Logging
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+            quote_trace_enabled=True,
+        ),
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
