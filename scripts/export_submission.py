@@ -87,6 +87,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "mm_first":           ("prosperity/strategies/metal_winner/mm_first.py",           "MMFirstStrategy"),
     "mm_first_v2":        ("prosperity/strategies/metal_winner/mm_first_v2.py",        "MMFirstStrategy"),
     "mm_first_v3":        ("prosperity/strategies/round_2/tibo/mm_first_v3.py",        "MMFirstStrategy"),
+    "mm_first_v4_combo":  ("prosperity/strategies/round_2/leo/mm_first_v4_combo.py",   "MMFirstV4ComboStrategy"),
     "mean_reversion":     ("prosperity/strategies/round_1/mean_reversion.py",          "MeanReversionStrategy"),
     "zscore":             ("prosperity/strategies/metal_winner/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/base/buy_and_hold.py",       "BuyAndHoldStrategy"),
