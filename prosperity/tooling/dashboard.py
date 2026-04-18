@@ -588,13 +588,14 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
     has_vol    = bool(_vol_cols)
     has_zscore = "zscore" in _lambda_extra and not lambda_sym.empty
 
-    # Row layout: price + spread + flow + position (4 fixed), then optional vol/zscore, then pnl
-    flow_row     = 3
-    position_row = 4
-    next_row     = 5
-    n_rows  = 4
-    heights = [0.46, 0.08, 0.10, 0.10]
-    titles  = ["Price & Trades", "Spread (Market vs Quote)", "Trade Flow", "Position & Imbalance"]
+    # Row layout: price + flow + position (3 fixed), then optional vol/zscore, then pnl
+    # spread row removed (was row 2)
+    flow_row     = 2
+    position_row = 3
+    next_row     = 4
+    n_rows  = 3
+    heights = [0.46, 0.10, 0.10]
+    titles  = ["Price & Trades", "Trade Flow", "Position & Imbalance"]
     vol_row    = None
     zscore_row = None
 
@@ -625,7 +626,7 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
         rows=n_rows, cols=1, shared_xaxes=True,
         row_heights=heights,
         subplot_titles=titles,
-        vertical_spacing=0.07,
+        vertical_spacing=0.03,
     )
 
     # Price (with optional EWMA smoothing)
@@ -696,19 +697,19 @@ def build_imc_figure(log, symbol: str, theme: str = "dark", smooth_n: int = 0, l
                                if _lbd_ask_sizes is not None else "%{y}<extra>MM Ask (log)</extra>"),
                 ), row=1, col=1)
 
-    # Spread
-    fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",
-        line=dict(color=C_SPREAD, width=1), fill="tozeroy",
-        fillcolor="rgba(134,142,150,0.15)", showlegend=False), row=2, col=1)
-    if not lambda_sym.empty:
-        quote_spread = (lambda_sym["ask_price"] - lambda_sym["bid_price"]).dropna()
-        if not quote_spread.empty:
-            quote_spread_df = lambda_sym.loc[quote_spread.index, ["timestamp"]].copy()
-            quote_spread_df["spread"] = quote_spread.values
-            fig.add_trace(go.Scatter(
-                x=quote_spread_df["timestamp"], y=quote_spread_df["spread"],
-                name="Quoted Spread", mode=_mode, marker=dict(**_marker, color=C_FEATURE_PALETTE[1]),
-                line=dict(color=C_FEATURE_PALETTE[1], width=1.2, shape=line_shape)), row=2, col=1)
+    # Spread (commented out)
+    # fig.add_trace(go.Scatter(x=act["timestamp"], y=act["spread"], name="Spread",
+    #     line=dict(color=C_SPREAD, width=1), fill="tozeroy",
+    #     fillcolor="rgba(134,142,150,0.15)", showlegend=False), row=2, col=1)
+    # if not lambda_sym.empty:
+    #     quote_spread = (lambda_sym["ask_price"] - lambda_sym["bid_price"]).dropna()
+    #     if not quote_spread.empty:
+    #         quote_spread_df = lambda_sym.loc[quote_spread.index, ["timestamp"]].copy()
+    #         quote_spread_df["spread"] = quote_spread.values
+    #         fig.add_trace(go.Scatter(
+    #             x=quote_spread_df["timestamp"], y=quote_spread_df["spread"],
+    #             name="Quoted Spread", mode=_mode, marker=dict(**_marker, color=C_FEATURE_PALETTE[1]),
+    #             line=dict(color=C_FEATURE_PALETTE[1], width=1.2, shape=line_shape)), row=2, col=1)
 
     if not market_flow_df.empty:
         flow_by_timestamp = market_flow_df.groupby("timestamp", as_index=False)["signed_quantity"].sum()
