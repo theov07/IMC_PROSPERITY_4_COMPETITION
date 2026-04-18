@@ -1,11 +1,8 @@
-"""Osmium mean-reversion MM v2 — adds tibo-style absolute taker thresholds
-and gap exploit on top of osmium_mr's AR1-biased mean-reversion.
+"""Fusion B + gap exploit — adds tibo-style thin-L1 sweep on top of leo_fusion_b.
 
-New params:
-  take_abs_buy   : unconditional buy when best ask <= take_abs_buy (None disables)
-  take_abs_sell  : unconditional sell when best bid >= take_abs_sell (None disables)
-  gap_trigger_min         : min tick gap L1→L2 to fire gap exploit (default 0 = off)
-  gap_trigger_max_vol_pct : L1 thin threshold as % of limit (default 0.15)
+Params:
+  gap_trigger_min           : min tick gap L1->L2 to fire gap exploit (default 0 = off)
+  gap_trigger_max_vol_pct   : L1 thin threshold as % of limit (default 0.15)
   gap_trigger_confirm_ticks : consecutive ticks required before firing (default 1)
 """
 
@@ -16,10 +13,10 @@ from typing import Any, Dict, List, Tuple
 from datamodel import Order, OrderDepth, TradingState
 
 from prosperity.market import BookSnapshot
-from prosperity.strategies.round_1.osmium_mr_artifact import OsmiumMeanRevStrategy
+from prosperity.strategies.round_1.leo_fusion_b import LeoFusionBStrategy
 
 
-class OsmiumMeanRevV2Strategy(OsmiumMeanRevStrategy):
+class LeoFusionBGapStrategy(LeoFusionBStrategy):
 
     def compute_orders(
         self,
@@ -30,7 +27,7 @@ class OsmiumMeanRevV2Strategy(OsmiumMeanRevStrategy):
         memory: Dict[str, Any],
     ) -> Tuple[List[Order], int]:
         if book.best_bid is None or book.best_ask is None:
-            return [], 0
+            return super().compute_orders(state, book, order_depth, position, memory)
 
         limit = self.position_limit()
         buy_cap = self.buy_capacity(position)
@@ -39,45 +36,6 @@ class OsmiumMeanRevV2Strategy(OsmiumMeanRevStrategy):
         extra_orders: List[Order] = []
         virt_pos = position
 
-        # ── 1. Absolute taker thresholds (mean-reversion edge) ────────────
-        take_abs_buy = self.params.get("take_abs_buy")
-        take_abs_sell = self.params.get("take_abs_sell")
-
-        if take_abs_buy is not None and buy_cap > 0:
-            for ask_p in sorted(order_depth.sell_orders):
-                if ask_p > float(take_abs_buy):
-                    break
-                available = -order_depth.sell_orders[ask_p]
-                qty = min(available, buy_cap)
-                if qty <= 0:
-                    continue
-                extra_orders.append(Order(self.product, ask_p, qty))
-                order_depth.sell_orders[ask_p] += qty  # reduce toward 0
-                if order_depth.sell_orders[ask_p] == 0:
-                    del order_depth.sell_orders[ask_p]
-                buy_cap -= qty
-                virt_pos += qty
-                if buy_cap <= 0:
-                    break
-
-        if take_abs_sell is not None and sell_cap > 0:
-            for bid_p in sorted(order_depth.buy_orders, reverse=True):
-                if bid_p < float(take_abs_sell):
-                    break
-                volume = order_depth.buy_orders[bid_p]
-                qty = min(volume, sell_cap)
-                if qty <= 0:
-                    continue
-                extra_orders.append(Order(self.product, bid_p, -qty))
-                order_depth.buy_orders[bid_p] -= qty
-                if order_depth.buy_orders[bid_p] == 0:
-                    del order_depth.buy_orders[bid_p]
-                sell_cap -= qty
-                virt_pos -= qty
-                if sell_cap <= 0:
-                    break
-
-        # ── 2. Gap exploit on thin L1 ─────────────────────────────────────
         gap_min = float(self.params.get("gap_trigger_min", 0))
         if gap_min > 0:
             gap_vol_pct = float(self.params.get("gap_trigger_max_vol_pct", 0.15))
@@ -126,11 +84,9 @@ class OsmiumMeanRevV2Strategy(OsmiumMeanRevStrategy):
                     buy_cap -= qty
                     virt_pos += qty
 
-        # Book may be empty now after aggressive takes
         if not order_depth.buy_orders or not order_depth.sell_orders:
             return extra_orders, 0
 
-        # ── 3. Delegate to parent osmium_mr (AR1 + mean-rev) ──────────────
         sub_orders, conv = super().compute_orders(
             state, book, order_depth, virt_pos, memory,
         )
