@@ -2132,6 +2132,23 @@ MEMBER_OVERRIDES["tibo_round2_v1"] = {
     },
 }
 
+# First Round 2 champion candidate — Leo on both products, OSMIUM params tuned via gs1..gs5.
+# OSMIUM: osmium_mr (mean-rev, anchor=10000) with tuned take_edge, ar_gain, inv_soft.
+# IPR:    leo_fusion_b (block OLS + trend carry) untuned (baseline ≈ 237,859).
+MEMBER_OVERRIDES["first_sb_leo_round2"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["leo_osmium_v1"][1]["ASH_COATED_OSMIUM"],
+            take_edge=1.5,
+            ar_gain=0.3,
+            inventory_soft_ratio=0.9,
+            aggravate_min_frac=0.2,
+            unwind_boost_frac=0.3,
+        ),
+        "INTARIAN_PEPPER_ROOT": MEMBER_OVERRIDES["leo_osmium_v1"][1]["INTARIAN_PEPPER_ROOT"],
+    },
+}
+
 
 MEMBER_OVERRIDES["leo_osmium_v2"] = {
     1: {
