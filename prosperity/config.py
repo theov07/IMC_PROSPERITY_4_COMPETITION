@@ -969,6 +969,43 @@ MEMBER_OVERRIDES["theo_root_ask_gap_generalised"] = {
 }
 
 
+MEMBER_OVERRIDES["theo_best_clean_generalized"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["theo_root_ask_gap_generalised"][2]["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized",
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["theo_best_clean_generalized_v2"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["theo_best_clean_generalized"][2]["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v2",
+            startup_fast_target=64,
+            startup_post_pullback_target=72,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["theo_best_clean_generalized_v3"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["theo_best_clean_generalized_v2"][2]["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v3",
+            max_inventory_sell_guard_position=80,
+            max_inventory_sell_guard_threshold=0.0,
+        ),
+    },
+}
+
+
 MEMBER_OVERRIDES["champion_generalized"] = {
     1: {
         # Tibo's mm_first_v2 for ASH_COATED_OSMIUM

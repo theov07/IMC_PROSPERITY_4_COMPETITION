@@ -94,6 +94,18 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "trend_carry_window_v2": ("prosperity/strategies/trend_carry_window_v2.py", "TrendCarryWindowV2Strategy"),
     "osmium_mr":          ("prosperity/strategies/osmium_mr.py",          "OsmiumMeanRevStrategy"),
     "theo_best_generalized": ("prosperity/strategies/round_1/theo_best_generalized.py", "TheoGeneralizedStrategy"),
+    "theo_best_clean_generalized": (
+        "prosperity/strategies/round_2/theo/theo_best_clean_generalized.py",
+        "TheoBestCleanGeneralizedStrategy",
+    ),
+    "theo_best_clean_generalized_v2": (
+        "prosperity/strategies/round_2/theo/theo_best_clean_generalized_v2.py",
+        "TheoBestCleanGeneralizedV2Strategy",
+    ),
+    "theo_best_clean_generalized_v3": (
+        "prosperity/strategies/round_2/theo/theo_best_clean_generalized_v3.py",
+        "TheoBestCleanGeneralizedV3Strategy",
+    ),
     "theo_root_ask_gap_generalised": (
         "prosperity/strategies/round_2/theo/theo_root_ask_gap_generalised.py",
         "TheoRootAskGapGeneralisedStrategy",
@@ -124,6 +136,8 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "osmium_mr": ["naive_tight_mm_v10"],
     "osmium_mr_v2": ["naive_tight_mm_v10", "osmium_mr_artifact"],
     "theo_best_generalized": ["round1_regression_mm_v5"],
+    "theo_best_clean_generalized_v2": ["theo_best_clean_generalized"],
+    "theo_best_clean_generalized_v3": ["theo_best_clean_generalized_v2"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
 }
@@ -384,14 +398,28 @@ def main() -> int:
         print(f"Add them to STRATEGY_REGISTRY in {__file__}", file=sys.stderr)
         return 1
 
-    # Resolve dependencies: prepend each needed strategy's deps.
+    # Resolve dependencies transitively so inherited strategy chains are exported
+    # in base-to-leaf order.
     resolved: list[str] = []
-    for n in sorted(needed):
-        for dep in STRATEGY_DEPS.get(n, []):
-            if dep not in resolved:
-                resolved.append(dep)
-        if n not in resolved:
-            resolved.append(n)
+    visiting: set[str] = set()
+
+    def add_strategy(name: str) -> None:
+        if name in resolved:
+            return
+        if name in visiting:
+            raise ValueError(f"circular STRATEGY_DEPS detected at {name}")
+        visiting.add(name)
+        for dep in STRATEGY_DEPS.get(name, []):
+            add_strategy(dep)
+        visiting.remove(name)
+        resolved.append(name)
+
+    try:
+        for n in sorted(needed):
+            add_strategy(n)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     unknown_dep = set(resolved) - set(STRATEGY_REGISTRY)
     if unknown_dep:
         print(f"ERROR: STRATEGY_DEPS references unknown: {sorted(unknown_dep)}", file=sys.stderr)
