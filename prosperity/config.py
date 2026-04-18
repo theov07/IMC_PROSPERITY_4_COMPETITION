@@ -2115,6 +2115,23 @@ MEMBER_OVERRIDES["leo_osmium_v1"] = {
     },
 }
 
+# Round 2 port of leo_osmium_v1 — same strategies, same params.
+# Lets grid_search target round 2 data while patching round 2 overrides.
+MEMBER_OVERRIDES["leo_round2_v1"] = {
+    2: {
+        "ASH_COATED_OSMIUM": MEMBER_OVERRIDES["leo_osmium_v1"][1]["ASH_COATED_OSMIUM"],
+        "INTARIAN_PEPPER_ROOT": MEMBER_OVERRIDES["leo_osmium_v1"][1]["INTARIAN_PEPPER_ROOT"],
+    },
+}
+
+# Round 2 port of tibo_mm_first_v2 — for product-by-product comparison.
+MEMBER_OVERRIDES["tibo_round2_v1"] = {
+    2: {
+        "ASH_COATED_OSMIUM": MEMBER_OVERRIDES["tibo_mm_first_v2"][1]["ASH_COATED_OSMIUM"],
+        "INTARIAN_PEPPER_ROOT": MEMBER_OVERRIDES["tibo_mm_first_v2"][1]["INTARIAN_PEPPER_ROOT"],
+    },
+}
+
 
 MEMBER_OVERRIDES["leo_osmium_v2"] = {
     1: {
