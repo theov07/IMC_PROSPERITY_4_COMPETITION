@@ -77,6 +77,10 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "osmium_mr": ("prosperity.strategies.round_1.osmium_mr_artifact", "OsmiumMeanRevStrategy"),
     "osmium_mr_v2": ("prosperity.strategies.round_1.osmium_mr_v2", "OsmiumMeanRevV2Strategy"),
     "theo_best_generalized": ("prosperity.strategies.round_1.theo_best_generalized", "TheoGeneralizedStrategy"),
+    "theo_root_ask_gap_generalised": (
+        "prosperity.strategies.round_2.theo.theo_root_ask_gap_generalised",
+        "TheoRootAskGapGeneralisedStrategy",
+    ),
     "osmium_modulaire": ("prosperity.strategies.round_2.leo.osmium_modulaire", "OsmiumModulaireStrategy"),
     "pepper_modulaire": ("prosperity.strategies.round_2.leo.pepper_modulaire", "PepperModulaireStrategy"),
     "ask_exploit_modulaire": ("prosperity.strategies.round_2.theo.ask_exploit_modulaire", "AskExploitModulaireStrategy"),
