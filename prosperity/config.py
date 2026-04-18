@@ -90,7 +90,32 @@ ROUND_1: Dict[str, ProductConfig] = {
     ),
 }
 
-ROUND_2: Dict[str, ProductConfig] = {}
+ROUND_2: Dict[str, ProductConfig] = {
+    "ASH_COATED_OSMIUM": ProductConfig(
+        symbol="ASH_COATED_OSMIUM",
+        strategy="naive_tight_mm",
+        position_limit=80,
+        params=dict(
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    ),
+    "INTARIAN_PEPPER_ROOT": ProductConfig(
+        symbol="INTARIAN_PEPPER_ROOT",
+        strategy="naive_tight_mm",
+        position_limit=80,
+        params=dict(
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    ),
+}
 ROUND_3: Dict[str, ProductConfig] = {}
 ROUND_4: Dict[str, ProductConfig] = {}
 ROUND_5: Dict[str, ProductConfig] = {}
