@@ -243,51 +243,6 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
             ),
         },
     },
-    "tibo_naive_mm": {
-        1: {  "ASH_COATED_OSMIUM": _override(
-                ROUND_1["ASH_COATED_OSMIUM"],
-                strategy="naive_tight_mm",
-                gamma=0.001,
-                kappa=.8,
-                maker_size_base_pct=0.5, # in pct of position limit, scales down as inventory increases
-                take_edge=2,
-                pct_kept_for_takers=0.15, # capacity kept for aggressive takers
-                
-                min_half_spread=1.0,
-                mid_smooth_window=50, # mid_smooth_window=0 => disabled
-                mid_smooth_half_life=25,
-                sigma_window=200,
-                sigma_floor=0.5,
-                sigma_half_life=60,
-
-                ts_increment=100,
-                last_ts_value=199900,       # IMC live: last timestamp of the day
-                bt_last_ts_value=999900,    # internal backtest data: last timestamp of the day
-                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
-            ),
-             "INTARIAN_PEPPER_ROOT": _override(
-                ROUND_1["INTARIAN_PEPPER_ROOT"],
-                strategy="naive_tight_mm",
-                gamma=0.05, # grid searched
-                kappa=2.0,  # grid searched
-                maker_size_base_pct=0.3, # in pct of position limit, scales down as inventory increases
-                take_edge=2,
-                pct_kept_for_takers=0.25, # capacity kept for aggressive takers
-                
-                min_half_spread=1.0,
-                mid_smooth_window=50, # grid searched # mid_smooth_window=0 => disabled
-                mid_smooth_half_life=8, # grid searched -> could be between 5 and 15
-                sigma_window=150, # grid searched
-                sigma_floor=0.5,
-                sigma_half_life=50, # grid searched
-
-                ts_increment=100,
-                last_ts_value=199900,
-                bt_last_ts_value=199900,
-                log_flush_ts=1000, # fires at 900, 1900, 2900 ... every 1000 timestamp units
-            ),
-        },
-    },
     "tibo_mm_first": {
         1: {
             "ASH_COATED_OSMIUM": _override(
@@ -393,45 +348,46 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
             ),
         },
     },
-    "tibo_zscore": {
-        1: {
+    "tibo_mm_first_v3": {
+        2: {
             "ASH_COATED_OSMIUM": _override(
-                ROUND_1["ASH_COATED_OSMIUM"],
-                strategy="zscore",
-                # z-score signal
-                zscore_window=25,          # rolling window for mean/std
-                zscore_threshold=2,       # |z| must exceed this to tilt sizes
-                zscore_size_scale=0.5,      # scale per unit of excess z (1 + 0.5 * excess)
-                zscore_max_scale=2.0,       # cap on the size multiplier
-                # quoting
-                take_edge=.5,
-                maker_size_base_pct=0.5,
+                ROUND_2["ASH_COATED_OSMIUM"],
+                strategy="mm_first_v3",
+                take_edge=1,
+                maker_size_base_pct=0.3,
                 pct_kept_for_takers=0.1,
                 mid_smooth_window=50,
                 mid_smooth_half_life=10,
-                
+                taker_buy_threshold=9990,
+                taker_sell_threshold=10025,
+                gap_trigger_min=10,
+                gap_trigger_max_vol_pct=0.1,
+                gap_trigger_confirm_ticks=1,
+                quote_trace_enabled=True,
                 ts_increment=100,
-                last_ts_value=99900,
+                last_ts_value=999900,
                 log_flush_ts=1000,
             ),
             "INTARIAN_PEPPER_ROOT": _override(
-                ROUND_1["INTARIAN_PEPPER_ROOT"],
-                strategy="zscore",
-                zscore_window=100,
-                zscore_threshold=1.0,
-                zscore_size_scale=0.5,
-                zscore_max_scale=3.0,
+                ROUND_2["INTARIAN_PEPPER_ROOT"],
+                strategy="mm_first_v3",
+                inv_step_threshold=0.8,
                 take_edge=1.0,
                 maker_size_base_pct=0.5,
                 pct_kept_for_takers=0.2,
                 mid_smooth_window=20,
                 mid_smooth_half_life=10,
+                gap_trigger_min=10,
+                gap_trigger_max_vol_pct=0.10,
+                gap_trigger_confirm_ticks=2,
+                quote_trace_enabled=True,
                 ts_increment=100,
-                last_ts_value=99900,
+                last_ts_value=999900,
                 log_flush_ts=1000,
             ),
         },
     },
+
     "leo_naive": {
         0: {
             "EMERALDS": _override(
@@ -1896,19 +1852,6 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
 }
 
 
-# Trend-carry window v2: same params as tibo_trend when that member exists.
-if "tibo_trend" in MEMBER_OVERRIDES:
-    MEMBER_OVERRIDES["tibo_trend_v2"] = {
-        1: {
-            "ASH_COATED_OSMIUM": None,
-            "INTARIAN_PEPPER_ROOT": _override(
-                MEMBER_OVERRIDES["tibo_trend"][1]["INTARIAN_PEPPER_ROOT"],
-                strategy="trend_carry_window_v2",
-            ),
-        },
-    }
-
-
 # ── V2 variants (block_size=200, R^2 ~0.99; rebalanced trend/residual weights
 #    so residual_z can drive sells on spikes instead of being dominated by trend).
 for _base in ("leo_fusion_a", "leo_fusion_b", "leo_fusion_c", "leo_fusion_d"):
@@ -1924,7 +1867,6 @@ for _base in ("leo_fusion_a", "leo_fusion_b", "leo_fusion_c", "leo_fusion_d"):
         },
     }
 
-
 MEMBER_OVERRIDES["leo_fusion_b_v3"] = {
     1: {
         "ASH_COATED_OSMIUM": None,
@@ -1939,7 +1881,6 @@ MEMBER_OVERRIDES["leo_fusion_b_v3"] = {
         ),
     },
 }
-
 
 MEMBER_OVERRIDES["leo_fusion_b_v4"] = {
     1: {
