@@ -1587,7 +1587,15 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
             "summary": aggregate,
             "days": [_result_to_jsonable(s) for s in summaries],
         }
-        Path(args.json_out).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        output_path = Path(args.json_out)
+        # If a directory is provided, create it and generate a default filename
+        if str(output_path).endswith('/') or output_path.is_dir():
+            output_path.mkdir(parents=True, exist_ok=True)
+            output_path = output_path / f"{args.strategy}_round{args.round}.json"
+        else:
+            # Ensure parent directory exists for file paths
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     return 0
 
