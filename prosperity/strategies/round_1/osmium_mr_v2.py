@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Tuple
 from datamodel import Order, OrderDepth, TradingState
 
 from prosperity.market import BookSnapshot
-from prosperity.strategies.metal_winner.osmium_mr import OsmiumMeanRevStrategy
+from prosperity.strategies.round_1.osmium_mr_artifact import OsmiumMeanRevStrategy
 
 
 class OsmiumMeanRevV2Strategy(OsmiumMeanRevStrategy):

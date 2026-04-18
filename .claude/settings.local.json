@@ -102,7 +102,7 @@
       "Bash(python3 backtest.py --strategy test_theo --round 1 --days -2 -1 0 --match-trades realistic --product INTARIAN_PEPPER_ROOT)",
       "Bash(python3 backtest.py --strategy test_theo --round 1 --days -2 -1 0 --match-trades realistic)",
       "Bash(python3 backtest.py --strategy submissions.test_theo --round 1 --days -2 -1 0 --match-trades realistic)",
-      "Bash(python3 backtest.py --strategy submissions.theo_vrai_strat --round 1 --days -2 -1 0 --match-trades realistic)"
+      "Bash(python3 backtest.py --strategy submissions.theo_vrai_strat --round 1 --days -2 -1 0 --match-trades realistic)",
       "Bash(python backtest.py --strategy theo_best_generalized --round 1 --days -2 --match-trades realistic)",
       "Bash(python -c \"from prosperity.tooling.dashboard import build_backtest_figure, build_imc_figure; print\\('OK'\\)\")",
       "Bash(python -c \"from prosperity.strategies.metal_winner.mm_first_v2 import MMFirstStrategy; print\\('OK'\\)\")"

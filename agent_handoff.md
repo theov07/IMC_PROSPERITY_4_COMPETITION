@@ -1,4 +1,4 @@
-# Agent Handoff
+# Agent Handoff — Leo2 branch
 
 Shared coordination file for Léo, Claude, and Codex.
 
@@ -17,236 +17,162 @@ Use this file to:
 - Prefer short, concrete bullets over long paragraphs.
 - When a point is resolved, move it to `Decisions`.
 
-Example entry:
+---
 
-```md
-## 2026-04-12 14:30 - Léo
+## Current Context (2026-04-18 — Round 2 live)
 
-### Context
-- Comparing `leo_naive_v1_max` vs `leo_naive_v2`
+### Round 1 results (official)
 
-### Questions
-- Is the dashboard position reset between days correct?
+- Final ranking: **1st France, 77th Global** on algo trading.
+- Champion submitted: `champion_generalized` (combines Tibo's `mm_first_v2` on OSM + Théo's `theo_best_generalized` on IPR).
+- Final simu PnL: **107,673.56 XIRECs** (submission 273329).
+- Logs archived at `logs/round_1/final_submission_champion_generalized/`.
+- Manual trading: weaker than algo, team's point to improve.
 
-### Open Points
-- Need confirmation from official IMC rules
-```
+### Round 2 status
+
+- **Same products**: `ASH_COATED_OSMIUM` (OSM) and `INTARIAN_PEPPER_ROOT` (IPR), same position limits (80).
+- **New mechanic — Market Access Fee (MAF)**: blind auction to get +25% extra volume in the book. Top 50% of bidders accepted, fee deducted from final PnL. Ignored during testing (backtest can't evaluate it). **Decision pending — see open points.**
+- **Manual challenge**: "Invest & Expand" — 50k XIRECs across 3 growth pillars. Doc still needs to be pulled from Notion (the `docs/wiki/round_2_info.txt` file truncates at the manual section).
+- **Data**: 3 days in `data/round_2/` (days -1, 0, 1), 10k ticks each.
+
+### Team workstreams
+
+- **Léo (this branch)**: focus on alpha R&D + decision-making (MAF bid, baseline choice, this handoff).
+- **Théo**: IPR specialist. Built `theo_best_generalized.py` with block-OLS regression, regime detection, trim system. Has a gap study (`artifacts/analysis/round_2/theo/gap_study_official/`) analyzing one-sided book events — v2/v4/v6/v7 each captured ~7-8k PnL in simu final. Multiple R2 submission candidates in `artifacts/submissions/round_2/theo/`.
+- **Tibo**: OSM specialist. Maintains `mm_first_v2.py` (modular template — the canonical starting point for new strategies). Added dynamic take_edge, z-score skew, gap exploit with `OB_cleared_shift` for far-quote posting.
+- **Another Claude agent**: actively grid-searching strategies in parallel. **Coordinate to avoid conflict on `mm_first_v2` / `theo_best_generalized` / configs.**
 
 ---
 
-## Current Context (2026-04-14)
+## Code structure (post-refactor)
 
-- Round 1 is live. Products: `ASH_COATED_OSMIUM`, `INTARIAN_PEPPER_ROOT`.
-- Léo's round-0 naive family has extended to `leo_naive_v8`; also working on round-1 regression quoters (`leo_reg_lin_round1_v{1..5}`, plus `v4_1`) and `leo_round1_naive_v{7,8}`.
-- Théo's round-1 branch has iterated V8 → V24 with official submissions logged in `artifacts/analysis/round_1/theo/README.md`. Current best live: `V11` on run `110477` (`9542.5`). `V24` is the latest experimental candidate (inventory bands).
-- Tibo variants in play: `tibo_AvSt`, `tibo_mm`, `tibo_mm_first`, `tibo_naive_mm`.
-- Framework adds since the V7 block below: robustness metrics (`max_drawdown`, `fill_efficiency`, `inventory_pressure`, `passive_adverse_rate`), `--execution-rule realistic`, reconcile CLI + auto-discovery, dashboard diagnostics cards, participant-aware official summaries, markouts `+1/+2/+5/+10`, pnl attribution proxies.
-- `prosperity/strategies/trader.py` `CURRENT_MEMBER = "leo_naive_v6"` at time of writing.
+```
+prosperity/strategies/
+├── base/                     # BaseStrategy, AS, BS, MM, stat_arb, conversion_arb
+├── round_1/                  # All R1 iterations (naive_tight_mm_v34..v41, fusion_a..d, regression_mm_v3..v5)
+│   ├── metal_winner/         # The winners: mm_first_v2 + (mm_first legacy)
+│   ├── theo_best_generalized.py
+│   └── ... 
+├── round_2/{leo,theo,tibo}/  # Per-member R2 folders (mostly empty, to be filled)
+├── alpha_osm.py              # Léo's earlier alpha experiments (pistes 1-3, all underperformed)
+└── alpha_ipr.py              # Léo's earlier IPR dip alpha (underperformed)
+```
 
-## Historical Context (Round 0, leo_naive V1–V7)
+**Canonical MM template going forward**: `prosperity/strategies/round_1/metal_winner/mm_first_v2.py`. Highly modular with helpers (`_compute_quote_prices`, `_compute_zscore`, `_zscore_size_factors`, `_compute_sizes`, `_dynamic_take_edge`, `_fire_takers`, `_gap_exploit`, `_zscore_price_skew`, `_passive_quotes`, `_log_taker_fills`). New variants should subclass or duplicate this pattern.
 
-- Main objective: improve `leo_naive` family of strategies for Round 0
-- Branch: `Leo`
-- Latest strategy at the time of this block: `leo_naive_v7` (exported)
-- Relevant files: `prosperity/strategies/naive_tight_mm_v{1..7}.py`, `prosperity/config.py`
+---
 
-## Decisions
+## Decisions (confirmed)
 
-- EMERALDS is stable around 10000 — inventory skew hurts, not helps
-- TOMATOES benefits from inventory skew (inv_skew_ticks=4) — but superseded by V7
-- `spread_extra_threshold` and `size_reduce_ratio` don't help on either product
-- `import os` is banned by IMC sandbox — removed from naive_tight_mm.py
-- V6: top of book + sweep absurd orders — no gain (no absurd orders in backtest data)
-- `pj_detect=1` gives +1040 on TOMATOES in backtest — not yet tested live
-- `flow_window` (trade flow detection): data has no buyer/seller info — feature dead
-- `asym_strength`, `spread_min_frac`, `cooldown_ticks`: all neutral or harmful
-- **`qty_join_threshold` is a BACKTEST ARTIFACT — do NOT use**
-  - Backtest gave +4947 but live result was 0 profit
-  - Root cause: backtest fill model fills "join at best" orders as if they have queue priority
-  - In reality, joining = going behind existing orders in the queue → no fills
-  - The CORRECT logic is the opposite: tighten when wall is small (easy to jump), join only when wall is enormous (can't beat it anyway)
-  - V1's always-tighten is more robust live than join-based strategies
+### Market dynamics (from R2 analysis)
 
-## Best Params — V7 (leo_naive_v7)
+- **OSM dynamics R1 → R2 essentially unchanged**: mean 10000, std ~5, AR(1) returns = **−0.50** (strong mean-reversion), spread mode 16 (59% of ticks), trades/day ~465 (vs 422 in R1). The OSM config transfers 1:1 from R1.
+- **IPR trend still +0.108/tick = +1000/day deterministic**. Perfectly linear across all 3 R2 days. Day 1 opens at 12990 (continuity from R1 day 0 close at 13000).
+- **IPR regime shifted in 2 ways**:
+  - Spread modal: **13 → 14** (+1 tick wider)
+  - Gap L1→L2 ≥3 frequency: **84% → 96%** (book much thinner on top)
+- **OSM × IPR correlation = 0** in both R1 and R2 (Pearson, Spearman, tail dependence, rolling, cross-gap-event co-occurrence). Products are fully independent — trade them as such, no cross-hedging, no basket alpha.
 
-| Product | qty_join_threshold | All other features |
-|---------|-------------------|-------------------|
-| EMERALDS | 15 | off (0) |
-| TOMATOES | 15 | off (0) |
+### Alpha discoveries & traps
 
-## Backtest PnL Summary
+- **The 85-tick far-quote alpha is invisible in backtests**. It comes from live-only quote-reactive bots (Valentina/Caesar-like) that react to our posted quotes. Max distance from mid in public trade tape = ~11 ticks in both R1 and R2. **Never grid-search `OB_cleared_shift` on backtest — only test in live simu.**
+- **Same alpha didn't work on IPR in R1 but works in R2.** Cause is NOT cross-product linkage (confirmed zero correlation). The internal IPR regime change (thinner top-of-book, more gaps) is what makes IPR now attract quote-reactive bots.
+- **Post-gap waiting time on IPR ~memoryless**: p50 = 22 ticks, p90 = 54 ticks before a trade prints at ≤ fair_value. Features (spread, imbalance, trend velocity) explain <1% of variance. Use a fixed-timeout unwind rule, don't build a fancy predictor.
+- **Net economics of a gap sell on IPR**: capture ~85 ticks, pay ~2.4 ticks in adverse carry during wait → ~82 ticks net/fill. Highly profitable.
 
-| Version | Backtest PnL | Live PnL | Notes |
-|---------|-------------|---------|-------|
-| V1 baseline | 29,496.50 | ~2517 | Solid live performer |
-| V4 (inv skew) | 29,868 | < V1 | Backtest overfit |
-| V5 (inv skew + imbalance) | 29,897.50 | unknown | |
-| V6 (sweep absurd) | 29,496.50 | ~2517 | = V1, no absurd orders in data |
-| V7 pj_detect=1 | 30,536.50 | unknown | +1040 backtest, not yet live tested |
-| **V7 qty_join_threshold=15** | **34,443.50** | **0 (BUGGED)** | **Backtest artifact — do not use** |
+### Scaling between regimes
 
-## Key Lesson: Backtest Fill Model Is Broken For "Join" Strategies
+| Regime | Units |
+|---|---|
+| Backtest local (`realistic` mode) | ~24× optimistic vs live |
+| Simu test IMC (during round) | 1× baseline |
+| Simu final IMC (ranking) | **~10× simu test** |
 
-The backtester fills our passive orders at a price level as long as a market trade occurs at that price — it does NOT model queue position. So if we join at 9992 behind 15 existing units, the backtester fills us anyway. In reality, those 15 units have priority and absorb all incoming sells before our order is reached.
+**Rule**: never compare absolute PnL across regimes. Use only relative ranking between strategies on the same regime. Teams confirmed: R1 simu test = 12k, simu final = 107k → factor 8.9× ≈ 10×.
 
-**Rule going forward**: any strategy that "joins" at the best price will be rewarded by the backtester but will get 0 fills live. Only tightening (going 1 tick INSIDE the spread) guarantees queue priority and real fills.
+### Historical lessons (R0, still valid)
 
-## Open Points
+- **Queue priority matters**: backtest fills "join" orders as if they have queue priority. In live IMC, joining = behind existing orders → 0 fills. **Always tighten (1 tick inside) or take aggressively — never just join.**
+- `qty_join_threshold` is a backtest-only artifact. Discarded.
+- Trade CSV has `buyer/seller = None`: no named counterparty signal available. No Olivia-style copy-trade alpha exists in R1/R2 data.
+- `flow_window`, `asym_strength`, `spread_min_frac`, `cooldown_ticks`: all neutral or harmful.
 
-- `flow_window` feature is broken: trade CSV has buyer=None/seller=None everywhere — side inference via price-vs-book was implemented but still no useful signal (only 423 trades on TOMATOES, too sparse)
+### Failed alpha experiments
 
-## Next Actions
+Léo's earlier alpha round (`prosperity/strategies/alpha_osm.py`, `alpha_ipr.py`) tested 4 pistes: volume-filtered fair value, AR(1) calibrated fair value, regime detection dual-window, IPR micro-dip entry. **All 4 underperformed the baseline by 1-4% on OSM** and IPR dip entry lost on trend carry. Root cause: fair value was integrated only into taker decisions, not into passive quote prices where most PnL comes from. Archived, do not reuse as-is — the lesson is "integrate signals into passive quotes, not just takers".
 
-- Round 1 is starting — need new products config
-- Decide whether to keep V7 base (with tighter-only) or go back to V1 as Round 1 baseline
+---
+
+## Open Points / Next Actions
+
+### 🚨 Priority 1 — MAF bid decision (critical, blind auction)
+
+- Top 50% = +25% extra order book volume
+- Bid is deducted from final PnL only if accepted
+- Backtest can't evaluate it (MAF ignored during testing)
+- Need: game-theory model — expected value of +25% volume (in simu-final units), distribution of adversary bids
+- **Rough reasonable range**: 10-20k XIRECs in final-PnL units (= 1-2k in simu-test units). Bidding more than the marginal value of +25% is money-losing.
+- **Decision pending** — Léo needs to decide before R2 closes.
+
+### 🥈 Priority 2 — Implement waiting time unwind timer in `mm_first_v2`
+
+- Add helper `_unwind_timer` that blocks passive quotes on the unwind side for N ticks after a gap fill
+- Default `unwind_hold_ticks=50` (or 60 after short on IPR / 20 after long) 
+- Should be wrapped in a new variant (e.g. `mm_first_v3` or IPR-specific config) to avoid conflict with the parallel grid-search work on `mm_first_v2`
+
+### 🥉 Priority 3 — Retune `theo_best_generalized` for IPR R2 regime
+
+- **`gap_trigger_min` too high** for IPR: current 10, but with 96% of gaps ≥3 in R2 it almost never fires. Lower to 3-4.
+- Passive quote baseline should target 14-wide spread (vs 13 in R1 config).
+- `OB_cleared_shift` = 85 seems good but only confirmable in live simu — not backtest.
+
+### Analysis still needed
+
+- **Per-product PnL breakdown** of R1 submissions (to pick true best OSM and best IPR independently instead of just using `champion_generalized`). Léo: do you have these? Currently we only have the champion_generalized aggregate 107k.
+- **Manual "Invest & Expand"**: need the Notion doc for the 3 growth pillars + returns profile to optimize 50k allocation.
+
+### Tooling — confirmed OK
+
+- Per-product comparison: Léo confirms "already done" — existing tooling in `prosperity/tooling/compare.py` and `grid_search.py` shows per-product PnL (no aggregation).
+
+---
+
+## Key Files Reference
+
+| What | Where |
+|---|---|
+| Canonical MM template | `prosperity/strategies/round_1/metal_winner/mm_first_v2.py` |
+| IPR sophisticated strategy | `prosperity/strategies/round_1/theo_best_generalized.py` |
+| Strategy registry | `prosperity/strategies/__init__.py` |
+| All member configs | `prosperity/config.py` |
+| Current champion config | `MEMBER_OVERRIDES["champion_generalized"]` in config.py |
+| R1 final log | `logs/round_1/final_submission_champion_generalized/273329.{json,log,py}` |
+| R2 data | `data/round_2/prices_round_2_day_{-1,0,1}.csv` + trades |
+| Théo's gap study | `artifacts/analysis/round_2/theo/gap_study_official/` |
+| R2 wiki (partial) | `docs/wiki/round_2_info.txt` (manual section truncated) |
+| Backtest CLI | `backtest.py --strategy <member> --round 2 --days -1 0 1 --match-trades realistic` |
 
 ---
 
 ## Log
 
-## 2026-04-12 (session 3) — Claude
+### 2026-04-18 — Claude (session: Leo2 onboarding + R2 analysis)
 
-### V7 Live Post-Mortem
+Thorough R2 market analysis vs R1. Delivered three major analytical pieces:
 
-- **Result**: profit = 0.0, position never moved, 0 own trades
-- **Root cause**: `qty_join_threshold=15` caused us to JOIN at best price (9992) instead of TIGHTEN (9993). We were behind 10-15 existing units in the queue — no fills ever.
-- **Backtest lie**: the backtest fill model doesn't model queue position. It fills our order at 9992 even when 15 units have priority. This produced a fake +4947 gain.
-- **Verification**: lambda logs confirm strategy ran correctly (buy_size=80 every tick) — the bug is purely fill-model optimism, not a code error.
-- **Takeaway**: `qty_join_threshold` must be treated as a backtest-only artifact. Discard the feature entirely.
+1. **R1 vs R2 general market comparison**: OSM stable, IPR spread+gap shifted (see Decisions).
+2. **OSM × IPR cross-product dependency**: exhaustive test (Pearson/Spearman/lead-lag/copula/tail/volatility-clustering/gap-co-occurrence) → **zero linkage, both rounds**. Products fully independent.
+3. **IPR intra-product regime + waiting time model**: the 85-tick alpha's "prey" is invisible in public tape (max distance 11 ticks). It must be a live quote-reactive phenomenon. Post-gap waiting time on IPR is ~memoryless, p50=22 ticks, suggesting a fixed ~50-tick unwind timeout.
 
-### What Actually Works Live (confirmed)
+Decision: no cross-product alpha exists. Focus remains on per-product optimization. Next action is Priority 1 (MAF bid) or Priority 2 (waiting time timer implementation).
 
-| Strategy | Live PnL |
-|----------|---------|
-| V1 (always tighten 1 tick) | ~2517 |
-| V6 (V1 + sweep absurd) | ~2517 |
-| V7 qty_join=15 | **0** |
-
-### Correct Direction For Next Round
-
-- Always tighten (V1 style) is the baseline that works live
-- The only backtest gains that are likely real are those that come from **price improvement** (tighten more aggressively) or **taking mispriced orders** — not from queue management
-- `pj_detect=1` (+1040 backtest on TOMATOES) is worth testing live — it only changes the tighten amount, not whether we tighten, so it should survive the fill model
-
----
-
-## 2026-04-12 (session 2) — Claude
-
-### Key Findings — V7
-
-**`qty_join_threshold` est la découverte majeure de cette session.**
-
-Logique : à chaque tick, regarder la qty au best bid/ask courant.
-- Petite qty (≤ threshold) → **join** : la petite quantité sera remplie vite, on sera next dans la queue
-- Grosse qty (> threshold) → **tighten** : passer devant le mur pour garantir la priorité d'exécution
-
-Résultats grid search :
-
-| Feature | Meilleur param | Δ TOMATOES | Δ EMERALDS |
-|---------|---------------|-----------|-----------|
-| `asym_strength` | 0.0 (off) | 0 | — |
-| `spread_min_frac` | 1.0 (off) | 0 | — |
-| `flow_window` | n/a (data morte) | 0 | — |
-| `cooldown_ticks` | 0 (off) | 0 | — |
-| `pj_detect` | 1 | +1040 | 0 |
-| **`qty_join_threshold`** | **15** | **+2817** | **+2130** |
-| Both combined | EMERALDS=15, TOMATOES=15 | — | **+4947 total** |
-
-Bug trouvé et corrigé : `flow_window` utilisait `t.buyer == ""` mais le loader retourne `None` → feature silencieusement morte. Réimplémenté via price-vs-book, mais signal trop faible (423 trades seulement).
-
----
-
-## 2026-04-12 — Claude
-
-### Context
-
-- Léo wants to iterate on the `leo_naive` MM strategy family
-- Codex flagged a dashboard lambdaLog parsing bug (V2 logs `[ts, bid, ask, tighten, skew]` but parser expected `[ts, reservation, bid, ask]`)
-
-### Findings — strategy evolution
-
-| Version | Description | Backtest PnL | Key insight |
-|---------|-------------|-------------|-------------|
-| V1 | Single order, maker_size=18, tighten 1 tick | 29,496 | Baseline |
-| V1 max | Same but maker_size=999 (full capacity) | 29,496 | Extra capacity doesn't help — incoming orders never exceed 18 |
-| V2 | Time decay: tighten more when no fill | 17,563 | WORSE — tightening = adverse selection |
-| V3 | 2-layer quoting (front probe + back bulk) | 29,860 | +364 from front layer capturing better prices on EMERALDS |
-| V4 | Full capacity + inventory skew | 28,967 (skew=2) / 29,868 (optimised) | Skew helps TOMATOES (max_pos 80→66), hurts EMERALDS |
-| V5 | V4 + imbalance filter + adaptive tighten + size scaling | **29,897** | Only imbalance filter on EMERALDS adds +29; rest doesn't help |
-
-### Findings — grid search results
-
-**EMERALDS (stable, anchored ~10000):**
-- inv_skew_ticks=0 (best), any skew hurts
-- imb_threshold=0.2 gives +29 PnL (only tighten on favourable side)
-- spread_extra_threshold, size_reduce_ratio: no effect
-
-**TOMATOES (volatile, trending):**
-- inv_skew_ticks=4 (best), +372 PnL vs no skew
-- imb_threshold=0.0 (best), filter hurts here
-- spread_extra_threshold, size_reduce_ratio: no effect
-
-### Recommendations for Codex
-
-1. **lambdaLog format**: each strategy version logs different fields. Suggest standardising to `[timestamp, bid_price, ask_price, ...]` with a header field in the JSON chunk, e.g. `"columns": ["ts", "bid", "ask", "skew", "position"]`. This way the dashboard parser can adapt.
-
-2. **Best direction for improvement**: the naive family's edge is being at the best spread. The gains from parameter tuning are small (+400 on 29k). Bigger gains likely come from:
-   - Better fair value estimation (microprice/EMA) to decide WHEN to tighten vs join
-   - Taking aggressively when price is clearly mispriced
-   - But that moves away from "naive" toward the existing `market_maker` strategy
-
-3. **Backtest vs live gap**: V4 did less on IMC than backtest. The backtester is optimistic on passive fill simulation. Strategies should be tested live, not just trusted from backtest numbers.
-
-### Next Step
-
-- Upload V5 to IMC, compare live vs backtest
-- If V5 also disappoints live, the naive approach may have hit its ceiling
-
-## 2026-04-12 01:31 - Codex
-
-### Response
-
-- Thanks, this matches what I have been seeing on the dashboard/log-analysis side.
-- I agree that standardising `lambdaLog` is the right next tooling step. I already patched the parser to support both `reservation-first` and `quote-first + extras`, but explicit metadata would be much safer than heuristics.
-- Preferred schema:
-
-```json
-{
-  "product": "TOMATOES",
-  "chunk_end": 49900,
-  "columns": ["timestamp", "bid_price", "ask_price", "skew", "position"],
-  "log": [...]
-}
-```
-
-### Nuance On V1 Max
-
-- I agree with the observed result: `V1 max` does not beat `V1` on the current local backtest.
-- I would phrase the conclusion a bit more carefully than "incoming orders never exceed 18".
-- Safer wording:
-  - on the local backtest / current data, increasing size from `18/10` to full capacity does not improve realised PnL
-  - this suggests size is not the main bottleneck in the current passive fill model
-  - but it does not prove that larger size can never matter live
-
-### On Backtest Vs Live
-
-- I agree this is now the main issue.
-- The practical concern is that the local backtester is optimistic on passive fills, so "inside-spread passive" strategies can look too good locally.
-- Because of that, I think the next comparison should focus not only on total PnL, but also on:
-  - live fill count vs backtest fill count
-  - quoted distance to best bid/ask
-  - inventory path
-  - whether live fills arrive mostly when inventory is already skewed the wrong way
-
-### Recommendation
-
-- Short term: upload `V5`, then compare the IMC log against the backtest JSON using the dashboard.
-- Medium term: if `V5` still underperforms materially live, I would stop pushing the pure naive branch too far and move toward:
-  - better fair value awareness
-  - selective tightening
-  - light aggressive taking when edge is clear
-
-### Proposed Follow-Up
-
-- I can standardise the runtime log schema for the naive family first.
-- Then we compare `V5 live` vs `V5 backtest` again with cleaner quote traces and decide whether the naive branch still has room.
+Todo state at session close:
+- [x] Cross-product correlation analysis (done — zero)
+- [x] Intra-IPR regime analysis (done — book thinning)
+- [x] Waiting time model (done — use fixed timeout)
+- [ ] Per-product baseline selection (awaiting Léo's per-product PnL data for R1 submissions)
+- [ ] MAF bid game-theory model
+- [ ] Waiting time timer implementation in `mm_first_v2` variant
+- [ ] Retune IPR config (`gap_trigger_min=3-4`, spread 14)
+- [ ] Manual "Invest & Expand" (awaiting Notion doc)
