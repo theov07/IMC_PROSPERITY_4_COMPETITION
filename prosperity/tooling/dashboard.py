@@ -1272,7 +1272,7 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
         bt2_per_prod_pnl = _bt_per_product_pnl(backtest_data2, market_df_raw)
         print("Precomputed backtest2 data.")
 
-    app = Dash(__name__, title="Prosperity Trading Dashboard")
+    app = Dash(__name__, title="Prosperity Trading Dashboard", suppress_callback_exceptions=True)
 
     # ── Static layout shell (theme-independent IDs) ──
     chart_ids: list[str] = []
@@ -1331,7 +1331,7 @@ def run_dash(log=None, log2=None, backtest_data: dict | None = None, data_dir: s
                         min=0, max=100, step=1, value=20,
                         marks={0: "0", 25: "25", 50: "50", 75: "75", 100: "100"},
                         tooltip={"placement": "top", "always_visible": False},
-                        updatemode="drag",
+                        updatemode="mouseup",
                         included=True,
                     ),
                 ], style={"display": "flex", "alignItems": "center", "marginLeft": "12px", "width": "220px"}),
