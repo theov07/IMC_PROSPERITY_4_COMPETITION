@@ -29,6 +29,7 @@ research/visualizer/__pycache__/
 
 
 logs/round_1/theo
+logs/round_2/*
 artifacts/analysis/round_1/theo
 
 .claude/*
