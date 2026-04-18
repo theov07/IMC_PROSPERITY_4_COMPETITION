@@ -80,6 +80,8 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "osmium_modulaire": ("prosperity.strategies.round_2.leo.osmium_modulaire", "OsmiumModulaireStrategy"),
     "pepper_modulaire": ("prosperity.strategies.round_2.leo.pepper_modulaire", "PepperModulaireStrategy"),
     "ask_exploit_modulaire": ("prosperity.strategies.round_2.theo.ask_exploit_modulaire", "AskExploitModulaireStrategy"),
+    "aco_mm_modulaire": ("prosperity.strategies.round_2.leo.aco_mm_modulaire", "AcoMMModulaireStrategy"),
+    "mm_first_v4_combo": ("prosperity.strategies.round_2.leo.mm_first_v4_combo", "MMFirstV4ComboStrategy"),
 }
 
 
