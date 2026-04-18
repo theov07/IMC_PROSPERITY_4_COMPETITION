@@ -1079,6 +1079,190 @@ MEMBER_OVERRIDES["champion_generalized"] = {
 }
 
 
+# Leo's OSMIUM + Theo's broken-book gap-quote idea (empty_side_shift / gap_size).
+# Base = osmium_sb_leo_round2's OSMIUM config, with broken-book handler enabled.
+MEMBER_OVERRIDES["leo_osmium_jump_v1"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["first_sb_leo_round2"][2]["ASH_COATED_OSMIUM"],
+            empty_side_shift=85,
+            gap_size=30,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# Theo's ASH_COATED_OSMIUM penny-improve MM isolated from submission 283574
+# (flat-modular port as `aco_mm_modulaire`). OSMIUM-only, IPR disabled.
+MEMBER_OVERRIDES["leo_osmium_only_exploration"] = {
+    2: {
+        "ASH_COATED_OSMIUM": ProductConfig(
+            symbol="ASH_COATED_OSMIUM",
+            strategy="aco_mm_modulaire",
+            position_limit=80,
+            params=dict(
+                last_ts_value=999900,
+                ts_increment=100,
+                base_size=10,
+                improve_ticks=1,
+                inv_skew_threshold=15,
+                inv_reduce_factor=0.4,
+                max_pos_to_buy=30,
+                min_pos_to_sell=-30,
+                min_spread_to_quote=4,
+                empty_side_shift=85,
+                gap_size=30,
+            ),
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# ── mm_first_v4_combo A/B test configs (Leo x Tibo best-of-both) ────────────
+# Base params shared by all variants — match Tibo's mm_first_v3 defaults for OSM
+_V4_OSM_BASE = dict(
+    strategy="mm_first_v4_combo",
+    # Tibo baseline params
+    take_edge=1,
+    take_edge_lo=0.7,
+    take_edge_hi=1,
+    take_edge_vol_lo=2.0,
+    take_edge_vol_hi=5.0,
+    maker_size_base_pct=0.5,
+    pct_kept_for_takers=0.1,
+    mid_smooth_window=50,
+    mid_smooth_half_life=10,
+    taker_buy_threshold=9990,
+    taker_sell_threshold=10025,
+    zscore_window=50,
+    zscore_threshold=1,
+    zscore_size_scale=0.5,
+    zscore_max_scale=5.0,
+    # Gap exploit (live alpha — PRESERVED)
+    gap_trigger_min=10,
+    OB_cleared_shift=89,
+    gap_trigger_max_vol_pct=0.1,
+    gap_trigger_confirm_ticks=1,
+    zscore_gap_gate=1.5,
+    # Logging
+    quote_trace_enabled=True,
+    ts_increment=100,
+    last_ts_value=999900,
+    log_flush_ts=1000,
+)
+
+
+def _osm_v4(**extra):
+    """Build ASH_COATED_OSMIUM override with V4 base + extra opt-in params."""
+    return _override(ROUND_2["ASH_COATED_OSMIUM"], **{**_V4_OSM_BASE, **extra})
+
+
+# Variant A — baseline: all new features OFF  (= mm_first_v3 equivalent)
+MEMBER_OVERRIDES["v4_A_baseline"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant B — anchor fixe 10000 (Leo's #1)  + AR(1) on mid_smooth (cleaner signal)
+MEMBER_OVERRIDES["v4_B_anchor"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.0,       # pure fixed
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant B' — anchor hybrid (EWMA bounded to ±10 of 10000)
+MEMBER_OVERRIDES["v4_B2_anchor_hybrid"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,      # slow EMA
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant C — asymmetric takers only (Leo's #3)
+MEMBER_OVERRIDES["v4_C_asym"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            unwind_take_edge=1.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant D — toxic flow filter only (Leo's #4)
+MEMBER_OVERRIDES["v4_D_toxic"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            toxic_threshold=0.6,
+            toxic_window=6,
+            toxic_size_frac=0.75,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant E — jump filter only (Leo's #5)
+MEMBER_OVERRIDES["v4_E_jump"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            trend_jump_threshold=1.0,
+            jump_size_frac=0.5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant F — anchor hybrid + asymmetric (the two highest-impact features)
+MEMBER_OVERRIDES["v4_F_anchor_asym"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=1.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant G — all Leo mechanisms combined
+MEMBER_OVERRIDES["v4_G_all"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=1.0,
+            toxic_threshold=0.6,
+            toxic_window=6,
+            toxic_size_frac=0.75,
+            trend_jump_threshold=1.0,
+            jump_size_frac=0.5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
