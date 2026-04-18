@@ -1242,6 +1242,27 @@ MEMBER_OVERRIDES["v4_F_anchor_asym"] = {
     },
 }
 
+# Variant F2 — v4_F with tuned unwind params (2D grid winner)
+#   Grid searched unwind_take_edge ∈ {0..5} x pct_kept_for_takers ∈ {0.05..0.3}
+#   Best: unwind_take_edge=3.0, pct_kept_for_takers=0.05
+#   vs v4_F (unwind=1.0, kept=0.1): +658 PnL (+1.1%), inv_ratio 0.232 -> 0.209 (-10%)
+#   vs v4_A baseline: +2,391 PnL (+4.1%), inv_ratio 0.282 -> 0.209 (-26%)
+MEMBER_OVERRIDES["v4_F2_tuned_unwind"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=3.0,           # tuned up from 1.0
+            pct_kept_for_takers=0.05,       # tuned down from 0.1 (less strict hard-stop)
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
 # Variant G — all Leo mechanisms combined
 MEMBER_OVERRIDES["v4_G_all"] = {
     2: {
