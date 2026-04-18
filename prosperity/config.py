@@ -850,6 +850,125 @@ MEMBER_OVERRIDES["theo_best_generalized"] = {
 }
 
 
+MEMBER_OVERRIDES["theo_root_ask_gap_generalised"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            ROUND_2["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_root_ask_gap_generalised",
+            aggravate_cut=0.04,
+            ask_spread_bull=9.0,
+            bid_spread_bull=1.0,
+            block_size=200,
+            bootstrap_confidence=0.55,
+            bull_threshold=1.0,
+            cheap_buy_boost_per_z=0.18,
+            cheap_residual_z=0.9,
+            fastfill_buy_edge_boost=0.0,
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+            fastfill_end_ts=12000,
+            fastfill_min_passive_buy=10,
+            fastfill_target=80,
+            dip_threshold=1.0,
+            chase_threshold=1.25,
+            last_ts_value=999900,
+            log_flush_ts=1000,
+            maker_size=80,
+            max_bid_extra_ticks=2,
+            min_completed_blocks=5,
+            neut_spread_ask=5.0,
+            neut_spread_bid=2.0,
+            one_sided_target_gap=24,
+            position_limit=80,
+            reg_horizon=25,
+            reg_r2_cap=0.98,
+            reg_r2_floor=0.85,
+            reg_residual_reversion=0.25,
+            reg_rmse_floor=1.0,
+            resid_inv_per_z=14.0,
+            rich_residual_z=1.0,
+            rich_sell_boost_per_z=0.14,
+            seed_slope=0.1015,
+            startup_anchor_bid_spread=1.0,
+            startup_anchor_gap_ticks=1,
+            startup_anchor_size=4,
+            startup_chase_passive_buy=1,
+            startup_chase_take_cap=1,
+            startup_chase_take_edge=4.0,
+            startup_cold_join_ticks=0,
+            startup_cold_passive_buy=3,
+            startup_cold_take_cap=4,
+            startup_cold_take_edge=3.0,
+            startup_delayed_finish_ts=3000,
+            startup_dip_take_edge_boost=1.0,
+            startup_end_ts=30000,
+            startup_fast_passive_buy=8,
+            startup_fast_take_cap=12,
+            startup_fast_target=32,
+            startup_post_pullback_target=64,
+            startup_pre_pullback_target=48,
+            startup_pullback_ticks=2.0,
+            startup_release_take_cap=8,
+            startup_release_stretch=1.0,
+            startup_target=80,
+            strong_trend_ticks=0.9,
+            take_buy_edge_bull=-8.0,
+            take_buy_edge_neut=2.0,
+            take_sell_edge_neut=2.0,
+            target_gap_scale=26.0,
+            trend_buy_boost_per_tick=0.24,
+            trend_inv_per_tick=16.0,
+            trend_inventory_cap=80,
+            trend_sell_boost_per_tick=0.2,
+            ts_increment=100,
+            unwind_take_edge=10.0,
+            very_strong_trend_ticks=1.6,
+            fv_alpha=0.05,
+            short_alpha=0.22,
+            slope_window=20,
+            trim_reference_slope_weight=0.15,
+            trim_start_position=79,
+            trim_floor_position=78,
+            trim_extension_threshold=0.75,
+            trim_signal_edge=1.0,
+            trim_sell_size=1,
+            trim_cooldown_ticks=20,
+            trim_take_position=80,
+            trim_take_edge=2.0,
+            trim_take_stretch=999.0,
+            trim_take_sell_size=1,
+            trim_ask_local_edge=0.0,
+            rebuy_block_ticks=25,
+            ask_gap_quote_size=8,
+            ask_gap_sell_enable_position=80,
+            gap_fill_min_premium=35,
+            hold_sell_size=0,
+            hold_sell_offset=0,
+            gap_rebuy_buy_edge=-10.0,
+            gap_rebuy_min_discount=20.0,
+            gap_rebuy_passive_buy=6,
+            gap_rebuy_take_cap=8,
+            gap_rebuy_window=2500,
+            gap_trap_arm_streak=2,
+            gap_trap_base_size=4,
+            gap_trap_clear_after=4,
+            gap_trap_floor_position=80,
+            gap_trap_fragile_ask_window=6,
+            gap_trap_min_gap=3,
+            gap_trap_min_imbalance=-0.05,
+            gap_trap_min_trend=0.0,
+            gap_trap_premium_extra=2,
+            gap_trap_premium_size=3,
+            gap_trap_premium_streak=2,
+            gap_trap_recent_ask_window=12,
+            gap_trap_top_ask_max=12,
+            empty_side_shift=85,
+        ),
+    },
+}
+
+
 MEMBER_OVERRIDES["champion_generalized"] = {
     1: {
         # Tibo's mm_first_v2 for ASH_COATED_OSMIUM
@@ -956,6 +1075,190 @@ MEMBER_OVERRIDES["champion_generalized"] = {
             last_ts_value=999900,
             quote_trace_enabled=True,
         ),
+    },
+}
+
+
+# Leo's OSMIUM + Theo's broken-book gap-quote idea (empty_side_shift / gap_size).
+# Base = osmium_sb_leo_round2's OSMIUM config, with broken-book handler enabled.
+MEMBER_OVERRIDES["leo_osmium_jump_v1"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _override(
+            MEMBER_OVERRIDES["first_sb_leo_round2"][2]["ASH_COATED_OSMIUM"],
+            empty_side_shift=85,
+            gap_size=30,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# Theo's ASH_COATED_OSMIUM penny-improve MM isolated from submission 283574
+# (flat-modular port as `aco_mm_modulaire`). OSMIUM-only, IPR disabled.
+MEMBER_OVERRIDES["leo_osmium_only_exploration"] = {
+    2: {
+        "ASH_COATED_OSMIUM": ProductConfig(
+            symbol="ASH_COATED_OSMIUM",
+            strategy="aco_mm_modulaire",
+            position_limit=80,
+            params=dict(
+                last_ts_value=999900,
+                ts_increment=100,
+                base_size=10,
+                improve_ticks=1,
+                inv_skew_threshold=15,
+                inv_reduce_factor=0.4,
+                max_pos_to_buy=30,
+                min_pos_to_sell=-30,
+                min_spread_to_quote=4,
+                empty_side_shift=85,
+                gap_size=30,
+            ),
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# ── mm_first_v4_combo A/B test configs (Leo x Tibo best-of-both) ────────────
+# Base params shared by all variants — match Tibo's mm_first_v3 defaults for OSM
+_V4_OSM_BASE = dict(
+    strategy="mm_first_v4_combo",
+    # Tibo baseline params
+    take_edge=1,
+    take_edge_lo=0.7,
+    take_edge_hi=1,
+    take_edge_vol_lo=2.0,
+    take_edge_vol_hi=5.0,
+    maker_size_base_pct=0.5,
+    pct_kept_for_takers=0.1,
+    mid_smooth_window=50,
+    mid_smooth_half_life=10,
+    taker_buy_threshold=9990,
+    taker_sell_threshold=10025,
+    zscore_window=50,
+    zscore_threshold=1,
+    zscore_size_scale=0.5,
+    zscore_max_scale=5.0,
+    # Gap exploit (live alpha — PRESERVED)
+    gap_trigger_min=10,
+    OB_cleared_shift=89,
+    gap_trigger_max_vol_pct=0.1,
+    gap_trigger_confirm_ticks=1,
+    zscore_gap_gate=1.5,
+    # Logging
+    quote_trace_enabled=True,
+    ts_increment=100,
+    last_ts_value=999900,
+    log_flush_ts=1000,
+)
+
+
+def _osm_v4(**extra):
+    """Build ASH_COATED_OSMIUM override with V4 base + extra opt-in params."""
+    return _override(ROUND_2["ASH_COATED_OSMIUM"], **{**_V4_OSM_BASE, **extra})
+
+
+# Variant A — baseline: all new features OFF  (= mm_first_v3 equivalent)
+MEMBER_OVERRIDES["v4_A_baseline"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant B — anchor fixe 10000 (Leo's #1)  + AR(1) on mid_smooth (cleaner signal)
+MEMBER_OVERRIDES["v4_B_anchor"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.0,       # pure fixed
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant B' — anchor hybrid (EWMA bounded to ±10 of 10000)
+MEMBER_OVERRIDES["v4_B2_anchor_hybrid"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,      # slow EMA
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant C — asymmetric takers only (Leo's #3)
+MEMBER_OVERRIDES["v4_C_asym"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            unwind_take_edge=1.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant D — toxic flow filter only (Leo's #4)
+MEMBER_OVERRIDES["v4_D_toxic"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            toxic_threshold=0.6,
+            toxic_window=6,
+            toxic_size_frac=0.75,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant E — jump filter only (Leo's #5)
+MEMBER_OVERRIDES["v4_E_jump"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            trend_jump_threshold=1.0,
+            jump_size_frac=0.5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant F — anchor hybrid + asymmetric (the two highest-impact features)
+MEMBER_OVERRIDES["v4_F_anchor_asym"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=1.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Variant G — all Leo mechanisms combined
+MEMBER_OVERRIDES["v4_G_all"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=1.0,
+            toxic_threshold=0.6,
+            toxic_window=6,
+            toxic_size_frac=0.75,
+            trend_jump_threshold=1.0,
+            jump_size_frac=0.5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
     },
 }
 
