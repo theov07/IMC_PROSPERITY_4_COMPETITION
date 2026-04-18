@@ -43,7 +43,18 @@ After isolating the far-quote alpha (fills at |price - 10000| > 30 ticks):
 | 3: `mid_smooth_half_life` × `maker_size_base_pct` | marginal (+47 but inv+7%) | rejected | ❌ |
 | 4: `anchor_drift_bound` × `ar_gain` | `drift=2, ar_gain=0.3` | **+2,907** | ✅ |
 
-## v4_F4 champion (new best)
+## v4_F5 champion (latest)
+
+- **63,420 PnL** (+248 vs v4_F4, +9.4% vs baseline)
+- inventory ratio **0.181** (−37% vs baseline, best yet)
+- One new feature added: `inventory_aversion_gamma=0.0015` (Avellaneda-Stoikov lite)
+  - Grid searched γ ∈ {0.0005..0.03}, sweet spot at 0.0015
+- Other 3 features tested but abandoned:
+  - wall_mid (volume-filtered fair value): ALL values > 0 degrade
+  - taker_cooldown: ALL values > 1 degrade
+  - microprice_size_tilt: ALL values > 0 degrade
+
+## v4_F4 champion (previous best)
 
 - **63,172 PnL OSM 3j** (+5,180 vs baseline, +8.9%)
 - inventory ratio 0.214 (baseline 0.282, -24%)

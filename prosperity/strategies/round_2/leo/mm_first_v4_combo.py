@@ -451,6 +451,155 @@ class MMFirstV4ComboStrategy(BaseStrategy):
             buy_size = max(1.0, buy_size * jump_size_frac)
         return buy_size, sell_size
 
+    # ── NEW: wall mid (volume-filtered fair value) ──────────────────────
+
+    def _compute_base_mid(
+        self,
+        raw_mid: float,
+        book: BookSnapshot,
+    ) -> float:
+        """Return a volume-filtered mid that ignores book levels with vol < threshold.
+
+        Small resting orders at extreme prices are often toxic (informed traders
+        baiting fills). Computing mid only from "substantial" levels gives a
+        more robust fair value.
+
+        Params:
+          mid_vol_filter — minimum level volume to include (default 0 = off)
+
+        Returns raw_mid when filter is off, or when no levels pass the filter.
+        """
+        vol_filter = int(self.params.get("mid_vol_filter", 0))
+        if vol_filter <= 0:
+            return raw_mid
+
+        wall_bid = None
+        for (p, v) in book.bid_levels:
+            if v >= vol_filter:
+                wall_bid = p
+                break
+
+        wall_ask = None
+        for (p, v) in book.ask_levels:
+            if v >= vol_filter:
+                wall_ask = p
+                break
+
+        if wall_bid is None or wall_ask is None:
+            return raw_mid
+        return (wall_bid + wall_ask) / 2.0
+
+    # ── NEW: taker cooldown (prevents overtrading) ──────────────────────
+
+    def _taker_cooldown_active(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+    ) -> Tuple[bool, bool]:
+        """Return (buy_blocked, sell_blocked) based on time since last taker fire.
+
+        After firing a taker on side X, block new takers on that side for
+        taker_cooldown_ticks ticks. Helps avoid overtrading in volatile spikes
+        where the backtest fires repeatedly then reverses.
+
+        Params:
+          taker_cooldown_ticks — cooldown duration in ticks (default 0 = off)
+        """
+        cooldown = int(self.params.get("taker_cooldown_ticks", 0))
+        if cooldown <= 0:
+            return False, False
+
+        now = int(state.timestamp)
+        ts_increment = int(self.params.get("ts_increment", 100))
+        last_buy = memory.get("_last_taker_buy_ts")
+        last_sell = memory.get("_last_taker_sell_ts")
+
+        buy_blocked = last_buy is not None and (now - last_buy) < cooldown * ts_increment
+        sell_blocked = last_sell is not None and (now - last_sell) < cooldown * ts_increment
+        return buy_blocked, sell_blocked
+
+    def _update_taker_cooldown(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+        taker_buy_px: Set[int],
+        taker_sell_px: Set[int],
+    ) -> None:
+        """Record timestamp of this tick's taker fires for next-tick cooldown."""
+        now = int(state.timestamp)
+        if taker_buy_px:
+            memory["_last_taker_buy_ts"] = now
+        if taker_sell_px:
+            memory["_last_taker_sell_ts"] = now
+
+    # ── NEW: inventory-aversion bias on fair value (AS-lite) ────────────
+
+    def _apply_inventory_bias(
+        self,
+        fair_value: float,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> float:
+        """Shift fair value toward zero-inventory (Avellaneda-Stoikov lite).
+
+        fair_biased = fair - gamma * position * sigma^2
+
+        When long (position > 0):  fair shifts DOWN -> more likely to sell,
+                                   less likely to buy at old fair.
+        When short (position < 0): fair shifts UP.
+
+        Complements _compute_asym_take_edges but at the fair-value level
+        (affects both takers AND passives, more holistic).
+
+        Params:
+          inventory_aversion_gamma — scale factor (default 0.0 = off)
+                                     typical 0.01-0.05 for OSM (sigma~1)
+        """
+        gamma = float(self.params.get("inventory_aversion_gamma", 0.0))
+        if gamma <= 0 or position == 0:
+            return fair_value
+
+        sigma = memory.get("sigma_smoothed", 1.0)
+        return fair_value - gamma * position * (sigma ** 2)
+
+    # ── NEW: microprice size tilt (order flow predictive) ───────────────
+
+    def _microprice_size_tilt(
+        self,
+        book: BookSnapshot,
+        raw_mid: float,
+        bid_size: float,
+        ask_size: float,
+    ) -> Tuple[float, float]:
+        """Tilt passive sizes based on microprice - mid deviation.
+
+        When microprice > mid (bid-heavy book), expect price UP:
+          increase ask_size (sell more — capture the rise)
+          decrease bid_size (don't load more into a rising market)
+
+        Orthogonal to z-score size tilt which is mean-reversion based.
+        This is order-flow based (predictive, not reactive).
+
+        Params:
+          microprice_size_gain — linear gain on deviation (default 0.0 = off)
+          microprice_size_threshold — min |delta| to activate (default 0.2)
+        """
+        gain = float(self.params.get("microprice_size_gain", 0.0))
+        if gain <= 0:
+            return bid_size, ask_size
+
+        threshold = float(self.params.get("microprice_size_threshold", 0.2))
+        micro = self._microprice(book)
+        delta = micro - raw_mid
+        if abs(delta) < threshold:
+            return bid_size, ask_size
+
+        scale = 1.0 + gain * (abs(delta) - threshold)
+        if delta > 0:  # bid-heavy -> expect up -> sell more
+            return bid_size / scale, ask_size * scale
+        else:  # ask-heavy -> expect down -> buy more
+            return bid_size * scale, ask_size / scale
+
     # ── NEW: asymmetric passive skew (maker-aggressive unwind) ────────────
 
     def _asym_passive_skew(
@@ -632,12 +781,18 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         if raw_mid is not None:
             memory["_last_mid"] = raw_mid
 
-        mid_smooth = self._smooth_mid(mid, memory)
-        self._compute_zscore(mid, memory)
-        sigma = self._update_volatility(mid, memory)
+        # NEW: base_mid = volume-filtered mid if mid_vol_filter > 0, else raw_mid
+        base_mid = self._compute_base_mid(mid, book)
+
+        mid_smooth = self._smooth_mid(base_mid, memory)
+        self._compute_zscore(base_mid, memory)
+        sigma = self._update_volatility(base_mid, memory)
 
         # NEW: compute fair value (anchor-based if anchor_price set, else mid_smooth)
-        fair_value = self._compute_anchor_signal(mid, book, mid_smooth, memory)
+        fair_value = self._compute_anchor_signal(base_mid, book, mid_smooth, memory)
+
+        # NEW: inventory-aversion bias on fair value (Avellaneda-Stoikov lite)
+        fair_value = self._apply_inventory_bias(fair_value, position, memory)
 
         limit = self.position_limit()
         inventory_ratio = position / float(limit) if limit else 0.0
@@ -652,14 +807,27 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         bid_size = max(0.0, bid_size * bid_factor)
         ask_size = max(0.0, ask_size * ask_factor)
 
+        # NEW: microprice size tilt (order-flow predictive)
+        bid_size, ask_size = self._microprice_size_tilt(book, mid, bid_size, ask_size)
+
         # NEW: asymmetric take edges
         base_edge = self._dynamic_take_edge(memory)
         buy_edge, sell_edge = self._compute_asym_take_edges(base_edge, position, memory)
+
+        # NEW: taker cooldown — if active, raise edge to effectively block takers that side
+        buy_blocked, sell_blocked = self._taker_cooldown_active(state, memory)
+        if buy_blocked:
+            buy_edge = 1_000_000.0   # effectively block buy takers this tick
+        if sell_blocked:
+            sell_edge = 1_000_000.0
 
         taker_orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px = self._fire_takers(
             order_depth, fair_value, bid_size, ask_size, buy_cap, sell_cap,
             buy_edge=buy_edge, sell_edge=sell_edge,
         )
+
+        # NEW: update taker cooldown timestamps for next tick
+        self._update_taker_cooldown(state, memory, taker_buy_px, taker_sell_px)
 
         gap_orders, buy_cap, sell_cap, bid_price, ask_price = self._gap_exploit(
             order_depth, memory, limit, bid_size, ask_size,

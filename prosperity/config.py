@@ -1312,6 +1312,83 @@ MEMBER_OVERRIDES["v4_F4_champion"] = {
 }
 
 
+# ── v4_F5 feature probes: v4_F4 + 1 new feature each ───────────────────
+# Base = v4_F4 champion params + add ONE new feature per variant to isolate effect.
+
+_V4_F4_BASE_PARAMS = dict(
+    anchor_price=10000.0,
+    anchor_alpha=0.02,
+    anchor_drift_bound=2.0,       # from grid 4
+    ar_gain=0.3,
+    ar_shift_source="mid_smooth",
+    unwind_take_edge=3.0,
+    pct_kept_for_takers=0.05,
+    take_edge_lo=0.3,             # from grid 1
+    take_edge_hi=0.8,
+)
+
+# v4_F5_wall — volume-filtered mid (wall_mid)
+MEMBER_OVERRIDES["v4_F5_wall"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            mid_vol_filter=10,   # filter out book levels with vol < 10
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F5_cooldown — taker cooldown
+MEMBER_OVERRIDES["v4_F5_cooldown"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            taker_cooldown_ticks=5,   # block takers 5 ticks (500ms) after firing
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F5_invbias — inventory-aversion fair value bias (AS-lite)
+MEMBER_OVERRIDES["v4_F5_invbias"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            inventory_aversion_gamma=0.03,   # moderate bias
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F5_micro — microprice size tilt (predictive)
+MEMBER_OVERRIDES["v4_F5_micro"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            microprice_size_gain=0.5,
+            microprice_size_threshold=0.2,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# v4_F5 champion — v4_F4 + inventory_aversion_gamma (AS-lite tuned)
+#   Grid searched gamma ∈ {0.0005..0.03} → optimal 0.0015
+#   +248 PnL vs v4_F4, inv ratio 0.214 -> 0.181 (-15%)
+#   Other 3 features tested (wall_mid, taker_cooldown, microprice_size_tilt)
+#   all degraded the backtest, abandoned.
+MEMBER_OVERRIDES["v4_F5_champion"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            inventory_aversion_gamma=0.0015,   # new winner
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
 # Variant G — all Leo mechanisms combined
 MEMBER_OVERRIDES["v4_G_all"] = {
     2: {
