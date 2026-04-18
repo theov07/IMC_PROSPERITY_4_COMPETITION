@@ -97,6 +97,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "osmium_modulaire":   ("prosperity/strategies/round_2/leo/osmium_modulaire.py", "OsmiumModulaireStrategy"),
     "pepper_modulaire":   ("prosperity/strategies/round_2/leo/pepper_modulaire.py", "PepperModulaireStrategy"),
     "ask_exploit_modulaire": ("prosperity/strategies/round_2/theo/ask_exploit_modulaire.py", "AskExploitModulaireStrategy"),
+    "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
