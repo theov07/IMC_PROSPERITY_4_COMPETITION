@@ -1,0 +1,6 @@
+{
+  "report": "artifacts/analysis/round_2/theo/gap_study_official/index.html",
+  "variant_csv": "artifacts/analysis/round_2/theo/gap_study_official/tables/variant_summary.csv",
+  "event_csv": "artifacts/analysis/round_2/theo/gap_study_official/tables/event_summary.csv",
+  "matrix_csv": "artifacts/analysis/round_2/theo/gap_study_official/tables/one_sided_capture_matrix.csv"
+}
