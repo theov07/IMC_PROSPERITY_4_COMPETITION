@@ -1,0 +1,5 @@
+variant,event,expected,focus_ts,one_sided_kind,trade_text,position_before,position_after,bid1,ask1,prev_kinds,prev_bid_levels,prev_ask_levels
+v2,Gap Mid Sell,SELL 13149x4 puis BUY 13064x4,57000,ASK_EMPTY,SELL 13149x4 ; BUY 13064x4,80,80,13050.0,,NONE -> BID_EMPTY -> NONE,2 / 0 / 1,2 / 2 / 2
+v4,Gap Early Sell,SELL 13096x5 puis BUY 13002/13001,4400,ASK_EMPTY,SELL 13096x5,80,75,12997.0,,NONE -> NONE -> NONE,2 / 2 / 2,2 / 2 / 1
+v6,Gap Early Buy,BUY 12913x5,5000,BID_EMPTY,BUY 12913x5,41,46,,13015.0,NONE -> NONE -> NONE,2 / 1 / 2,2 / 3 / 2
+v7,Gap Late Sell,SELL 13184x7 puis BUY 13100x7,92500,ASK_EMPTY,SELL 13184x7 ; BUY 13100x7,80,80,13085.0,,NONE -> NONE -> NONE,1 / 1 / 1,1 / 1 / 1
