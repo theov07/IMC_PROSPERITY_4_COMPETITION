@@ -1,8 +1,10 @@
 """Backtester entrypoint — v4_F_anchor_asym."""
+
 from prosperity.config import get_round_config
 from prosperity.persistence import dump_state, load_state
 from prosperity.strategies import build_strategy
 from prosperity.strategies.base import BaseStrategy
+
 from datamodel import Order, TradingState
 from typing import Dict, List
 
