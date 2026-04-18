@@ -54,7 +54,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "leo_fusion_b_v3": ("prosperity/strategies/round_1/leo_fusion_b_v3.py", "LeoFusionBV3Strategy"),
     "leo_fusion_b_v8": ("prosperity/strategies/round_1/leo_fusion_b_v8.py", "LeoFusionBV8Strategy"),
     "leo_fusion_b_v10": ("prosperity/strategies/round_1/leo_fusion_b_v10.py", "LeoFusionBV10Strategy"),
+    "leo_fusion_b_gap": ("prosperity/strategies/round_1/leo_fusion_b_gap.py", "LeoFusionBGapStrategy"),
+    "leo_fusion_b_scout": ("prosperity/strategies/round_1/leo_fusion_b_scout.py", "LeoFusionBScoutStrategy"),
     "osmium_mr_artifact": ("prosperity/strategies/round_1/osmium_mr_artifact.py", "OsmiumMeanRevStrategy"),
+    "osmium_mr_v2": ("prosperity/strategies/round_1/osmium_mr_v2.py", "OsmiumMeanRevV2Strategy"),
     "leo_fusion_c": ("prosperity/strategies/round_1/leo_fusion_c.py", "LeoFusionCStrategy"),
     "leo_fusion_d": ("prosperity/strategies/round_1/leo_fusion_d.py", "LeoFusionDStrategy"),
     "naive_tight_mm_v10": ("prosperity/strategies/naive_tight_mm_v10.py", "NaiveTightMarketMakerV10Strategy"),
@@ -83,6 +86,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "signal_trader":      ("prosperity/strategies/signal_trader.py",      "SignalTraderStrategy"),
     "mm_first":           ("prosperity/strategies/metal_winner/mm_first.py",           "MMFirstStrategy"),
     "mm_first_v2":        ("prosperity/strategies/metal_winner/mm_first_v2.py",        "MMFirstStrategy"),
+    "mm_first_v3":        ("prosperity/strategies/round_2/tibo/mm_first_v3.py",        "MMFirstStrategy"),
     "mean_reversion":     ("prosperity/strategies/round_1/mean_reversion.py",          "MeanReversionStrategy"),
     "zscore":             ("prosperity/strategies/metal_winner/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/base/buy_and_hold.py",       "BuyAndHoldStrategy"),
@@ -90,6 +94,9 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "trend_carry_window_v2": ("prosperity/strategies/trend_carry_window_v2.py", "TrendCarryWindowV2Strategy"),
     "osmium_mr":          ("prosperity/strategies/osmium_mr.py",          "OsmiumMeanRevStrategy"),
     "theo_best_generalized": ("prosperity/strategies/round_1/theo_best_generalized.py", "TheoGeneralizedStrategy"),
+    "osmium_modulaire":   ("prosperity/strategies/round_2/leo/osmium_modulaire.py", "OsmiumModulaireStrategy"),
+    "pepper_modulaire":   ("prosperity/strategies/round_2/leo/pepper_modulaire.py", "PepperModulaireStrategy"),
+    "ask_exploit_modulaire": ("prosperity/strategies/round_2/theo/ask_exploit_modulaire.py", "AskExploitModulaireStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -106,10 +113,15 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "leo_fusion_b_v3": ["round1_regression_mm_v5"],
     "leo_fusion_b_v8": ["round1_regression_mm_v5"],
     "leo_fusion_b_v10": ["round1_regression_mm_v5"],
+    "leo_fusion_b_gap": ["round1_regression_mm_v5", "leo_fusion_b"],
+    "leo_fusion_b_scout": ["round1_regression_mm_v5", "leo_fusion_b", "leo_fusion_b_gap"],
     "leo_fusion_c": ["round1_regression_mm_v5"],
     "leo_fusion_d": ["round1_regression_mm_v5"],
     "osmium_mr": ["naive_tight_mm_v10"],
+    "osmium_mr_v2": ["naive_tight_mm_v10", "osmium_mr_artifact"],
     "theo_best_generalized": ["round1_regression_mm_v5"],
+    "pepper_modulaire":      ["round1_regression_mm_v5"],
+    "ask_exploit_modulaire": ["round1_regression_mm_v5"],
 }
 
 
@@ -437,9 +449,16 @@ def main() -> int:
     ]
     output = "\n".join(parts)
 
-    output_path = Path(
-        args.output or f"artifacts/submissions/{args.member}_round{args.round}_submission.py"
-    )
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        team = next((t for t in ("leo", "theo", "tibo") if t in args.member.lower()), None)
+        round_dir = f"round_{args.round}"
+        if team is not None:
+            default_output = f"artifacts/submissions/{round_dir}/{team}/{args.member}_round{args.round}_submission.py"
+        else:
+            default_output = f"artifacts/submissions/{round_dir}/{args.member}_round{args.round}_submission.py"
+        output_path = Path(default_output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(output, encoding="utf-8")
     print(f"Wrote {output_path} ({len(output):,} bytes)")
