@@ -6,6 +6,7 @@ and auditable top-to-bottom, matching the `mm_first_v2.py` template.
 
 Modules (in order of invocation):
 
+  _handle_broken_book       wide gap-quotes when OB side(s) are empty
   _compute_signal           EMA-anchor + AR(1) mean-rev shift on mid
   _apply_eod_flatten        liquidation branch near end-of-day
   _take_abs                 unconditional taker on absolute price thresholds
@@ -444,6 +445,50 @@ class OsmiumModulaireStrategy(BaseStrategy):
             orders.append(Order(self.product, ask_price, -sell_size))
         return orders
 
+    # ── broken-book gap quotes (Theo-style) ────────────────────────────
+
+    def _handle_broken_book(
+        self,
+        book: BookSnapshot,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> Optional[List[Order]]:
+        """If one/both sides of the OB are empty, post wide gap-quotes at
+        last_bid - shift / last_ask + shift to catch counterparties that
+        cross back through the hole. Returns None when book is two-sided."""
+        if book.best_bid is None:
+            pass
+        elif book.best_ask is None:
+            pass
+        else:
+            return None
+
+        shift = int(self.params.get("empty_side_shift", 0))
+        if shift <= 0:
+            return []
+        size = int(self.params.get("gap_size", 20))
+        buy_cap = self.buy_capacity(position)
+        sell_cap = self.sell_capacity(position)
+        last_bid = memory.get("_last_bid")
+        last_ask = memory.get("_last_ask")
+
+        orders: List[Order] = []
+        if book.best_bid is None and book.best_ask is None:
+            if last_bid is not None and buy_cap > 0:
+                orders.append(Order(self.product, last_bid - shift, min(size, buy_cap)))
+            if last_ask is not None and sell_cap > 0:
+                orders.append(Order(self.product, last_ask + shift, -min(size, sell_cap)))
+            return orders
+        if book.best_bid is None:
+            if last_bid is not None and buy_cap > 0:
+                orders.append(Order(self.product, last_bid - shift, min(size, buy_cap)))
+            return orders
+        if book.best_ask is None:
+            if last_ask is not None and sell_cap > 0:
+                orders.append(Order(self.product, last_ask + shift, -min(size, sell_cap)))
+            return orders
+        return []
+
     # ── orchestrator ───────────────────────────────────────────────────
 
     def compute_orders(
@@ -454,8 +499,14 @@ class OsmiumModulaireStrategy(BaseStrategy):
         position: int,
         memory: Dict[str, Any],
     ) -> Tuple[List[Order], int]:
+        if book.best_bid is not None:
+            memory["_last_bid"] = book.best_bid
+        if book.best_ask is not None:
+            memory["_last_ask"] = book.best_ask
+
         if book.best_bid is None or book.best_ask is None:
-            return [], 0
+            broken_orders = self._handle_broken_book(book, position, memory)
+            return broken_orders or [], 0
 
         eod_orders = self._apply_eod_flatten(state, order_depth, position)
         if eod_orders is not None:
