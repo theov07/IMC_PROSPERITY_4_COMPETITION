@@ -17,7 +17,27 @@ from prosperity.config import MEMBER_OVERRIDES, get_round_config
 from prosperity.tooling.data import MarketDataLoader
 
 
-STRATEGY_ALIASES = {name: f"submissions.{name}" for name in MEMBER_OVERRIDES}
+def _resolve_strategy_alias(name: str) -> str:
+    # After round 1 refactor, round 1 dispatchers live in submissions/round_1/.
+    # Round 2 per-member dispatchers live in submissions/round_2/<member>/.
+    candidates = [
+        f"submissions.{name}",
+        f"submissions.round_1.{name}",
+        f"submissions.round_2.{name}",
+        f"submissions.round_2.leo.{name}",
+        f"submissions.round_2.theo.{name}",
+        f"submissions.round_2.tibo.{name}",
+    ]
+    for candidate in candidates:
+        try:
+            importlib.import_module(candidate)
+            return candidate
+        except ModuleNotFoundError:
+            continue
+    return f"submissions.{name}"
+
+
+STRATEGY_ALIASES = {name: _resolve_strategy_alias(name) for name in MEMBER_OVERRIDES}
 
 
 class TradeMatchingMode(str, Enum):
@@ -169,7 +189,10 @@ class BacktestEngine:
     def __init__(self, data_dir: str | Path, strategy_module: str, round_num: int = 0):
         self.loader = MarketDataLoader(data_dir)
         self.strategy_name = strategy_module
-        self.strategy_module = STRATEGY_ALIASES.get(strategy_module, strategy_module)
+        resolved = STRATEGY_ALIASES.get(strategy_module)
+        if resolved is None:
+            resolved = _resolve_strategy_alias(strategy_module)
+        self.strategy_module = resolved
         self.round_num = round_num
 
     def _load_trader(self):
