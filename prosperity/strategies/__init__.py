@@ -60,6 +60,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "avellaneda_stoikov": ("prosperity.strategies.base.avellaneda_stoikov", "AvellanedaStoikovStrategy"),
     "mm_first": ("prosperity.strategies.metal_winner.mm_first", "MMFirstStrategy"),
     "mm_first_v2": ("prosperity.strategies.metal_winner.mm_first_v2", "MMFirstStrategy"),
+    "mm_first_v3": ("prosperity.strategies.round_2.tibo.mm_first_v3", "MMFirstStrategy"),
     "mean_reversion": ("prosperity.strategies.round_1.mean_reversion", "MeanReversionStrategy"),
     "zscore": ("prosperity.strategies.metal_winner.zscore", "ZScoreStrategy"),
     "buy_and_hold": ("prosperity.strategies.base.buy_and_hold", "BuyAndHoldStrategy"),
