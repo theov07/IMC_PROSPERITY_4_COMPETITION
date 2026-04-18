@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Round 2 Gap Study</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    .page {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1, h2 {
+      margin: 0 0 12px;
+    }
+    p {
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 18px;
+      padding: 18px 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.25);
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    li {
+      margin-bottom: 8px;
+      color: #dbe4f0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid #334155;
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: #f8fafc;
+      background: #0b1220;
+      position: sticky;
+      top: 0;
+    }
+    .table-wrap {
+      overflow: auto;
+      max-height: 520px;
+    }
+    a {
+      color: #7dd3fc;
+    }
+    code {
+      background: #0b1220;
+      border: 1px solid #334155;
+      padding: 1px 5px;
+      border-radius: 6px;
+      color: #bfdbfe;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>Round 2 Gap Study</h1>
+      <p>Etude officielle comparee sur <code>INTARIAN_PEPPER_ROOT</code> a partir des logs <code>v2</code>, <code>v4</code>, <code>v6</code> et <code>v7</code>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Variant</th><th>Event</th><th>Zoom</th><th>Full review</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>v2</td><td>Gap Mid Sell</td><td><a href="cases/v2_mid_sell_gap.html">zoom event</a></td><td><a href="full_reviews/v2/e981fbad-17ee-403c-b2d3-3ce5f42bea85_INTARIAN_PEPPER_ROOT_review.html">full review</a></td></tr><tr><td>v4</td><td>Gap Early Sell</td><td><a href="cases/v4_early_sell_gap.html">zoom event</a></td><td><a href="full_reviews/v4/86812db3-419c-4475-8ec2-64443c17374f_INTARIAN_PEPPER_ROOT_review.html">full review</a></td></tr><tr><td>v6</td><td>Gap Early Buy</td><td><a href="cases/v6_early_buy_gap.html">zoom event</a></td><td><a href="full_reviews/v6/442d3e56-2b40-46c3-81c7-8a7890fa7a93_INTARIAN_PEPPER_ROOT_review.html">full review</a></td></tr><tr><td>v7</td><td>Gap Late Sell</td><td><a href="cases/v7_late_sell_gap.html">zoom event</a></td><td><a href="full_reviews/v7/7a412199-6cd6-4446-b89d-07ed784ddabd_INTARIAN_PEPPER_ROOT_review.html">full review</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Key Insights</h2>
+      <ul>
+        <li>La journee contient 83 ticks one-sided sur INTARIAN_PEPPER_ROOT: 41 `ASK_EMPTY`, 41 `BID_EMPTY`, 1 `BOTH_EMPTY`.</li><li>Les trois sells gap reussis (`v4`, `v2`, `v7`) arrivent avec une position deja tres longue, entre 75 et 80, et un trou cote ask.</li><li>Le low buy gap `v6` n&#x27;existe que parce que la strategie est encore a 41 au timestamp 5000: si on remplit trop vite a 80, on tue ce coup-la.</li><li>Les versions qui captent les sells gap chargent tres vite l&#x27;inventaire; la version qui capte le buy gap garde de la capacite plus longtemps. C&#x27;est la contradiction centrale a resoudre.</li><li>Les trous de carnet sont nombreux, mais une strategie n&#x27;en capture qu&#x27;une petite fraction: le bon etat d&#x27;inventaire compte autant que le signal de carnet.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Variant Summary</h2>
+      <div class="table-wrap">
+        <table class="dataframe summary-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>variant</th>
+      <th>log_id</th>
+      <th>profit</th>
+      <th>event</th>
+      <th>focus_ts</th>
+      <th>event_kind</th>
+      <th>trade_text</th>
+      <th>position_before</th>
+      <th>position_after</th>
+      <th>t20</th>
+      <th>t40</th>
+      <th>t60</th>
+      <th>t75</th>
+      <th>t80</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>v2</td>
+      <td>278804</td>
+      <td>7565.0</td>
+      <td>Gap Mid Sell</td>
+      <td>57000</td>
+      <td>ASK_EMPTY</td>
+      <td>SELL 13149x4 ; BUY 13064x4</td>
+      <td>80</td>
+      <td>80</td>
+      <td>200</td>
+      <td>900</td>
+      <td>1200</td>
+      <td>1200</td>
+      <td>1200</td>
+    </tr>
+    <tr>
+      <td>v4</td>
+      <td>279664</td>
+      <td>7851.0</td>
+      <td>Gap Early Sell</td>
+      <td>4400</td>
+      <td>ASK_EMPTY</td>
+      <td>SELL 13096x5</td>
+      <td>80</td>
+      <td>75</td>
+      <td>200</td>
+      <td>400</td>
+      <td>1400</td>
+      <td>3200</td>
+      <td>3200</td>
+    </tr>
+    <tr>
+      <td>v6</td>
+      <td>281821</td>
+      <td>7569.0</td>
+      <td>Gap Early Buy</td>
+      <td>5000</td>
+      <td>BID_EMPTY</td>
+      <td>BUY 12913x5</td>
+      <td>41</td>
+      <td>46</td>
+      <td>300</td>
+      <td>2700</td>
+      <td>12100</td>
+      <td>12400</td>
+      <td>12500</td>
+    </tr>
+    <tr>
+      <td>v7</td>
+      <td>282144</td>
+      <td>7910.0</td>
+      <td>Gap Late Sell</td>
+      <td>92500</td>
+      <td>ASK_EMPTY</td>
+      <td>SELL 13184x7 ; BUY 13100x7</td>
+      <td>80</td>
+      <td>80</td>
+      <td>100</td>
+      <td>1200</td>
+      <td>1300</td>
+      <td>2700</td>
+      <td>2700</td>
+    </tr>
+  </tbody>
+</table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Event Summary</h2>
+      <div class="table-wrap">
+        <table class="dataframe event-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>variant</th>
+      <th>event</th>
+      <th>expected</th>
+      <th>focus_ts</th>
+      <th>one_sided_kind</th>
+      <th>trade_text</th>
+      <th>position_before</th>
+      <th>position_after</th>
+      <th>bid1</th>
+      <th>ask1</th>
+      <th>prev_kinds</th>
+      <th>prev_bid_levels</th>
+      <th>prev_ask_levels</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>v2</td>
+      <td>Gap Mid Sell</td>
+      <td>SELL 13149x4 puis BUY 13064x4</td>
+      <td>57000</td>
+      <td>ASK_EMPTY</td>
+      <td>SELL 13149x4 ; BUY 13064x4</td>
+      <td>80</td>
+      <td>80</td>
+      <td>13050.0</td>
+      <td>NaN</td>
+      <td>NONE -&gt; BID_EMPTY -&gt; NONE</td>
+      <td>2 / 0 / 1</td>
+      <td>2 / 2 / 2</td>
+    </tr>
+    <tr>
+      <td>v4</td>
+      <td>Gap Early Sell</td>
+      <td>SELL 13096x5 puis BUY 13002/13001</td>
+      <td>4400</td>
+      <td>ASK_EMPTY</td>
+      <td>SELL 13096x5</td>
+      <td>80</td>
+      <td>75</td>
+      <td>12997.0</td>
+      <td>NaN</td>
+      <td>NONE -&gt; NONE -&gt; NONE</td>
+      <td>2 / 2 / 2</td>
+      <td>2 / 2 / 1</td>
+    </tr>
+    <tr>
+      <td>v6</td>
+      <td>Gap Early Buy</td>
+      <td>BUY 12913x5</td>
+      <td>5000</td>
+      <td>BID_EMPTY</td>
+      <td>BUY 12913x5</td>
+      <td>41</td>
+      <td>46</td>
+      <td>NaN</td>
+      <td>13015.0</td>
+      <td>NONE -&gt; NONE -&gt; NONE</td>
+      <td>2 / 1 / 2</td>
+      <td>2 / 3 / 2</td>
+    </tr>
+    <tr>
+      <td>v7</td>
+      <td>Gap Late Sell</td>
+      <td>SELL 13184x7 puis BUY 13100x7</td>
+      <td>92500</td>
+      <td>ASK_EMPTY</td>
+      <td>SELL 13184x7 ; BUY 13100x7</td>
+      <td>80</td>
+      <td>80</td>
+      <td>13085.0</td>
+      <td>NaN</td>
+      <td>NONE -&gt; NONE -&gt; NONE</td>
+      <td>1 / 1 / 1</td>
+      <td>1 / 1 / 1</td>
+    </tr>
+  </tbody>
+</table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>One-sided Capture Matrix</h2>
+      <p>Chaque ligne est un timestamp one-sided sur la journee. Les colonnes <code>v2/v4/v6/v7</code> disent s'il y a eu une execution submission au tick ou au tick suivant.</p>
+      <div class="table-wrap">
+        <table class="dataframe matrix-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>timestamp</th>
+      <th>one_sided_kind</th>
+      <th>bid_levels</th>
+      <th>ask_levels</th>
+      <th>v2</th>
+      <th>v4</th>
+      <th>v6</th>
+      <th>v7</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2600</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>BUY@12998x8</td>
+      <td>BUY@12998x8</td>
+      <td>BUY@12998x8</td>
+    </tr>
+    <tr>
+      <td>4400</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>SELL@13096x5</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>4900</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>BUY@13002x3</td>
+      <td>BUY@12913x5</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>5100</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>5800</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>6400</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>6500</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>6900</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>9700</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>12200</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>13800</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>15000</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>16700</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>17200</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>18900</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>19900</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>21400</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>22400</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>22800</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>23400</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>24600</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>25900</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>26600</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>27800</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>29300</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>29500</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>30200</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>30700</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>30900</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>33100</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>34500</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>36800</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>38000</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>40200</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>40900</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>42100</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>42600</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>43600</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>44200</td>
+      <td>BOTH_EMPTY</td>
+      <td>0</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>44400</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>46300</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>47100</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>48500</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>49300</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>49900</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>50400</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>50900</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>51400</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>52300</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>52800</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>52900</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>53400</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>54500</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>56400</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>57100</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>BUY@13064x4</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>62200</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>62300</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>65800</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>66600</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>68100</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>69300</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>69900</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>71700</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>BUY@13079x1</td>
+      <td>-</td>
+      <td>BUY@13079x1</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>72400</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>73600</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>77100</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>77500</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>77800</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>78500</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>80200</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>80400</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>80800</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>82500</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>1</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>85600</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>88300</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>89800</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>93100</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>93300</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>2</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>94100</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>94300</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>96500</td>
+      <td>ASK_EMPTY</td>
+      <td>1</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>96600</td>
+      <td>ASK_EMPTY</td>
+      <td>2</td>
+      <td>0</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>97400</td>
+      <td>BID_EMPTY</td>
+      <td>0</td>
+      <td>3</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+    </tr>
+  </tbody>
+</table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

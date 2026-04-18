@@ -193,6 +193,12 @@ def _write_plotly_review_html(fig, output_path: Path, page_title: str) -> None:
       margin-bottom: 14px;
       flex-wrap: wrap;
     }}
+    .toolbar-controls {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
     .toolbar-copy {{
       display: flex;
       flex-direction: column;
@@ -206,12 +212,20 @@ def _write_plotly_review_html(fig, output_path: Path, page_title: str) -> None:
     .toolbar-subtitle {{
       font-size: 13px;
     }}
-    .theme-switch {{
+    .control-switch {{
       display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 6px;
       border-radius: 999px;
+      flex-wrap: wrap;
+    }}
+    .control-label {{
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      padding: 0 4px 0 6px;
+      text-transform: uppercase;
     }}
     .theme-btn {{
       appearance: none;
@@ -239,8 +253,11 @@ def _write_plotly_review_html(fig, output_path: Path, page_title: str) -> None:
       .toolbar {{
         align-items: flex-start;
       }}
-      .theme-switch {{
+      .toolbar-controls {{
         width: 100%;
+        justify-content: flex-start;
+      }}
+      .control-switch {{
         justify-content: flex-start;
       }}
     }}
@@ -251,11 +268,19 @@ def _write_plotly_review_html(fig, output_path: Path, page_title: str) -> None:
     <div class="toolbar">
       <div class="toolbar-copy">
         <div class="toolbar-title">{title_text}</div>
-        <div class="toolbar-subtitle" id="theme-subtitle">Interactive export with light and dark themes</div>
+        <div class="toolbar-subtitle" id="theme-subtitle">Interactive export with theme and line-shape controls</div>
       </div>
-      <div class="theme-switch" id="theme-switch">
-        <button class="theme-btn" id="theme-light" type="button">Light</button>
-        <button class="theme-btn" id="theme-dark" type="button">Dark</button>
+      <div class="toolbar-controls">
+        <div class="control-switch" id="theme-switch">
+          <span class="control-label">Theme</span>
+          <button class="theme-btn" id="theme-light" type="button">Light</button>
+          <button class="theme-btn" id="theme-dark" type="button">Dark</button>
+        </div>
+        <div class="control-switch" id="line-switch">
+          <span class="control-label">Lines</span>
+          <button class="theme-btn" id="line-default" type="button">Default</button>
+          <button class="theme-btn" id="line-hv" type="button">HV</button>
+        </div>
       </div>
     </div>
     <div class="chart-shell" id="chart-shell">
@@ -266,24 +291,75 @@ def _write_plotly_review_html(fig, output_path: Path, page_title: str) -> None:
     const THEME_FIGURES = {json.dumps(themed_figures, cls=PlotlyJSONEncoder)};
     const THEME_TOKENS = {json.dumps(theme_tokens)};
     const PLOT_CONFIG = {{responsive: true, displaylogo: false}};
-    const STORAGE_KEY = "prosperity_plotly_export_theme";
+    const THEME_STORAGE_KEY = "prosperity_plotly_export_theme";
+    const LINE_MODE_STORAGE_KEY = "prosperity_plotly_export_line_mode";
     const plotRoot = document.getElementById("plotly-review-root");
     const chartShell = document.getElementById("chart-shell");
     const themeSwitch = document.getElementById("theme-switch");
+    const lineSwitch = document.getElementById("line-switch");
     const subtitle = document.getElementById("theme-subtitle");
-    const buttons = {{
+    const themeButtons = {{
       light: document.getElementById("theme-light"),
       dark: document.getElementById("theme-dark"),
+    }};
+    const lineButtons = {{
+      default: document.getElementById("line-default"),
+      hv: document.getElementById("line-hv"),
+    }};
+    const state = {{
+      theme: resolveInitialTheme(),
+      lineMode: resolveInitialLineMode(),
     }};
 
     function resolveInitialTheme() {{
       try {{
-        const saved = window.localStorage.getItem(STORAGE_KEY);
+        const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
         if (saved && THEME_TOKENS[saved]) {{
           return saved;
         }}
       }} catch (_err) {{}}
       return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }}
+
+    function resolveInitialLineMode() {{
+      try {{
+        const saved = window.localStorage.getItem(LINE_MODE_STORAGE_KEY);
+        if (saved === "default" || saved === "hv") {{
+          return saved;
+        }}
+      }} catch (_err) {{}}
+      return "default";
+    }}
+
+    function cloneFigure(figure) {{
+      return JSON.parse(JSON.stringify(figure));
+    }}
+
+    function applyLineMode(figure, lineMode) {{
+      if (lineMode !== "hv" || !Array.isArray(figure.data)) {{
+        return figure;
+      }}
+
+      figure.data.forEach((trace) => {{
+        if (!trace || typeof trace !== "object") {{
+          return;
+        }}
+        const mode = typeof trace.mode === "string" ? trace.mode : "";
+        if (mode.indexOf("lines") === -1) {{
+          return;
+        }}
+        trace.line = Object.assign({{}}, trace.line || {{}}, {{ shape: "hv" }});
+      }});
+      return figure;
+    }}
+
+    function applyToggleStyles(buttonMap, activeValue, tokens) {{
+      Object.entries(buttonMap).forEach(([name, button]) => {{
+        const active = name === activeValue;
+        button.style.backgroundColor = active ? tokens.button_active_bg : tokens.button_bg;
+        button.style.color = active ? tokens.button_active_text : tokens.button_text;
+        button.style.borderColor = active ? tokens.button_active_bg : tokens.border;
+      }});
     }}
 
     function applyChrome(theme) {{
@@ -295,28 +371,41 @@ def _write_plotly_review_html(fig, output_path: Path, page_title: str) -> None:
       chartShell.style.boxShadow = tokens.shadow;
       themeSwitch.style.backgroundColor = tokens.panel_bg;
       themeSwitch.style.border = "1px solid " + tokens.border;
+      lineSwitch.style.backgroundColor = tokens.panel_bg;
+      lineSwitch.style.border = "1px solid " + tokens.border;
       subtitle.style.color = tokens.muted;
-
-      Object.entries(buttons).forEach(([name, button]) => {{
-        const active = name === theme;
-        button.style.backgroundColor = active ? tokens.button_active_bg : tokens.button_bg;
-        button.style.color = active ? tokens.button_active_text : tokens.button_text;
-        button.style.borderColor = active ? tokens.button_active_bg : tokens.border;
-      }});
+      applyToggleStyles(themeButtons, state.theme, tokens);
+      applyToggleStyles(lineButtons, state.lineMode, tokens);
     }}
 
-    function applyTheme(theme) {{
-      const figure = THEME_FIGURES[theme] || THEME_FIGURES.light;
-      applyChrome(theme);
+    function renderPlot() {{
+      const baseFigure = THEME_FIGURES[state.theme] || THEME_FIGURES.light;
+      const figure = applyLineMode(cloneFigure(baseFigure), state.lineMode);
+      applyChrome(state.theme);
       Plotly.react(plotRoot, figure.data, figure.layout, PLOT_CONFIG);
       try {{
-        window.localStorage.setItem(STORAGE_KEY, theme);
+        window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
+        window.localStorage.setItem(LINE_MODE_STORAGE_KEY, state.lineMode);
       }} catch (_err) {{}}
     }}
 
-    buttons.light.addEventListener("click", function () {{ applyTheme("light"); }});
-    buttons.dark.addEventListener("click", function () {{ applyTheme("dark"); }});
-    applyTheme(resolveInitialTheme());
+    themeButtons.light.addEventListener("click", function () {{
+      state.theme = "light";
+      renderPlot();
+    }});
+    themeButtons.dark.addEventListener("click", function () {{
+      state.theme = "dark";
+      renderPlot();
+    }});
+    lineButtons.default.addEventListener("click", function () {{
+      state.lineMode = "default";
+      renderPlot();
+    }});
+    lineButtons.hv.addEventListener("click", function () {{
+      state.lineMode = "hv";
+      renderPlot();
+    }});
+    renderPlot();
   </script>
 </body>
 </html>
@@ -1500,12 +1589,11 @@ def plot_symbol_review_plotly(log: OfficialLog, symbol: str, output_dir: str | P
     fig.update_xaxes(title_text="Timestamp", row=3, col=1)
 
     fig.update_layout(
-        title=f"{symbol} review (B8/S5=max book qty, 1/23=filled/book)",
         template="plotly_white",
         hovermode="x unified",
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "left", "x": 0},
         height=980,
-        margin={"l": 60, "r": 60, "t": 80, "b": 50},
+        margin={"l": 60, "r": 60, "t": 50, "b": 50},
     )
 
     group_name = group if group is not None else log.analysis_group
