@@ -1263,6 +1263,55 @@ MEMBER_OVERRIDES["v4_F2_tuned_unwind"] = {
 }
 
 
+# Variant F3 — v4_F2 + maker-aggressive passive unwind skew
+MEMBER_OVERRIDES["v4_F3_maker_unwind"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=3.0,
+            pct_kept_for_takers=0.05,
+            # New: maker-aggressive unwind via passive skew (live probe)
+            # Backtest can't validate this (no queue model) — live test only.
+            # Start minimal (1 tick) to limit backtest-visible downside.
+            passive_unwind_skew_ticks=1,   # max 1 tick shift toward mid
+            passive_unwind_trigger=0.3,    # activate above 30% position
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# Variant F4 — v4_F2 + 4 grid search winners cumulated
+#   Grid 1: take_edge_lo=0.3, take_edge_hi=0.8 (vs 0.7/1.0) → +117 PnL
+#   Grid 2: taker_buy/sell thresholds unchanged (baseline optimal)
+#   Grid 3: maker_size_base_pct unchanged (marginal gain, inventory cost too high)
+#   Grid 4: anchor_drift_bound=2 (vs 10) → +2,907 PnL (biggest win)
+#          + fine grid confirmed drift=2 better than 5
+MEMBER_OVERRIDES["v4_F4_champion"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            # From v4_F2 (kept)
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=3.0,
+            pct_kept_for_takers=0.05,
+            # Grid 1 winner
+            take_edge_lo=0.3,
+            take_edge_hi=0.8,
+            # Grid 4 winner
+            anchor_drift_bound=2.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
 # Variant G — all Leo mechanisms combined
 MEMBER_OVERRIDES["v4_G_all"] = {
     2: {
