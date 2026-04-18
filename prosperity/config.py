@@ -371,20 +371,20 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
     "tibo_zscore": {
         1: {
             "ASH_COATED_OSMIUM": _override(
-                ROUND_1["ASH_COATED_OSMIUM"],
-                strategy="zscore",
-                # z-score signal
-                zscore_window=25,          # rolling window for mean/std
-                zscore_threshold=2,       # |z| must exceed this to tilt sizes
-                zscore_size_scale=0.5,      # scale per unit of excess z (1 + 0.5 * excess)
-                zscore_max_scale=2.0,       # cap on the size multiplier
-                # quoting
-                take_edge=.5,
-                maker_size_base_pct=0.5,
+                ROUND_2["ASH_COATED_OSMIUM"],
+                strategy="mm_first_v3",
+                take_edge=0.5,
+                maker_size_base_pct=0.3,
                 pct_kept_for_takers=0.1,
-                mid_smooth_window=50,
+                mid_smooth_window=60,
                 mid_smooth_half_life=10,
                 
+                taker_buy_threshold=9990,
+                taker_sell_threshold=10025,
+                gap_trigger_min=0,
+                gap_trigger_max_vol_pct=0.07,
+                gap_trigger_confirm_ticks=1,
+                quote_trace_enabled=True,
                 ts_increment=100,
                 last_ts_value=99900,
                 log_flush_ts=1000,

@@ -934,8 +934,15 @@ def build_backtest_figure(backtest_data: dict, symbol: str, market_df_raw: pd.Da
                 ), row=price_row, col=1)
             mid = (sym_mkt["bid_price_1"] + sym_mkt["ask_price_1"]) / 2
             fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=_smooth(mid, smooth_n),
-                name="Mid", mode=_mode, marker=dict(**_marker, color=C_FAIR),
-                line=dict(color=C_FAIR, width=1, shape=line_shape)), row=price_row, col=1)
+                name="Mid", mode=_mode, marker=dict(**_marker, color="#888888"),
+                line=dict(color="#888888", width=1, dash="dash", shape=line_shape)), row=price_row, col=1)
+            bv = sym_mkt["bid_volume_1"].replace(0, 1)
+            av = sym_mkt["ask_volume_1"].replace(0, 1)
+            microprice = (sym_mkt["bid_price_1"] * av + sym_mkt["ask_price_1"] * bv) / (bv + av)
+            fair_ewm = microprice.ewm(span=25, adjust=False).mean()
+            fig.add_trace(go.Scatter(x=sym_mkt["timestamp"], y=fair_ewm,
+                name="Fair (EWM)", mode=_mode, marker=dict(**_marker, color=C_FAIR),
+                line=dict(color=C_FAIR, width=1.3, shape=line_shape)), row=price_row, col=1)
 
         # MM quotes overlay — never smooth (discrete integer prices; smoothing crosses bid/ask)
         if not sym_quotes.empty:
