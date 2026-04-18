@@ -54,6 +54,8 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "leo_fusion_b_v7": ("prosperity.strategies.round_1.leo_fusion_b_v7", "LeoFusionBV7Strategy"),
     "leo_fusion_b_v8": ("prosperity.strategies.round_1.leo_fusion_b_v8", "LeoFusionBV8Strategy"),
     "leo_fusion_b_v10": ("prosperity.strategies.round_1.leo_fusion_b_v10", "LeoFusionBV10Strategy"),
+    "leo_fusion_b_gap": ("prosperity.strategies.round_1.leo_fusion_b_gap", "LeoFusionBGapStrategy"),
+    "leo_fusion_b_scout": ("prosperity.strategies.round_1.leo_fusion_b_scout", "LeoFusionBScoutStrategy"),
     "osmium_mr_artifact": ("prosperity.strategies.round_1.osmium_mr_artifact", "OsmiumMeanRevStrategy"),
     "leo_fusion_c": ("prosperity.strategies.round_1.leo_fusion_c", "LeoFusionCStrategy"),
     "leo_fusion_d": ("prosperity.strategies.round_1.leo_fusion_d", "LeoFusionDStrategy"),
@@ -72,6 +74,8 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "osmium_mr": ("prosperity.strategies.round_1.osmium_mr_artifact", "OsmiumMeanRevStrategy"),
     "osmium_mr_v2": ("prosperity.strategies.round_1.osmium_mr_v2", "OsmiumMeanRevV2Strategy"),
     "theo_best_generalized": ("prosperity.strategies.round_1.theo_best_generalized", "TheoGeneralizedStrategy"),
+    "osmium_modulaire": ("prosperity.strategies.round_2.leo.osmium_modulaire", "OsmiumModulaireStrategy"),
+    "pepper_modulaire": ("prosperity.strategies.round_2.leo.pepper_modulaire", "PepperModulaireStrategy"),
 }
 
 

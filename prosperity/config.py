@@ -2132,20 +2132,47 @@ MEMBER_OVERRIDES["tibo_round2_v1"] = {
     },
 }
 
-# First Round 2 champion candidate — Leo on both products, OSMIUM params tuned via gs1..gs5.
-# OSMIUM: osmium_mr (mean-rev, anchor=10000) with tuned take_edge, ar_gain, inv_soft.
-# IPR:    leo_fusion_b (block OLS + trend carry) untuned (baseline ≈ 237,859).
+# First Round 2 champion candidate — Leo strategies + Tibo-style hole-in-OB sweep on both products.
+# OSMIUM: osmium_mr_v2 (osmium_mr + gap exploit) with tuned take_edge/ar_gain/inv_soft from gs1..gs5.
+# IPR:    leo_fusion_b_gap (leo_fusion_b + gap exploit) baseline params.
 MEMBER_OVERRIDES["first_sb_leo_round2"] = {
     2: {
         "ASH_COATED_OSMIUM": _override(
             MEMBER_OVERRIDES["leo_osmium_v1"][1]["ASH_COATED_OSMIUM"],
+            strategy="osmium_modulaire",
             take_edge=1.5,
             ar_gain=0.3,
             inventory_soft_ratio=0.9,
             aggravate_min_frac=0.2,
             unwind_boost_frac=0.3,
+            gap_trigger_min=20,
+            gap_trigger_max_vol_pct=0.15,
+            gap_trigger_confirm_ticks=2,
         ),
-        "INTARIAN_PEPPER_ROOT": MEMBER_OVERRIDES["leo_osmium_v1"][1]["INTARIAN_PEPPER_ROOT"],
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_osmium_v1"][1]["INTARIAN_PEPPER_ROOT"],
+            strategy="pepper_modulaire",
+            gap_trigger_min=8,
+            gap_trigger_max_vol_pct=0.15,
+            gap_trigger_confirm_ticks=1,
+            empty_side_shift=5,
+            gap_scout_floor_position=78,
+            gap_scout_min_gap=3,
+            gap_scout_size_limit=7,
+            gap_scout_recent_ask_window=6,
+            gap_scout_early_start_ts=0,
+            gap_scout_early_end_ts=999900,
+            gap_scout_mid_start_ts=0,
+            gap_scout_mid_end_ts=0,
+            gap_scout_late_start_ts=0,
+            gap_scout_late_end_ts=0,
+            gap_rebuy_window=2500,
+            gap_rebuy_min_discount=20.0,
+            gap_rebuy_buy_edge=-10.0,
+            gap_rebuy_take_cap=8,
+            hold_sell_size=1,
+            hold_sell_offset=0,
+        ),
     },
 }
 
