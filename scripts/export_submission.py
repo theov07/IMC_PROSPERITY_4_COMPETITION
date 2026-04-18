@@ -95,6 +95,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "theo_best_generalized": ("prosperity/strategies/round_1/theo_best_generalized.py", "TheoGeneralizedStrategy"),
     "osmium_modulaire":   ("prosperity/strategies/round_2/leo/osmium_modulaire.py", "OsmiumModulaireStrategy"),
     "pepper_modulaire":   ("prosperity/strategies/round_2/leo/pepper_modulaire.py", "PepperModulaireStrategy"),
+    "ask_exploit_modulaire": ("prosperity/strategies/round_2/theo/ask_exploit_modulaire.py", "AskExploitModulaireStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -119,6 +120,7 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "osmium_mr_v2": ["naive_tight_mm_v10", "osmium_mr_artifact"],
     "theo_best_generalized": ["round1_regression_mm_v5"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
+    "ask_exploit_modulaire": ["round1_regression_mm_v5"],
 }
 
 
