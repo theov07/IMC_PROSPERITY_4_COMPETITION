@@ -90,6 +90,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "trend_carry_window_v2": ("prosperity/strategies/trend_carry_window_v2.py", "TrendCarryWindowV2Strategy"),
     "osmium_mr":          ("prosperity/strategies/osmium_mr.py",          "OsmiumMeanRevStrategy"),
     "theo_best_generalized": ("prosperity/strategies/round_1/theo_best_generalized.py", "TheoGeneralizedStrategy"),
+    "theo_root_ask_gap_generalised": (
+        "prosperity/strategies/round_2/theo/theo_root_ask_gap_generalised.py",
+        "TheoRootAskGapGeneralisedStrategy",
+    ),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).

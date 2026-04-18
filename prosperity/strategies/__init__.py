@@ -72,6 +72,10 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "osmium_mr": ("prosperity.strategies.metal_winner.osmium_mr", "OsmiumMeanRevStrategy"),
     "osmium_mr_v2": ("prosperity.strategies.osmium_mr_v2", "OsmiumMeanRevV2Strategy"),
     "theo_best_generalized": ("prosperity.strategies.round_1.theo_best_generalized", "TheoGeneralizedStrategy"),
+    "theo_root_ask_gap_generalised": (
+        "prosperity.strategies.round_2.theo.theo_root_ask_gap_generalised",
+        "TheoRootAskGapGeneralisedStrategy",
+    ),
 }
 
 
