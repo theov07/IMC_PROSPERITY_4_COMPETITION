@@ -96,11 +96,23 @@ Mesuré sur champion_19april_am :
 - **Agressif** si confiance haute dans V (→ 500-1000)
 - **Défensif** si peur teams sérieuses (→ 2,500-3,000)
 
+## ⚠️ Known critical flaw (to fix)
+
+**Script 01 enrichit uniquement le CARNET (prices CSV), PAS les TRADES.**
+
+- MAF wiki : +25% de **flow total** (quotes passifs + trades agressifs)
+- Notre synthetic : +25% book depth seulement → trades inchangés
+- Backtest `realistic` fill model : fills majoritairement trades-driven
+- → V mesuré (+0.27%) est **significativement sous-estimé**
+
+**Fix needed** : modifier `01_generate_synthetic_data.py` pour dupliquer ~25% des
+lignes de `trades_round_2_day_X.csv` (avec jitter timestamp, prix/vol tirés de
+la distribution empirique) puis re-run script 02.
+
 ## Caveats & limitations
 
-1. **Synthetic data accuracy** : +37% au lieu de +25% (overshoot)
-   - Scaling correction appliquée (V × 25/37)
-   - À refiner avec génération probabiliste plus stricte
+1. **Synthetic data accuracy (book)** : ratio 1.296 vs 1.25 target (léger overshoot)
+   - Generation probabiliste en place, overshoot résiduel faible
 
 2. **Adversary model first-principles** : pas d'accès web au leaderboard
    - Modèle basé sur fractions estimées de types d'équipes

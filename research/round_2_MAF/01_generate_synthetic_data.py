@@ -94,58 +94,42 @@ def enrich_row(row, bid_vol_dist, ask_vol_dist, rng: random.Random, target_extra
     # Decide how many quotes to try adding this tick (Poisson-ish)
     max_quotes_per_side = 2 if rng.random() < accept_prob else (1 if rng.random() < accept_prob else 0)
 
-    # Bid side: fill gaps between L1 and L2, or L2 and L3
+    # Bid side: fill gaps between L1 and L2, or L2 and L3 ONLY.
+    # Distribution-preserving rules:
+    #   - Empty side (0 levels)       → skip (no inject)
+    #   - Only 1 level                → skip (don't add L2 that doesn't exist in real book)
+    #   - ≥ 2 levels, gap ≥ 2 ticks   → inject in gap
+    #   - ≥ 2 levels, no gap          → skip
     for _ in range(max_quotes_per_side):
         if added >= target_extra / 2:
             break
-        # Choose a gap to fill
-        if len(bid_levels) >= 2:
-            # Pick a random pair and place a quote in between
-            idx = rng.randrange(len(bid_levels) - 1)
-            p_high, _ = bid_levels[idx]
-            p_low, _ = bid_levels[idx + 1]
-            if p_high - p_low >= 2:
-                new_p = rng.randint(p_low + 1, p_high - 1)
-                new_v = int(bid_vol_dist[rng.randrange(len(bid_vol_dist))])
-                new_bids.append((new_p, new_v))
-                added += new_v
-            else:
-                break
-        elif len(bid_levels) == 1:
-            # Only L1 present — add one below
-            p1, _ = bid_levels[0]
-            new_p = p1 - rng.randint(1, 5)
-            new_v = int(bid_vol_dist[rng.randrange(len(bid_vol_dist))])
-            new_bids.append((new_p, new_v))
-            added += new_v
-            break
-        else:
-            break
+        if len(bid_levels) < 2:
+            break  # can't add without distorting distribution
+        idx = rng.randrange(len(bid_levels) - 1)
+        p_high, _ = bid_levels[idx]
+        p_low, _ = bid_levels[idx + 1]
+        if p_high - p_low < 2:
+            break  # no gap to fill
+        new_p = rng.randint(p_low + 1, p_high - 1)
+        new_v = int(bid_vol_dist[rng.randrange(len(bid_vol_dist))])
+        new_bids.append((new_p, new_v))
+        added += new_v
 
-    # Ask side: symmetric
+    # Ask side: symmetric with same distribution-preservation rules
     for _ in range(max_quotes_per_side):
         if added >= target_extra:
             break
-        if len(ask_levels) >= 2:
-            idx = rng.randrange(len(ask_levels) - 1)
-            p_low, _ = ask_levels[idx]
-            p_high, _ = ask_levels[idx + 1]
-            if p_high - p_low >= 2:
-                new_p = rng.randint(p_low + 1, p_high - 1)
-                new_v = int(ask_vol_dist[rng.randrange(len(ask_vol_dist))])
-                new_asks.append((new_p, new_v))
-                added += new_v
-            else:
-                break
-        elif len(ask_levels) == 1:
-            p1, _ = ask_levels[0]
-            new_p = p1 + rng.randint(1, 5)
-            new_v = int(ask_vol_dist[rng.randrange(len(ask_vol_dist))])
-            new_asks.append((new_p, new_v))
-            added += new_v
+        if len(ask_levels) < 2:
             break
-        else:
+        idx = rng.randrange(len(ask_levels) - 1)
+        p_low, _ = ask_levels[idx]
+        p_high, _ = ask_levels[idx + 1]
+        if p_high - p_low < 2:
             break
+        new_p = rng.randint(p_low + 1, p_high - 1)
+        new_v = int(ask_vol_dist[rng.randrange(len(ask_vol_dist))])
+        new_asks.append((new_p, new_v))
+        added += new_v
 
     # Merge: combine original + new, re-sort, keep top 3 on each side
     all_bids = sorted(bid_levels + new_bids, key=lambda x: -x[0])[:3]
