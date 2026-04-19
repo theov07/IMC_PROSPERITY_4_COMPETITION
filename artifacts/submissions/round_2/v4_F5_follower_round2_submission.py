@@ -1,57 +1,410 @@
-"""Combo strategy — best of Tibo's mm_first_v3 + Leo's osmium_jump_v1.
-
-Built on Tibo's modular skeleton (penny-improve MM, z-score suite, gap_exploit
-with far-quote alpha on empty book).  Adds Leo's unique mechanisms as opt-in
-helpers that are no-ops when their params are absent / zero:
-
-  1. _compute_anchor_signal   — fixed anchor + AR(1) shift as fair value
-                                (alternative to mid_smooth)
-  2. _compute_asym_take_edges — asymmetric take edges with inventory pressure
-                                (unwind_take_edge * pressure)
-  3. _apply_toxic_flow        — shrink size on the adverse side when signed
-                                recent trade-flow is extreme
-  4. _apply_jump_filter       — shrink size on the side that just got joined
-                                (1-tick best bid/ask jump detected)
-  5. _apply_eod_flatten       — aggressive liquidation past eod_flatten_ts
-
-Live-only alpha PRESERVED (invisible in backtest):
-  - gap_exploit's far-quote when a side is empty (OB_cleared_shift)
-
-Params (new; all default to disabled):
-  anchor_price          — fixed fair value anchor (e.g. 10000 for OSM)
-                          When set, adjusted_mid = anchor + ar_shift is used as
-                          fair value for takers AND z-score.  When absent, falls
-                          back to mid_smooth.
-  anchor_alpha          — if > 0, anchor is an EMA of mid (vs fixed)
-                          Set 0 for pure fixed anchor.
-  anchor_drift_bound    — clamp abs(anchor - anchor_price) to this many ticks
-                          when anchor_alpha > 0.  Hybrid fixed/EMA safety net.
-  ar_gain               — AR(1) shift coefficient.  shift = -ar_gain * (mid - prev_mid)
-                          Set 0 to disable.  Typical 0.3-0.5 on OSM.
-  ar_shift_source       — "mid" (default) or "microprice" or "mid_smooth"
-                          The delta used for the AR(1) shift.  "microprice" and
-                          "mid_smooth" are less polluted by bid-ask bounce.
-  unwind_take_edge      — pressure-weighted reduction on the unwinding side.
-                          Set 0 to use symmetric edges (Tibo default).
-  toxic_threshold       — |signed flow / total flow| > this shrinks adverse side.
-                          Set 0 to disable.  Typical 0.6.
-  toxic_window          — rolling window for flow aggregation (default 6).
-  toxic_size_frac       — multiplier applied to the adverse side (default 0.75).
-  trend_jump_threshold  — 1-tick best-bid/ask jump filter strength.
-                          Set 0 to disable.
-  jump_size_frac        — size multiplier when a jump is detected (default 0.5).
-  eod_flatten_ts        — liquidate past this timestamp.  Set 0 to disable.
-"""
-
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple
-
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datamodel import Order, OrderDepth, TradingState
+from datamodel import OrderDepth
+from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
+import json
+import math
 
-from prosperity.market import BookSnapshot
-from prosperity.strategies.base.base import BaseStrategy
+# ── prosperity/market.py ──────────────────────────────────────────────────────────
 
+PriceLevel = Tuple[int, int]
+
+
+@dataclass(frozen=True)
+class BookSnapshot:
+    symbol: str
+    bid_levels: List[PriceLevel]
+    ask_levels: List[PriceLevel]
+    best_bid: int | None
+    best_bid_volume: int
+    best_ask: int | None
+    best_ask_volume: int
+    mid_price: float | None
+    microprice: float | None
+    spread: int | None
+    imbalance: float | None
+
+
+def _sorted_bid_levels(order_depth: OrderDepth) -> List[PriceLevel]:
+    return sorted(order_depth.buy_orders.items(), key=lambda item: item[0], reverse=True)
+
+
+def _sorted_ask_levels(order_depth: OrderDepth) -> List[PriceLevel]:
+    return sorted(((price, -volume) for price, volume in order_depth.sell_orders.items()), key=lambda item: item[0])
+
+
+def snapshot_from_order_depth(symbol: str, order_depth: OrderDepth) -> BookSnapshot:
+    bid_levels = _sorted_bid_levels(order_depth)
+    ask_levels = _sorted_ask_levels(order_depth)
+
+    best_bid = bid_levels[0][0] if bid_levels else None
+    best_bid_volume = bid_levels[0][1] if bid_levels else 0
+    best_ask = ask_levels[0][0] if ask_levels else None
+    best_ask_volume = ask_levels[0][1] if ask_levels else 0
+
+    mid_price = None
+    microprice = None
+    spread = None
+    imbalance = None
+
+    if best_bid is not None and best_ask is not None:
+        spread = best_ask - best_bid
+        mid_price = (best_bid + best_ask) / 2.0
+
+        total_top = best_bid_volume + best_ask_volume
+        if total_top > 0:
+            microprice = (
+                best_bid * best_ask_volume + best_ask * best_bid_volume
+            ) / total_top
+            imbalance = (best_bid_volume - best_ask_volume) / total_top
+
+    return BookSnapshot(
+        symbol=symbol,
+        bid_levels=bid_levels,
+        ask_levels=ask_levels,
+        best_bid=best_bid,
+        best_bid_volume=best_bid_volume,
+        best_ask=best_ask,
+        best_ask_volume=best_ask_volume,
+        mid_price=mid_price,
+        microprice=microprice,
+        spread=spread,
+        imbalance=imbalance,
+    )
+
+
+# ── prosperity/persistence.py ─────────────────────────────────────────────────────
+
+def load_state(raw_state: str) -> Dict[str, Any]:
+    if not raw_state:
+        return {}
+    try:
+        loaded = json.loads(raw_state)
+        return loaded if isinstance(loaded, dict) else {}
+    except Exception:
+        return {}
+
+
+def dump_state(state: Dict[str, Any]) -> str:
+    return json.dumps(state, separators=(",", ":"))
+
+
+# ── prosperity/strategies/base/base.py ────────────────────────────────────────────
+
+class BaseStrategy(ABC):
+    """Abstract base for all product strategies.
+
+    Each strategy receives the full TradingState but is responsible for
+    producing orders for ONE product at a time.
+    """
+
+    def __init__(self, product: str, params: Dict[str, Any]):
+        self.product = product
+        self.params = params
+
+    # ------------------------------------------------------------------
+    def on_tick(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+    ) -> Tuple[List[Order], int]:
+        """Called every iteration for this product.
+
+        Returns:
+            orders: list of Order objects to send
+            conversions: integer conversion request (0 if none)
+        """
+        self._memory = memory  # available to all helper methods via self._memory
+
+        order_depth = state.order_depths.get(self.product)
+        if order_depth is None:
+            return [], 0
+
+        position = state.position.get(self.product, 0)
+        book = snapshot_from_order_depth(self.product, order_depth)
+
+        return self.compute_orders(
+            state=state,
+            book=book,
+            order_depth=order_depth,
+            position=position,
+            memory=memory,
+        )
+
+    @abstractmethod
+    def compute_orders(
+        self,
+        state: TradingState,
+        book: BookSnapshot,
+        order_depth: OrderDepth,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> Tuple[List[Order], int]:
+        """Produce orders and conversion request for this product."""
+        ...
+
+    # ------------------------------------------------------------------
+    # Shared price utilities (call from any strategy)
+    # ------------------------------------------------------------------
+    def _microprice(self, book: "BookSnapshot") -> float:
+        """Volume-weighted microprice using all available book levels.
+
+        bid_vwap = Σ(price × vol) / Σvol  across all bid levels
+        ask_vwap = same for asks
+        microprice = (bid_vwap × ask_total + ask_vwap × bid_total) / (bid_total + ask_total)
+
+        One side empty OR both sides empty → returns the previous microprice
+        stored in self._memory["_microprice_last"] (or 0.0 on the very first tick).
+
+        Stores result in self._memory["_microprice_last"].
+        Requires self._memory to be set (done automatically by on_tick).
+        """
+        bid_total = sum(v for _, v in book.bid_levels)
+        ask_total = sum(v for _, v in book.ask_levels)
+
+        prev = self._memory.get("_microprice_last", 0.0)
+
+        if bid_total == 0 or ask_total == 0:
+            # One or both sides empty: can't compute a meaningful cross-side price
+            return float(prev)
+
+        bid_vwap = sum(p * v for p, v in book.bid_levels) / bid_total
+        ask_vwap = sum(p * v for p, v in book.ask_levels) / ask_total
+        result = (bid_vwap * ask_total + ask_vwap * bid_total) / (bid_total + ask_total)
+
+        self._memory["_microprice_last"] = result
+        return result
+
+    def _smooth_mid(self, mid: float, memory: Dict[str, Any]) -> float:
+        """EWMA smoother for any price series (mid, microprice, etc.).
+
+        Params read from self.params:
+          mid_smooth_window    — rolling window size (default 20; 0 = disabled)
+          mid_smooth_half_life — EMA half-life in ticks (default window/2)
+
+        Stores in memory: ``mid_smooth_buf``, ``mid_smoothed``.
+        Returns the smoothed value (or the raw input when window <= 0 or too few samples).
+        """
+        window = int(self.params.get("mid_smooth_window", 20))
+        if window <= 0:
+            return mid
+        half_life = float(self.params.get("mid_smooth_half_life", window / 2.0))
+        buf = memory.setdefault("mid_smooth_buf", [])
+        buf.append(mid)
+        if len(buf) > window:
+            buf[:] = buf[-window:]
+        if len(buf) < 2:
+            return mid
+        alpha = 1.0 - 2.0 ** (-1.0 / half_life) if half_life > 0 else 1.0
+        smoothed = buf[0]
+        for p in buf[1:]:
+            smoothed = alpha * p + (1.0 - alpha) * smoothed
+        memory["mid_smoothed"] = smoothed
+        return smoothed
+
+    # ------------------------------------------------------------------
+    # Shared volatility estimation (call from any strategy)
+    # ------------------------------------------------------------------
+    def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
+        """Estimate realised volatility from mid-price returns with EWMA smoothing.
+
+        Params read from self.params:
+          sigma_window   — rolling window size for returns (default 50)
+          sigma_default  — fallback when too few prices (default 1.0)
+          sigma_half_life — EWMA half-life for smoothing (default 60)
+          sigma_floor    — minimum returned value (default 0.5)
+
+        Stores in memory: ``mid_history``, ``sigma_smoothed``.
+        Returns the floored, smoothed sigma.
+        """
+        window = int(self.params.get("sigma_window", 50))
+        prices = memory.setdefault("mid_history", [])
+        prices.append(mid)
+        if len(prices) > window + 1:
+            prices[:] = prices[-(window + 1):]
+
+        if len(prices) < 3:
+            return float(self.params.get("sigma_default", 1.0))
+
+        returns = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+        n = len(returns)
+        mean_r = sum(returns) / n
+        var = sum((r - mean_r) ** 2 for r in returns) / max(n - 1, 1)
+        sigma_raw = math.sqrt(var) if var > 0 else float(self.params.get("sigma_default", 1.0))
+
+        half_life = float(self.params.get("sigma_half_life", 60))
+        alpha = 2.0 / (half_life + 1.0)
+        sigma_prev = memory.get("sigma_smoothed", sigma_raw)
+        sigma_smoothed = alpha * sigma_raw + (1.0 - alpha) * sigma_prev
+        memory["sigma_smoothed"] = sigma_smoothed
+
+        return max(sigma_smoothed, float(self.params.get("sigma_floor", 0.5)))
+
+    # ------------------------------------------------------------------
+    # Optional: expose named price features for the dashboard
+    # ------------------------------------------------------------------
+    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        """Return a dict of named price-level features at the current tick.
+
+        Override in concrete strategies to surface prices like reservation price,
+        fair value, etc.  Keys become trace names in the dashboard.
+        Default: no features.
+        """
+        return {}
+
+    # ------------------------------------------------------------------
+    # Helpers available to all strategies
+    # ------------------------------------------------------------------
+    def runtime_trace_enabled(self) -> bool:
+        enabled = self.params.get("runtime_trace_enabled")
+        if enabled is not None:
+            return bool(enabled)
+        return not bool(False)
+
+    def log_quote_snapshot(
+        self,
+        *,
+        state: TradingState,
+        memory: Dict[str, Any],
+        bid_price: int | float | None,
+        ask_price: int | float | None,
+        extras: Dict[str, Any] | None = None,
+    ) -> None:
+        """Accumulate and flush a lightweight quote trace for official IMC logs.
+
+        The trace format is intentionally small and common across quoting
+        strategies so the dashboard can render our own bid/ask from runtime logs:
+          {
+            "product": "...",
+            "trace": "quote_trace",
+            "chunk_end": 49900,
+            "columns": ["timestamp", "bid_price", "ask_price", ...],
+            "log": [[...], [...]]
+          }
+
+        Strategies may append extra per-tick diagnostics through ``extras`` as
+        long as they keep a stable schema across ticks.
+        """
+        if not self.params.get("quote_trace_enabled", False) or not self.runtime_trace_enabled():
+            return
+
+        row: Dict[str, Any] = {
+            "timestamp": int(state.timestamp),
+            "bid_price": bid_price,
+            "ask_price": ask_price,
+        }
+        if extras:
+            row.update(extras)
+
+        columns = memory.setdefault("_quote_trace_columns", list(row.keys()))
+        for key in row.keys():
+            if key not in columns:
+                columns.append(key)
+
+        rows = memory.setdefault("_quote_trace_rows", [])
+        rows.append(row)
+
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        last_tick_ts = self.params.get("last_ts_value")
+        if last_tick_ts is None:
+            last_tick_ts = int(self.params.get("total_ticks", 200000)) - 100
+        else:
+            last_tick_ts = int(last_tick_ts)
+
+        end_of_sim = int(state.timestamp) >= last_tick_ts
+        checkpoint = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
+        if not (end_of_sim or checkpoint):
+            return
+
+        print(json.dumps({
+            "product": self.product,
+            "trace": "quote_trace",
+            "chunk_end": int(state.timestamp),
+            "columns": columns,
+            "log": [[row.get(column) for column in columns] for row in rows],
+        }))
+        memory["_quote_trace_rows"] = []
+
+    def log_taker_fill(
+        self,
+        *,
+        state: TradingState,
+        memory: Dict[str, Any],
+        side: str,
+        price: int,
+        quantity: int,
+        gap_exploit: bool = False,
+    ) -> None:
+        """Accumulate a taker fill and flush when the buffer is full enough.
+
+        Flush conditions (in priority order):
+          1. Deferred flag was set last tick → flush now.
+          2. Timestamp is the second-to-last of the day → flush as end-of-day cleanup.
+          3. Buffer reached 20 fills AND we are NOT at a quote-flush timestamp → flush.
+          4. Buffer reached 20 fills AND we ARE at a quote-flush timestamp → set deferred
+             flag; the flush will fire on the very next tick instead.
+
+        Log format emitted to stdout:
+          {"product": "...", "trace": "taker_fills", "chunk_end": ts,
+           "log": [[ts, side, price, qty], ...]}           # regular taker
+           "log": [[ts, side, price, qty, 1], ...]}         # gap exploit (5th element=1)
+        """
+        if not self.runtime_trace_enabled():
+            return
+
+        taker_log = memory.setdefault("_taker_log", [])
+        entry = [int(state.timestamp), side, price, quantity]
+        if gap_exploit:
+            entry.append(1)
+        taker_log.append(entry)
+
+        flush_ts = int(self.params.get("log_flush_ts", 10000))
+        ts_increment = int(self.params.get("ts_increment", 100))
+        last_ts = int(self.params.get("last_ts_value", 199900))
+        second_to_last = last_ts - ts_increment
+
+        is_quote_flush = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
+        deferred = memory.get("_taker_flush_deferred", False)
+
+        # If threshold hit exactly on a quote-flush ts, defer to the next tick.
+        if len(taker_log) >= 20 and is_quote_flush and not deferred:
+            memory["_taker_flush_deferred"] = True
+            return
+
+        should_flush = (
+            deferred
+            or int(state.timestamp) >= second_to_last
+            or (len(taker_log) >= 20 and not is_quote_flush)
+        )
+        if not should_flush:
+            return
+
+        print(json.dumps({
+            "product": self.product,
+            "trace": "taker_fills",
+            "chunk_end": int(state.timestamp),
+            "log": taker_log,
+        }))
+        memory["_taker_log"] = []
+        memory["_taker_flush_deferred"] = False
+
+    def position_limit(self) -> int:
+        return self.params.get("position_limit", 20)
+
+    def buy_capacity(self, position: int) -> int:
+        return max(0, self.position_limit() - position)
+
+    def sell_capacity(self, position: int) -> int:
+        return max(0, self.position_limit() + position)
+
+
+# ── prosperity/strategies/round_2/leo/mm_first_v4_combo.py ────────────────────────
 
 class MMFirstV4ComboStrategy(BaseStrategy):
 
@@ -777,20 +1130,19 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         buy_cap: int,
         sell_cap: int,
     ) -> Tuple[List[Order], int, int]:
-        """Fire one-shot probes at MULTIPLE distances at session start.
+        """Fire a one-shot extreme-distance probe at the start of the day.
 
-        Posts bids/asks at best ± each of probe_t0_distances ticks (minimal qty)
-        within the first probe_t0_max_ts timestamps. Tests multiple depths
-        in a single submission — if a specific distance gets filled, we know
-        aggressors cross at that depth.
+        Posts a bid at best_bid − probe_t0_distance and an ask at
+        best_ask + probe_t0_distance, with minimal qty, at the first N ticks.
+        If filled, we know aggressors cross at that depth.
 
         Params:
-          probe_t0_distances — list/tuple of tick distances (default [] = off)
-          probe_t0_qty       — qty per probe (default 1)
-          probe_t0_max_ts    — last timestamp to fire (default 500)
+          probe_t0_distance — ticks from best (default 0 = off)
+          probe_t0_qty      — qty per side (default 1)
+          probe_t0_max_ts   — last timestamp to fire (default 500 = first 5 ticks)
         """
-        distances = self.params.get("probe_t0_distances")
-        if not distances or book.best_bid is None or book.best_ask is None:
+        dist = int(self.params.get("probe_t0_distance", 0))
+        if dist <= 0 or book.best_bid is None or book.best_ask is None:
             return [], buy_cap, sell_cap
 
         max_ts = int(self.params.get("probe_t0_max_ts", 500))
@@ -802,18 +1154,14 @@ class MMFirstV4ComboStrategy(BaseStrategy):
 
         qty = int(self.params.get("probe_t0_qty", 1))
         orders: List[Order] = []
-        for dist in distances:
-            d = int(dist)
-            if d <= 0:
-                continue
-            b_qty = min(qty, buy_cap)
-            a_qty = min(qty, sell_cap)
-            if b_qty > 0:
-                orders.append(Order(self.product, book.best_bid - d, b_qty))
-                buy_cap -= b_qty
-            if a_qty > 0:
-                orders.append(Order(self.product, book.best_ask + d, -a_qty))
-                sell_cap -= a_qty
+        b_qty = min(qty, buy_cap)
+        a_qty = min(qty, sell_cap)
+        if b_qty > 0:
+            orders.append(Order(self.product, book.best_bid - dist, b_qty))
+            buy_cap -= b_qty
+        if a_qty > 0:
+            orders.append(Order(self.product, book.best_ask + dist, -a_qty))
+            sell_cap -= a_qty
         if orders:
             memory["_probe_t0_fired"] = True
         return orders, buy_cap, sell_cap
@@ -1264,3 +1612,75 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         if z is not None:
             out["Z"] = float(z)
         return out
+
+# ── Config ────────────────────────────────────────────────────────────────────
+
+PRODUCTS = {'ASH_COATED_OSMIUM': {'OB_cleared_shift': 89,
+                       'anchor_alpha': 0.02,
+                       'anchor_drift_bound': 2.0,
+                       'anchor_price': 10000.0,
+                       'ar_gain': 0.3,
+                       'ar_shift_source': 'mid_smooth',
+                       'gap_trigger_confirm_ticks': 1,
+                       'gap_trigger_max_vol_pct': 0.1,
+                       'gap_trigger_min': 10,
+                       'inventory_aversion_gamma': 0.0015,
+                       'last_ts_value': 999900,
+                       'log_flush_ts': 1000,
+                       'maker_size': 20,
+                       'maker_size_base_pct': 0.5,
+                       'mid_smooth_half_life': 10,
+                       'mid_smooth_window': 50,
+                       'momentum_qty': 3,
+                       'momentum_threshold': 0.7,
+                       'momentum_window': 15,
+                       'pct_kept_for_takers': 0.05,
+                       'position_limit': 80,
+                       'quote_trace_enabled': True,
+                       'strategy': 'mm_first_v4_combo',
+                       'take_edge': 1,
+                       'take_edge_hi': 0.8,
+                       'take_edge_lo': 0.3,
+                       'take_edge_vol_hi': 5.0,
+                       'take_edge_vol_lo': 2.0,
+                       'taker_buy_threshold': 9990,
+                       'taker_sell_threshold': 10025,
+                       'tighten_ticks': 1,
+                       'ts_increment': 100,
+                       'unwind_take_edge': 3.0,
+                       'zscore_gap_gate': 1.5,
+                       'zscore_max_scale': 5.0,
+                       'zscore_size_scale': 0.5,
+                       'zscore_threshold': 1,
+                       'zscore_window': 50}}
+
+STRATEGY_CLASSES = {"mm_first_v4_combo": MMFirstV4ComboStrategy}
+
+# ── Trader ────────────────────────────────────────────────────────────────────
+
+class Trader:
+    def __init__(self):
+        self.strategies = {}
+        for symbol, cfg in PRODUCTS.items():
+            strat_name = cfg["strategy"]
+            params = {k: v for k, v in cfg.items() if k != "strategy"}
+            cls = STRATEGY_CLASSES[strat_name]
+            self.strategies[symbol] = cls(product=symbol, params=params)
+
+    def bid(self) -> int:
+        return 15
+
+    def run(self, state: TradingState):
+        saved = load_state(state.traderData)
+        product_memories = saved.setdefault("products", {})
+        result = {}
+        total_conversions = 0
+        for product, strategy in self.strategies.items():
+            if product not in state.order_depths:
+                continue
+            memory = product_memories.setdefault(product, {})
+            orders, conversions = strategy.on_tick(state, memory)
+            result[product] = orders
+            total_conversions += conversions
+        saved["last_timestamp"] = state.timestamp
+        return result, total_conversions, dump_state(saved)
