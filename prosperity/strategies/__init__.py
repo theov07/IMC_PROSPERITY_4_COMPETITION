@@ -97,6 +97,14 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
         "prosperity.strategies.round_2.theo.theo_best_clean_generalized_v5",
         "TheoBestCleanGeneralizedV5Strategy",
     ),
+    "theo_best_clean_generalized_v6": (
+        "prosperity.strategies.round_2.theo.theo_best_clean_generalized_v6",
+        "TheoBestCleanGeneralizedV6Strategy",
+    ),
+    "theo_best_clean_generalized_v7": (
+        "prosperity.strategies.round_2.theo.theo_best_clean_generalized_v7",
+        "TheoBestCleanGeneralizedV7Strategy",
+    ),
     "theo_root_ask_gap_generalised": (
         "prosperity.strategies.round_2.theo.theo_root_ask_gap_generalised",
         "TheoRootAskGapGeneralisedStrategy",

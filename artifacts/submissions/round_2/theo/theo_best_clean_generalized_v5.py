@@ -17,7 +17,6 @@ import math
 
 PriceLevel = Tuple[int, int]
 
-
 @dataclass(frozen=True)
 class BookSnapshot:
     symbol: str
@@ -32,14 +31,11 @@ class BookSnapshot:
     spread: int | None
     imbalance: float | None
 
-
 def _sorted_bid_levels(order_depth: OrderDepth) -> List[PriceLevel]:
     return sorted(order_depth.buy_orders.items(), key=lambda item: item[0], reverse=True)
 
-
 def _sorted_ask_levels(order_depth: OrderDepth) -> List[PriceLevel]:
     return sorted(((price, -volume) for price, volume in order_depth.sell_orders.items()), key=lambda item: item[0])
-
 
 def snapshot_from_order_depth(symbol: str, order_depth: OrderDepth) -> BookSnapshot:
     bid_levels = _sorted_bid_levels(order_depth)
@@ -92,7 +88,6 @@ def load_state(raw_state: str) -> Dict[str, Any]:
     except Exception:
         return {}
 
-
 def dump_state(state: Dict[str, Any]) -> str:
     return json.dumps(state, separators=(",", ":"))
 
@@ -100,28 +95,16 @@ def dump_state(state: Dict[str, Any]) -> str:
 # ── prosperity/strategies/base/base.py ────────────────────────────────────────────
 
 class BaseStrategy(ABC):
-    """Abstract base for all product strategies.
-
-    Each strategy receives the full TradingState but is responsible for
-    producing orders for ONE product at a time.
-    """
 
     def __init__(self, product: str, params: Dict[str, Any]):
         self.product = product
         self.params = params
 
-    # ------------------------------------------------------------------
     def on_tick(
         self,
         state: TradingState,
         memory: Dict[str, Any],
     ) -> Tuple[List[Order], int]:
-        """Called every iteration for this product.
-
-        Returns:
-            orders: list of Order objects to send
-            conversions: integer conversion request (0 if none)
-        """
         self._memory = memory  # available to all helper methods via self._memory
 
         order_depth = state.order_depths.get(self.product)
@@ -148,32 +131,15 @@ class BaseStrategy(ABC):
         position: int,
         memory: Dict[str, Any],
     ) -> Tuple[List[Order], int]:
-        """Produce orders and conversion request for this product."""
         ...
 
-    # ------------------------------------------------------------------
-    # Shared price utilities (call from any strategy)
-    # ------------------------------------------------------------------
     def _microprice(self, book: "BookSnapshot") -> float:
-        """Volume-weighted microprice using all available book levels.
-
-        bid_vwap = Σ(price × vol) / Σvol  across all bid levels
-        ask_vwap = same for asks
-        microprice = (bid_vwap × ask_total + ask_vwap × bid_total) / (bid_total + ask_total)
-
-        One side empty OR both sides empty → returns the previous microprice
-        stored in self._memory["_microprice_last"] (or 0.0 on the very first tick).
-
-        Stores result in self._memory["_microprice_last"].
-        Requires self._memory to be set (done automatically by on_tick).
-        """
         bid_total = sum(v for _, v in book.bid_levels)
         ask_total = sum(v for _, v in book.ask_levels)
 
         prev = self._memory.get("_microprice_last", 0.0)
 
         if bid_total == 0 or ask_total == 0:
-            # One or both sides empty: can't compute a meaningful cross-side price
             return float(prev)
 
         bid_vwap = sum(p * v for p, v in book.bid_levels) / bid_total
@@ -184,15 +150,6 @@ class BaseStrategy(ABC):
         return result
 
     def _smooth_mid(self, mid: float, memory: Dict[str, Any]) -> float:
-        """EWMA smoother for any price series (mid, microprice, etc.).
-
-        Params read from self.params:
-          mid_smooth_window    — rolling window size (default 20; 0 = disabled)
-          mid_smooth_half_life — EMA half-life in ticks (default window/2)
-
-        Stores in memory: ``mid_smooth_buf``, ``mid_smoothed``.
-        Returns the smoothed value (or the raw input when window <= 0 or too few samples).
-        """
         window = int(self.params.get("mid_smooth_window", 20))
         if window <= 0:
             return mid
@@ -210,21 +167,7 @@ class BaseStrategy(ABC):
         memory["mid_smoothed"] = smoothed
         return smoothed
 
-    # ------------------------------------------------------------------
-    # Shared volatility estimation (call from any strategy)
-    # ------------------------------------------------------------------
     def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
-        """Estimate realised volatility from mid-price returns with EWMA smoothing.
-
-        Params read from self.params:
-          sigma_window   — rolling window size for returns (default 50)
-          sigma_default  — fallback when too few prices (default 1.0)
-          sigma_half_life — EWMA half-life for smoothing (default 60)
-          sigma_floor    — minimum returned value (default 0.5)
-
-        Stores in memory: ``mid_history``, ``sigma_smoothed``.
-        Returns the floored, smoothed sigma.
-        """
         window = int(self.params.get("sigma_window", 50))
         prices = memory.setdefault("mid_history", [])
         prices.append(mid)
@@ -248,21 +191,9 @@ class BaseStrategy(ABC):
 
         return max(sigma_smoothed, float(self.params.get("sigma_floor", 0.5)))
 
-    # ------------------------------------------------------------------
-    # Optional: expose named price features for the dashboard
-    # ------------------------------------------------------------------
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
-        """Return a dict of named price-level features at the current tick.
-
-        Override in concrete strategies to surface prices like reservation price,
-        fair value, etc.  Keys become trace names in the dashboard.
-        Default: no features.
-        """
         return {}
 
-    # ------------------------------------------------------------------
-    # Helpers available to all strategies
-    # ------------------------------------------------------------------
     def runtime_trace_enabled(self) -> bool:
         enabled = self.params.get("runtime_trace_enabled")
         if enabled is not None:
@@ -278,21 +209,6 @@ class BaseStrategy(ABC):
         ask_price: int | float | None,
         extras: Dict[str, Any] | None = None,
     ) -> None:
-        """Accumulate and flush a lightweight quote trace for official IMC logs.
-
-        The trace format is intentionally small and common across quoting
-        strategies so the dashboard can render our own bid/ask from runtime logs:
-          {
-            "product": "...",
-            "trace": "quote_trace",
-            "chunk_end": 49900,
-            "columns": ["timestamp", "bid_price", "ask_price", ...],
-            "log": [[...], [...]]
-          }
-
-        Strategies may append extra per-tick diagnostics through ``extras`` as
-        long as they keep a stable schema across ticks.
-        """
         if not self.params.get("quote_trace_enabled", False) or not self.runtime_trace_enabled():
             return
 
@@ -343,20 +259,6 @@ class BaseStrategy(ABC):
         quantity: int,
         gap_exploit: bool = False,
     ) -> None:
-        """Accumulate a taker fill and flush when the buffer is full enough.
-
-        Flush conditions (in priority order):
-          1. Deferred flag was set last tick → flush now.
-          2. Timestamp is the second-to-last of the day → flush as end-of-day cleanup.
-          3. Buffer reached 20 fills AND we are NOT at a quote-flush timestamp → flush.
-          4. Buffer reached 20 fills AND we ARE at a quote-flush timestamp → set deferred
-             flag; the flush will fire on the very next tick instead.
-
-        Log format emitted to stdout:
-          {"product": "...", "trace": "taker_fills", "chunk_end": ts,
-           "log": [[ts, side, price, qty], ...]}           # regular taker
-           "log": [[ts, side, price, qty, 1], ...]}         # gap exploit (5th element=1)
-        """
         if not self.runtime_trace_enabled():
             return
 
@@ -374,7 +276,6 @@ class BaseStrategy(ABC):
         is_quote_flush = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
         deferred = memory.get("_taker_flush_deferred", False)
 
-        # If threshold hit exactly on a quote-flush ts, defer to the next tick.
         if len(taker_log) >= 20 and is_quote_flush and not deferred:
             memory["_taker_flush_deferred"] = True
             return
@@ -410,19 +311,12 @@ class BaseStrategy(ABC):
 
 StrategyBase = BaseStrategy
 
-
 def _ewma(previous: Optional[float], current: float, alpha: float) -> float:
     if previous is None:
         return current
     return alpha * current + (1.0 - alpha) * previous
 
-
-# ── TestTheo Strategy ─────────────────────────────────────────────────────────────
-
 class TheoBestCleanGeneralizedStrategy(StrategyBase):
-    """Hybrid: Full Leo fusion for buys + v34-style passive sells when at max position."""
-
-    # ── helpers ──────────────────────────────────────────────────────────
 
     def _update_regression(
         self,
@@ -608,22 +502,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         state:  TradingState,
         memory: Dict[str, Any],
     ) -> None:
-        """Detect gap fills from own_trades and promote them into rebuy state.
-
-        Checks each own trade against last tick's active gap quote prices and
-        against a minimum premium threshold vs the last known market price.
-        Avoids assuming a posted gap quote was filled — only marks state when
-        there is confirmed trade evidence.
-
-        Params:
-          empty_side_shift  — used to compute gap_fill_min_premium default
-          gap_fill_min_premium — min price offset from last known market price
-                                 to classify a fill as a gap fill (default max(30, shift//2))
-
-        Side effects on memory:
-          _last_gap_sell_ts, _last_gap_sell_price, _last_gap_sell_qty
-          _last_gap_buy_ts,  _last_gap_buy_price,  _last_gap_buy_qty
-        """
         empty_side_shift      = int(self.params.get("empty_side_shift", 85))
         gap_fill_min_premium  = int(self.params.get("gap_fill_min_premium", max(30, empty_side_shift // 2)))
         last_best_bid         = memory.get("_last_best_bid")
@@ -658,23 +536,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         gap_sell_quotes: List[int],
         gap_buy_quotes:  List[int],
     ) -> Optional[Tuple[List[Order], int]]:
-        """Handle one-sided or fully empty order book by posting wide quotes.
-
-        When both sides are absent, post a buy at last_known - shift and a sell
-        at last_known + shift (if position allows). Returns early with those orders.
-        When only one side is absent, post a single wide quote on the missing side.
-        When both sides are present, returns None so normal logic continues.
-
-        Also updates memory with last known best bid/ask and recent ask history
-        before returning early.
-
-        Params:
-          empty_side_shift             — tick offset for wide quotes (default 85)
-          ask_gap_sell_enable_position — min position to post a gap sell (default position_limit)
-          ask_gap_quote_size           — max size for a gap sell quote (default 8)
-
-        Returns (orders, 0) if the book is one-sided/empty, else None.
-        """
         orders: List[Order] = []
         empty_side_shift          = int(self.params.get("empty_side_shift", 85))
         ask_gap_sell_enable_pos   = int(self.params.get("ask_gap_sell_enable_position", self.position_limit()))
@@ -682,7 +543,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         last_best_bid             = memory.get("_last_best_bid")
         last_best_ask             = memory.get("_last_best_ask")
 
-        # Fully empty book
         if book.best_bid is None and book.best_ask is None:
             if last_best_bid is None and last_best_ask is None:
                 return orders, 0
@@ -702,14 +562,12 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             memory["_gap_buy_px"]             = gap_buy_quotes[:]
             return orders, 0
 
-        # Only asks visible — post a wide bid below last known bid
         if book.best_bid is None:
             ref           = last_best_bid if last_best_bid is not None else book.best_ask - 1
             gap_buy_price = ref - empty_side_shift
             orders.append(Order(self.product, gap_buy_price, self.buy_capacity(position)))
             gap_buy_quotes.append(gap_buy_price)
 
-        # Only bids visible — post a wide ask above last known ask
         elif book.best_ask is None:
             ref            = last_best_ask if last_best_ask is not None else book.best_bid + 1
             gap_sell_price = ref + empty_side_shift
@@ -719,7 +577,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
                     orders.append(Order(self.product, gap_sell_price, -gap_sell_qty))
                     gap_sell_quotes.append(gap_sell_price)
 
-        # Update last known prices and recent ask history
         if book.best_bid is not None:
             memory["_last_best_bid"] = book.best_bid
         if book.best_ask is not None:
@@ -730,7 +587,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             if len(recent_best_asks) > gap_scout_recent_ask_window:
                 del recent_best_asks[:-gap_scout_recent_ask_window]
 
-        # One side is still missing: flush trackers and return
         if book.best_bid is None or book.best_ask is None:
             memory["_active_gap_sell_quotes"] = gap_sell_quotes[:]
             memory["_active_gap_buy_quotes"]  = gap_buy_quotes[:]
@@ -746,23 +602,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         fv:     float,
         memory: Dict[str, Any],
     ) -> Tuple[float, float, float, float, float, float]:
-        """Update slow/fast EWMAs, slope window, and derived stretch signals.
-
-        ewma_fv    — slow EWMA of microprice (tracks the long-run trend level)
-        short_ema  — fast EWMA of microprice (tracks short-term momentum)
-        ewma_slope — change of ewma_fv over the last slope_window ticks
-        stretch    — spot minus short_ema (positive = price running above MA)
-        trim_reference — ewma_fv nudged forward by slope (signals for trimming)
-        entry_reference — min(fv, trim_reference) used as bid anchor price
-
-        Params:
-          fv_alpha                  — slow EWMA alpha (default 0.05)
-          short_alpha               — fast EWMA alpha (default 0.22)
-          slope_window              — window for EWMA slope (default 20)
-          trim_reference_slope_weight — weight applied to slope (default 0.15)
-
-        Returns (ewma_fv, short_ema, ewma_slope, stretch, trim_reference, entry_reference).
-        """
         fv_alpha     = float(self.params.get("fv_alpha", 0.05))
         short_alpha  = float(self.params.get("short_alpha", 0.22))
         slope_window = int(self.params.get("slope_window", 20))
@@ -797,21 +636,10 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         position: int,
         memory:   Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Compute all per-tick regime flags, inventory targets, and taker limits.
-
-        Covers: bullish/build_phase/on_dip/chasing flags, startup sub-phases
-        (fast/cold/chase/anchor), pullback tracking, gap_rebuy_mode, trim mode,
-        and rebuy_blocked. Also derives buy_edge and buy_take_cap so that
-        _buy_takers receives a fully resolved policy without re-reading params.
-
-        Returns a dict with all flags needed downstream by _compute_quote_prices,
-        _buy_takers, _sell_takers, _compute_passive_sizes, and _gap_trap_quotes.
-        """
         trend_ticks = stats["trend_ticks"]
         residual_z  = stats["residual_z"]
         ts          = int(state.timestamp)
 
-        # ── direction and build phase ──────────────────────────────────
         bull_threshold  = float(self.params.get("bull_threshold", 1.0))
         bullish         = trend_ticks > bull_threshold
         fastfill_target = int(self.params.get("fastfill_target", self.position_limit()))
@@ -820,14 +648,12 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         base_target     = self._inventory_target(state=state, stats=stats, position=position)
         inv_target      = max(base_target, fastfill_target) if build_phase else base_target
 
-        # ── dip / chase signals ────────────────────────────────────────
         dip_threshold   = float(self.params.get("dip_threshold", 1.0))
         chase_threshold = float(self.params.get("chase_threshold", 1.25))
         cheap_z         = float(self.params.get("cheap_residual_z", 0.9))
         rich_z          = float(self.params.get("rich_residual_z", 1.0))
         on_dip          = bullish and (stretch <= -dip_threshold or residual_z <= -cheap_z)
 
-        # ── startup sub-phases ─────────────────────────────────────────
         startup_fast_target           = int(self.params.get("startup_fast_target", min(fastfill_target, 32)))
         startup_fast_take_cap         = int(self.params.get("startup_fast_take_cap", 12))
         startup_fast_passive_buy      = int(self.params.get("startup_fast_passive_buy", 8))
@@ -877,7 +703,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             else:
                 active_build_target = min(active_build_target, startup_post_pullback_target)
 
-        # ── gap rebuy mode ─────────────────────────────────────────────
         last_gap_sell_ts    = int(memory.get("_last_gap_sell_ts", -(10 ** 9)))
         last_gap_sell_price = memory.get("_last_gap_sell_price")
         gap_rebuy_window      = int(self.params.get("gap_rebuy_window", 2500))
@@ -901,7 +726,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             or (startup_cold_loading and not pullback_seen)
         )
 
-        # ── trim mode ──────────────────────────────────────────────────
         trim_start_position      = int(self.params.get("trim_start_position", 79))
         trim_extension_threshold = float(self.params.get("trim_extension_threshold", 0.75))
         trim_quote_mode = (
@@ -913,11 +737,9 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         trim_take_mode = False
         trim_take_qty  = 0
 
-        # ── rebuy block ────────────────────────────────────────────────
         rebuy_block_until = int(memory.get("rebuy_block_until", -(10 ** 9)))
         rebuy_blocked     = bullish and ts < rebuy_block_until
 
-        # ── buy edge ──────────────────────────────────────────────────
         take_buy_edge_bull      = float(self.params.get("take_buy_edge_bull", -8.0))
         take_buy_edge_neut      = float(self.params.get("take_buy_edge_neut", 2.0))
         fastfill_buy_edge_boost = float(self.params.get("fastfill_buy_edge_boost", 0.0))
@@ -999,16 +821,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         regime:          Dict[str, Any],
         entry_reference: float,
     ) -> Tuple[int, int]:
-        """Compute passive bid and ask quote prices.
-
-        Base prices are derived from fair value ± spread (bull or neutral).
-        bid_extra ticks are added based on trend strength and residual cheapness.
-        During build phase, bid_price is nudged up toward entry_reference to
-        capture more of the trend move in cold/chase sub-phases.
-
-        Returns (bid_price, ask_price) — both sides guaranteed non-None here
-        since _handle_onesided_book has already filtered the one-sided case.
-        """
         bullish             = regime["bullish"]
         build_phase         = regime["build_phase"]
         startup_cold_loading = regime["startup_cold_loading"]
@@ -1034,7 +846,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         if bid_price >= ask_price:
             ask_price = bid_price + 1
 
-        # Trend / residual bid extras
         bid_extra   = 0
         strong      = float(self.params.get("strong_trend_ticks", 1.1))
         very_strong = float(self.params.get("very_strong_trend_ticks", 2.0))
@@ -1049,7 +860,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         bid_extra     = max(0, min(max_bid_extra, bid_extra))
         bid_price     = min(book.best_ask - 1, bid_price + bid_extra)
 
-        # Build-phase bid anchoring
         startup_anchor_bid_spread = regime["startup_anchor_bid_spread"]
         startup_cold_join_ticks   = regime["startup_cold_join_ticks"]
         if build_phase:
@@ -1070,18 +880,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         buy_cap:     int,
         regime:      Dict[str, Any],
     ) -> Tuple[List[Order], int, int, Set[int]]:
-        """Emit aggressive buy orders when ask price is below the fair-value edge.
-
-        Iterates sell_orders from cheapest upward, buying each level while:
-          - ask_p <= fv - buy_edge  (fair-value condition)
-          - buy_cap and buy_take_cap > 0  (capacity guards)
-          - During build phase: room to active_build_target is not exhausted
-
-        deep_take_guard restricts multi-level taker sweeps during early ticks
-        to avoid paying too far through the market.
-
-        Returns (orders, remaining_buy_cap, pending_buy, swept_ask_prices).
-        """
         orders:         List[Order] = []
         swept_prices:   Set[int]    = set()
         pending_buy     = 0
@@ -1131,14 +929,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         sell_cap:    int,
         regime:      Dict[str, Any],
     ) -> Tuple[List[Order], int, int]:
-        """Emit aggressive sell orders for neutral unwind (non-bullish, non-trim regimes).
-
-        Only fires when: not build_phase AND not trim_quote_mode AND not bullish.
-        Sell edge is tightened proportionally when position is above inv_target
-        to accelerate unwind under inventory pressure.
-
-        Returns (orders, remaining_sell_cap, pending_sell).
-        """
         orders:      List[Order] = []
         pending_sell = 0
 
@@ -1179,18 +969,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         ask_price:        int,
         buy_taker_prices: Set[int],
     ) -> Tuple[int, int, Optional[int], int, int, bool]:
-        """Compute passive bid/ask sizes, anchor order, and final ask_price.
-
-        Sizing via _size_from_target; then adjusted for:
-          - build_phase overrides (suppress sells, cap/floor buys by sub-phase)
-          - anchor bid in cold/chase sub-phases (secondary bid at entry_reference)
-          - gap_rebuy_mode (boost passive buy, cap to inv_target room)
-          - hold_sell_size logic (passive sell at top of book when near max position)
-          - rebuy_block (zero buys while blocked)
-          - crossing prevention (ask_price = bid_price + 1 if crossed)
-
-        Returns (buy_size, sell_size, anchor_buy_price, anchor_buy_size, ask_price, anchor_mode).
-        """
         build_phase         = regime["build_phase"]
         gap_rebuy_mode      = regime["gap_rebuy_mode"]
         bullish             = regime["bullish"]
@@ -1208,7 +986,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         startup_anchor_gap_ticks  = regime["startup_anchor_gap_ticks"]
         startup_anchor_size       = regime["startup_anchor_size"]
 
-        # Effective best ask after filtering taker-swept levels
         real_best_bid = book.best_bid
         real_best_ask = book.best_ask
         for ap, _ in book.ask_levels:
@@ -1280,34 +1057,10 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         trend_ticks:    float,
         gap_rebuy_mode: bool,
     ) -> Tuple[List[Order], List[int]]:
-        """Arm and post gap-trap sell orders when the ask side is persistently fragile.
-
-        Fragility is defined as: only one ask level, OR the gap to the second ask
-        level exceeds gap_trap_min_gap, OR top-of-book volume is thin AND imbalance
-        supports the bull case.
-
-        Once the ask side has been fragile for gap_trap_arm_streak consecutive ticks
-        and position >= gap_trap_floor_position, the trap is armed. A passive SELL is
-        posted at anchor_ask + empty_side_shift. An optional premium order is added
-        at peak_ask + empty_side_shift + premium_extra after gap_trap_premium_streak.
-
-        The trap is cleared when position drops below the floor, gap_rebuy_mode is
-        active, or gap_trap_clear_after consecutive non-fragile ticks occur.
-
-        Params:
-          gap_trap_arm_streak, gap_trap_clear_after, gap_trap_floor_position
-          gap_trap_min_gap, gap_trap_top_ask_max, gap_trap_min_imbalance
-          gap_trap_recent_ask_window, gap_trap_fragile_ask_window
-          gap_trap_base_size, gap_trap_premium_size, gap_trap_premium_streak
-          gap_trap_premium_extra, empty_side_shift
-
-        Returns (orders, gap_sell_prices_list).
-        """
         orders:              List[Order] = []
         gap_sell_prices:     List[int]   = []
         empty_side_shift     = int(self.params.get("empty_side_shift", 85))
 
-        # Restore persisted trap state
         gap_trap_fragile_streak = int(memory.get("_gap_trap_fragile_streak", 0))
         gap_trap_clear_streak   = int(memory.get("_gap_trap_clear_streak", 0))
         gap_trap_anchor_ask     = memory.get("_gap_trap_anchor_ask")
@@ -1327,7 +1080,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         gap_trap_premium_streak     = int(self.params.get("gap_trap_premium_streak", 3))
         gap_trap_premium_extra      = int(self.params.get("gap_trap_premium_extra", 2))
 
-        # Fragility detection
         ask_gap_fragile      = len(book.ask_levels) == 1
         if len(book.ask_levels) >= 2:
             ask_gap_fragile  = ask_gap_fragile or (book.ask_levels[1][0] - book.ask_levels[0][0] >= gap_trap_min_gap)
@@ -1335,7 +1087,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         imbalance_supportive = book.imbalance is None or book.imbalance >= gap_trap_min_imbalance
         ask_side_fragile     = ask_gap_fragile or (ask_size_fragile and imbalance_supportive)
 
-        # Rolling ask history for anchor and peak tracking
         trap_recent_asks = memory.setdefault("_gap_trap_recent_asks", [])
         trap_recent_asks.append(int(book.best_ask))
         if len(trap_recent_asks) > gap_trap_recent_ask_window:
@@ -1349,7 +1100,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         else:
             trap_fragile_asks[:] = []
 
-        # Streak update
         trap_armable = trend_ticks >= gap_trap_min_trend and not gap_rebuy_mode and position >= gap_trap_floor_position
         if trap_armable and ask_side_fragile:
             gap_trap_fragile_streak += 1
@@ -1361,12 +1111,10 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             gap_trap_fragile_streak  = 0
             gap_trap_clear_streak    = 0
 
-        # Arm trap
         if gap_trap_anchor_ask is None and trap_armable and gap_trap_fragile_streak >= gap_trap_arm_streak and trap_recent_asks:
             gap_trap_anchor_ask = min(trap_recent_asks)
             gap_trap_peak_ask   = max(trap_fragile_asks) if trap_fragile_asks else int(book.best_ask)
 
-        # Update or disarm trap
         if gap_trap_anchor_ask is not None:
             if not trap_armable or gap_trap_clear_streak >= gap_trap_clear_after:
                 gap_trap_anchor_ask = None
@@ -1380,7 +1128,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
                     latest_peak       = max(trap_fragile_asks)
                     gap_trap_peak_ask = max(int(gap_trap_peak_ask or latest_peak), latest_peak)
 
-        # Build trap orders
         gap_trap_sell_price    = None
         gap_trap_sell_size     = 0
         gap_trap_premium_price = None
@@ -1425,7 +1172,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             orders.append(Order(self.product, gap_trap_premium_price, -gap_trap_premium_size))
             gap_sell_prices.append(gap_trap_premium_price)
 
-        # Persist updated trap state
         memory["_gap_trap_fragile_streak"] = gap_trap_fragile_streak
         memory["_gap_trap_clear_streak"]   = gap_trap_clear_streak
         memory["_gap_trap_anchor_ask"]     = gap_trap_anchor_ask
@@ -1434,8 +1180,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         memory["gap_trap_armed"]           = int(gap_trap_armed)
 
         return orders, gap_sell_prices
-
-    # ── order construction ───────────────────────────────────────────────
 
     def compute_orders(
         self,
@@ -1446,10 +1190,8 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         memory:      Dict[str, Any],
     ) -> Tuple[List[Order], int]:
 
-        # ── PREMIUM FILL DETECTION ─────────────────────────────────────
         self._process_premium_fills(state, memory)
 
-        # ── RESET QUOTE TRACKERS ───────────────────────────────────────
         gap_sell_quotes: List[int] = []
         gap_buy_quotes:  List[int] = []
         memory["_active_gap_sell_quotes"] = []
@@ -1457,12 +1199,10 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         memory["_gap_sell_px"]            = []
         memory["_gap_buy_px"]             = []
 
-        # ── ONE-SIDED / EMPTY BOOK ─────────────────────────────────────
         onesided = self._handle_onesided_book(book, position, memory, gap_sell_quotes, gap_buy_quotes)
         if onesided is not None:
             return onesided
 
-        # Update last known prices and recent ask window (normal book path)
         if book.best_bid is not None:
             memory["_last_best_bid"] = book.best_bid
         if book.best_ask is not None:
@@ -1473,37 +1213,30 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             if len(recent_best_asks) > gap_scout_recent_ask_window:
                 del recent_best_asks[:-gap_scout_recent_ask_window]
 
-        # ── REGRESSION + FAIR VALUE ────────────────────────────────────
         mid   = book.mid_price if book.mid_price is not None else (book.best_bid + book.best_ask) / 2.0
         stats = self._update_regression(state=state, mid=mid, memory=memory)
         fv    = stats["fair_value"]
 
-        # ── EWMA SIGNALS ───────────────────────────────────────────────
         spot = book.microprice if book.microprice is not None else mid
         _, _, _, stretch, trim_reference, entry_reference = (
             self._update_ewma_signals(spot, fv, memory)
         )
 
-        # ── REGIME FLAGS ───────────────────────────────────────────────
         regime = self._compute_regime(state, stats, spot, stretch, book, position, memory)
 
-        # ── QUOTE PRICES ───────────────────────────────────────────────
         bid_price, ask_price = self._compute_quote_prices(book, fv, stats, regime, entry_reference)
 
         buy_cap  = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
 
-        # ── BUY TAKERS ─────────────────────────────────────────────────
         buy_orders, buy_cap, pending_buy, swept_ask_prices = self._buy_takers(
             order_depth, fv, position, buy_cap, regime
         )
 
-        # ── SELL TAKERS ────────────────────────────────────────────────
         sell_orders, sell_cap, pending_sell = self._sell_takers(
             order_depth, fv, position, sell_cap, regime
         )
 
-        # ── PASSIVE SIZING ─────────────────────────────────────────────
         buy_size, sell_size, anchor_buy_price, anchor_buy_size, ask_price, anchor_mode = (
             self._compute_passive_sizes(
                 position, buy_cap, sell_cap, pending_buy, pending_sell,
@@ -1511,14 +1244,12 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             )
         )
 
-        # ── GAP TRAP ───────────────────────────────────────────────────
         gap_trap_orders, gap_trap_sell_prices = self._gap_trap_quotes(
             book, position, memory, sell_cap, ask_price,
             stats["trend_ticks"], regime["gap_rebuy_mode"],
         )
         gap_sell_quotes.extend(gap_trap_sell_prices)
 
-        # ── ASSEMBLE ORDERS ────────────────────────────────────────────
         orders: List[Order] = buy_orders + sell_orders
         if buy_size > 0:
             orders.append(Order(self.product, bid_price, buy_size))
@@ -1528,7 +1259,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             orders.append(Order(self.product, ask_price, -sell_size))
         orders.extend(gap_trap_orders)
 
-        # ── MEMORY WRITES ──────────────────────────────────────────────
         memory["last_bid_price"]       = bid_price
         memory["last_ask_price"]       = ask_price
         memory["entry_reference"]      = entry_reference
@@ -1555,7 +1285,6 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
         memory["_gap_sell_px"]            = memory["_active_gap_sell_quotes"]
         memory["_gap_buy_px"]             = memory["_active_gap_buy_quotes"]
 
-        # ── LOGGING ────────────────────────────────────────────────────
         trend_ticks = stats["trend_ticks"]
         gap_trap_armed          = bool(memory.get("gap_trap_armed", 0))
         gap_trap_active         = bool(memory.get("gap_trap_active", 0))
@@ -1618,13 +1347,10 @@ class TheoBestCleanGeneralizedStrategy(StrategyBase):
             out["entry_reference"] = memory["entry_reference"]
         return out
 
-# ── Config ────────────────────────────────────────────────────────────────────
-
 
 # ── prosperity/strategies/round_2/theo/theo_best_clean_generalized_v2.py ──────────
 
 class TheoBestCleanGeneralizedV2Strategy(TheoBestCleanGeneralizedStrategy):
-    """V2: same logic as v1, with tuned startup-build parameters from search."""
 
     pass
 
@@ -1632,7 +1358,6 @@ class TheoBestCleanGeneralizedV2Strategy(TheoBestCleanGeneralizedStrategy):
 # ── prosperity/strategies/round_2/theo/theo_best_clean_generalized_v3.py ──────────
 
 class TheoBestCleanGeneralizedV3Strategy(TheoBestCleanGeneralizedV2Strategy):
-    """V3: suppress regular sells at max inventory when the ask is not rich enough."""
 
     def _max_inventory_sell_guard_active(
         self,
@@ -1699,7 +1424,6 @@ class TheoBestCleanGeneralizedV3Strategy(TheoBestCleanGeneralizedV2Strategy):
 # ── prosperity/strategies/round_2/theo/theo_best_clean_generalized_v4.py ──────────
 
 class TheoBestCleanGeneralizedV4Strategy(TheoBestCleanGeneralizedV3Strategy):
-    """V4: keep 3 slots of reserve unless a deep dump unlocks the reserve."""
 
     def _reserve_inventory_size(self) -> int:
         return max(0, int(self.params.get("dump_reserve_inventory", 3)))
@@ -1822,7 +1546,6 @@ class TheoBestCleanGeneralizedV4Strategy(TheoBestCleanGeneralizedV3Strategy):
 # ── prosperity/strategies/round_2/theo/theo_best_clean_generalized_v5.py ──────────
 
 class TheoBestCleanGeneralizedV5Strategy(TheoBestCleanGeneralizedV4Strategy):
-    """V5: keep v4 intact and add a mirrored buy-side gap trap."""
 
     def _buy_gap_trap_quotes(
         self,

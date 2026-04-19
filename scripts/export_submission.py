@@ -114,6 +114,14 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
         "prosperity/strategies/round_2/theo/theo_best_clean_generalized_v5.py",
         "TheoBestCleanGeneralizedV5Strategy",
     ),
+    "theo_best_clean_generalized_v6": (
+        "prosperity/strategies/round_2/theo/theo_best_clean_generalized_v6.py",
+        "TheoBestCleanGeneralizedV6Strategy",
+    ),
+    "theo_best_clean_generalized_v7": (
+        "prosperity/strategies/round_2/theo/theo_best_clean_generalized_v7.py",
+        "TheoBestCleanGeneralizedV7Strategy",
+    ),
     "theo_root_ask_gap_generalised": (
         "prosperity/strategies/round_2/theo/theo_root_ask_gap_generalised.py",
         "TheoRootAskGapGeneralisedStrategy",
@@ -148,6 +156,8 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_clean_generalized_v3": ["theo_best_clean_generalized_v2"],
     "theo_best_clean_generalized_v4": ["theo_best_clean_generalized_v3"],
     "theo_best_clean_generalized_v5": ["theo_best_clean_generalized_v4"],
+    "theo_best_clean_generalized_v6": ["theo_best_clean_generalized_v5"],
+    "theo_best_clean_generalized_v7": ["theo_best_clean_generalized_v6"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
 }
@@ -172,13 +182,23 @@ def _extract(source: str) -> tuple[list[str], str]:
     skip: set[int] = set()          # 1-indexed line numbers to remove from body
     external: list[str] = []
 
-    # Skip module-level docstring.
-    first = tree.body[0] if tree.body else None
-    if (first and isinstance(first, ast.Expr)
+    def mark_docstring_lines(node: ast.AST) -> None:
+        body = getattr(node, "body", None)
+        if not body:
+            return
+        first = body[0]
+        if (
+            isinstance(first, ast.Expr)
             and isinstance(first.value, ast.Constant)
-            and isinstance(first.value.value, str)):
-        for ln in range(first.lineno, first.end_lineno + 1):
-            skip.add(ln)
+            and isinstance(first.value.value, str)
+        ):
+            for ln in range(first.lineno, first.end_lineno + 1):
+                skip.add(ln)
+
+    # Skip module/class/function docstrings — useful in source, dead weight in export.
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            mark_docstring_lines(node)
 
     for node in tree.body:
         if not isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -205,7 +225,23 @@ def _extract(source: str) -> tuple[list[str], str]:
                 external.append(chunk)
 
     body_lines = [line for i, line in enumerate(src_lines, 1) if i not in skip]
-    body_text = "".join(body_lines).strip()
+
+    compact_lines: list[str] = []
+    previous_blank = False
+    for line in body_lines:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if not stripped:
+            if previous_blank:
+                continue
+            previous_blank = True
+            compact_lines.append("\n")
+            continue
+        previous_blank = False
+        compact_lines.append(line)
+
+    body_text = "".join(compact_lines).strip()
     return external, body_text
 
 

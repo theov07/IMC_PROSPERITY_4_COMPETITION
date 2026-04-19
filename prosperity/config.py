@@ -1046,6 +1046,48 @@ MEMBER_OVERRIDES["theo_best_clean_generalized_v5"] = {
 }
 
 
+MEMBER_OVERRIDES["theo_best_clean_generalized_v6"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["theo_best_clean_generalized_v5"][2]["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v6",
+            startup_price_improve_start_position=56,
+            startup_price_improve_holdback=8,
+            startup_price_improve_hot_threshold=4.0,
+            startup_price_improve_release_threshold=1.5,
+            startup_price_improve_hot_stretch=0.75,
+            startup_price_improve_take_cap=3,
+            startup_price_improve_passive_buy_cap=4,
+            startup_price_improve_anchor_extra_spread=1.0,
+            startup_price_improve_end_ts=3000,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["theo_best_clean_generalized_v7"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["theo_best_clean_generalized_v6"][2]["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v7",
+            startup_recent_low_window=12,
+            startup_recent_low_start_position=48,
+            startup_recent_low_holdback=6,
+            startup_recent_low_gap_threshold=2.0,
+            startup_recent_low_release_gap=0.5,
+            startup_recent_low_hot_stretch=0.4,
+            startup_recent_low_take_cap=2,
+            startup_recent_low_passive_buy_cap=3,
+            startup_recent_low_anchor_extra_spread=1.0,
+            startup_recent_low_buy_edge_floor=1.0,
+            startup_recent_low_end_ts=3000,
+        ),
+    },
+}
+
+
 MEMBER_OVERRIDES["champion_generalized"] = {
     1: {
         # Tibo's mm_first_v2 for ASH_COATED_OSMIUM
