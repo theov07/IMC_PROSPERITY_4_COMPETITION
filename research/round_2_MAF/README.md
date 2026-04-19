@@ -96,7 +96,48 @@ Mesuré sur champion_19april_am :
 - **Agressif** si confiance haute dans V (→ 500-1000)
 - **Défensif** si peur teams sérieuses (→ 2,500-3,000)
 
-## ⚠️ Known critical flaw (to fix)
+## ✅ V mesurée via méthode 80% subsampling (2026-04-19)
+
+**Insight Leo** : live IMC sample ~80% du book → MAF (+25%) ramène à ~100%
+(= conditions backtest). Donc uplift MAF = `PnL(100%) / PnL(80%)`.
+
+Pipeline reproductible (scripts 05 → 08) :
+
+| Script | Rôle |
+|---|---|
+| `05_subsample_80pct.py` | Thinning binomial des volumes à p=0.8 (book + trades) |
+| `06_estimate_maf_live_gain.py` | Backtest 100% vs 80%, ratios uplift par produit |
+| `07_parse_live_logs.py` | Parse les logs IMC R2 → PnL final par run et par produit |
+| `08_maf_breakeven_report.py` | Consolide logs + uplift → gain MAF + break-even bid |
+
+### Résultats (champion_19april_am, 3 seeds subsample, 8 logs live)
+
+**Uplift ratios 100%/80% (backtest realistic) :**
+- OSM : ×1.488 (**+48.8%**) — std ±2.5%
+- IPR : ×1.0004 (**+0.04%**) — quasi-nul (Theo v4 profite pas du +25% car far-quote sur empty-book events)
+- TOTAL : ×1.074 (+7.4%) — dilué par IPR
+
+**PnL live observé (logs IMC R2) :**
+- OSM mean = 2,571 ± 680 XIRECs (n=6)
+- IPR mean = 7,677 ± 298 XIRECs (n=4)
+- Combined total mean = 10,155 ± 333 XIRECs (n=2)
+
+**Gain MAF live estimé :**
+- OSM : +1,255 ± 338
+- IPR : +3 ± 3
+- **TOTAL : +1,258 ± 338 XIRECs** (+12.4% du PnL live total)
+
+### 🏁 Break-even bid = **1,258 XIRECs**
+
+- bid < 1,258 → net positif en espérance (si auction gagnée)
+- Conservateur (−1σ) : **920 XIRECs**
+- Bracket scénarios : 923 — 1,770
+
+**Hypothèse critique** : p_keep = 0.8 (sampling live IMC). À tester avec 0.75 / 0.85.
+
+---
+
+## ⚠️ Ancienne approche (script 01-04) — méthode synthétique +25%
 
 **Script 01 enrichit uniquement le CARNET (prices CSV), PAS les TRADES.**
 
