@@ -1088,6 +1088,23 @@ MEMBER_OVERRIDES["theo_best_clean_generalized_v7"] = {
 }
 
 
+MEMBER_OVERRIDES["theo_best_clean_generalized_v8"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["theo_best_clean_generalized_v7"][2]["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v8",
+            dump_reserve_inventory=5,
+            ask_gap_sell_enable_position=75,
+            gap_trap_floor_position=73,
+            buy_gap_trap_floor_position=75,
+            buy_gap_trap_base_size=3,
+            buy_gap_trap_premium_size=2,
+        ),
+    },
+}
+
+
 MEMBER_OVERRIDES["champion_generalized"] = {
     1: {
         # Tibo's mm_first_v2 for ASH_COATED_OSMIUM
