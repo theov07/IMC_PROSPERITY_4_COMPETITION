@@ -5,16 +5,89 @@ Budget : 50,000 XIRECs, allouer entre 3 piliers (Research / Scale / Speed).
 
 ---
 
-## 🏆 RECOMMANDATION FINALE
+## 🏆 RECOMMANDATION FINALE (level-k adjusted)
 
-### **Research = 13%  ·  Scale = 37%  ·  Speed = 50%**
+### **Research = 12%  ·  Scale = 35%  ·  Speed = 53%**
 
-- Research = 6,500 XIRECs → score **114,366**
-- Scale    = 18,500 XIRECs → multiplicateur **×2.59**
-- Speed    = 25,000 XIRECs → multiplicateur **×0.75** (rank attendu top 19%)
-- **Expected PnL ≈ +171,000 XIRECs**
+- Research = 6,000 XIRECs → score **110,790**
+- Scale    = 17,500 XIRECs → multiplicateur **×2.45**
+- Speed    = 26,500 XIRECs → multiplicateur **~×0.78** (rank top ~15-20%)
+- **Expected PnL ≈ +170,000 XIRECs**
 
-Alternative proche : `(15, 45, 40)` → PnL ~166k (−3% seulement).
+**Pourquoi z=53 et pas z=50 ?**
+
+Le raisonnement level-k (cognitive hierarchy) :
+- **L1** (stratèges qui font notre analyse) → convergent vers z=50
+- **L2** (anticipent que L1 converge sur 50) → vont à z=51-52
+- **L3** (anticipent L2) → z=53+
+- **z=53 = markup anti-focal 50 (+6%) + au-dessus du cluster L2 hypothétique à 52**
+- Analogue au bid MAF à 2173 (markup +8.6% sur focal 2000)
+
+**Coût du markup** : 1,500 XIRECs vs z=50 (= 0.9% de PnL)
+**Gain potentiel** : si ~10-20% du field est L2+ à z=51-52, gain +20-40k
+
+### Alternatives proches
+
+| Profil | (x, y, z) | PnL | Quand choisir |
+|---|---|---|---|
+| **Reco (level-k aware)** | **(12, 35, 53)** | **+170k** | **Par défaut** |
+| Reco L1 (base) | (13, 37, 50) | +171k | Si pas de level-k concern |
+| Alternative R×S plus riche | (15, 45, 40) | +166k | Si field moins sophistiqué |
+| Ultra-safe | (11, 29, 60) | +125k | Si field très sophistiqué |
+
+---
+
+## 📐 MÉTHODE & TECHNIQUES (détaillé)
+
+### Techniques mathématiques utilisées
+
+| Technique | Où utilisée | Pour quoi |
+|---|---|---|
+| **Conditions du premier ordre (KKT)** | scripts 01, 02 | Optimum analytique R/S : `(100-x)/(1+x) = ln(1+x)` → x≈23, y≈77 |
+| **Grid search intégral** | scripts 02, 03, 08 | Exploration exhaustive sur `x ∈ [0, 100]`, `y ∈ [0, 100-x]`, `z ∈ [0, 100-x-y]` |
+| **Monte Carlo sampling** | scripts 03, 04, 07 | Génération de fields synthétiques avec distributions variées |
+| **Rank-based tournament model** | core.py | Modèle de speed avec ties partageant le rank (wiki-spec compliant) |
+| **Error propagation / variance** | script 08 | Stabilité du best response sur 10 seeds (std ±750 PnL) |
+| **Sensitivity analysis** | scripts 04, 08 | Variation des priors, n_teams, sophistication du field |
+| **Cognitive hierarchy (Camerer-Ho-Chong)** | script 09 | Level-k reasoning : L0 naïf → L1 best response → L2 anticipate L1 → spiral |
+| **Focal point theory (Schelling)** | script 05 | Identification des nombres ronds (25, 30, 33, 40, 50) comme points de coordination |
+| **Iterated best response** | script 09 | Simulation L1→L2→L3 avec ajustement du field à chaque niveau |
+
+### Pipeline en 8 étapes
+
+**Étape 1 — Vérification formules (script 01)**
+Technique : comparaison numérique wiki vs UI.
+Confirme : `Research(40) = 160,944 ≈ UI 160,931`, `Scale(25) = ×1.75 ≈ UI ×1.8`.
+
+**Étape 2 — Optimum analytique R/S (script 02)**
+Technique : conditions du premier ordre sur `R(x) × S(y) × m − cost`. À m fixé et B_xy=100, l'équation `(100-x)/(1+x) = ln(1+x)` donne x≈23, y≈77.
+Généralisation : même ratio R/S ≈ 0.35 pour tout B_xy.
+
+**Étape 3 — Quantifier Speed impact**
+Technique : calcul de `max PnL` sous m fixé.
+Résultat : m=0.1 → PnL 24k vs m=0.9 → PnL 618k (facteur 25× !).
+
+**Étape 4 — Tournament best response (script 03)**
+Technique : pour chaque distribution adverse (10 tested), grid search sur z, calcul de rank, m, PnL.
+Résultat : best z varie de 0 (all coord) à 58 (competitive N(50,15)).
+
+**Étape 5 — Ensemble sous priors (script 04)**
+Technique : Monte Carlo sur 6 scénarios avec poids subjectifs, moyenne pondérée du PnL attendu.
+Résultat : ensemble-optimal z=37, PnL 221k (MAIS priors inventés).
+
+**Étape 6 — Focal matching (script 05)**
+Technique : cluster scenarios (20-40% à chaque focal), best response par cluster.
+Observation : plateau PnL plat autour du focal, marge d'erreur faible.
+
+**Étape 7 — Data-driven field (script 07)**
+Technique : sophistication tiers basés sur leaderboard R1 global + France + R2 aggregate.
+Chaque tier (TOP/UPPER_MID/MID/LOWER_MID/BOTTOM) a sa distribution Speed.
+Résultat field : mean=40.3, median=40, p25/p75=30/50.
+
+**Étape 8 — Level-k reasoning (script 09)**
+Technique : cognitive hierarchy simulation.
+Iteration L0→L1→L2→L3 avec injection de stratèges au z optimal du niveau précédent.
+Résultat : L1 converge à z=50, L2 stable à 50, L3 → z=51-52, spiral borné par self-limit.
 
 ---
 
