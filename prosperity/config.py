@@ -1378,6 +1378,142 @@ MEMBER_OVERRIDES["v4_F5_micro"] = {
 #   +248 PnL vs v4_F4, inv ratio 0.214 -> 0.181 (-15%)
 #   Other 3 features tested (wall_mid, taker_cooldown, microprice_size_tilt)
 #   all degraded the backtest, abandoned.
+_V4_F5_PARAMS = {**_V4_F4_BASE_PARAMS, "inventory_aversion_gamma": 0.0015}
+
+# v4_F6_spreadwiden
+MEMBER_OVERRIDES["v4_F6_spreadwiden"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            spread_widen_vol_threshold=2.0,
+            spread_widen_extra_ticks=1,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F6_postarget
+MEMBER_OVERRIDES["v4_F6_postarget"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            inventory_target=5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F6_filltox
+MEMBER_OVERRIDES["v4_F6_filltox"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            fill_toxicity_window=10,
+            fill_toxicity_threshold=0.7,
+            fill_toxicity_frac=0.5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F6_spreadz
+MEMBER_OVERRIDES["v4_F6_spreadz"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            spread_zscore_window=100,
+            spread_zscore_threshold=1.5,
+            spread_zscore_shift=1,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["v4_F6_microfair"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            use_microprice_as_fair=True,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# ── Live-probe variants (test on IMC, backtest-invisible) ───────────────
+
+# Multi-shift probes: test OB_cleared_shift at different depths
+# to find other potential hole levels where aggressors cross.
+MEMBER_OVERRIDES["v4_F5_shift5"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS, OB_cleared_shift=5),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+MEMBER_OVERRIDES["v4_F5_shift30"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS, OB_cleared_shift=30),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+MEMBER_OVERRIDES["v4_F5_shift60"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS, OB_cleared_shift=60),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+MEMBER_OVERRIDES["v4_F5_shift120"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS, OB_cleared_shift=120),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Empty-book probe: ALWAYS post far quotes (not just when book empty)
+# to detect aggressors that cross at extreme depths under normal conditions.
+MEMBER_OVERRIDES["v4_F5_probe"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            probe_distance=80,          # 80 ticks from best
+            probe_qty=1,                # minimal size to limit risk
+            probe_interval_ticks=200,   # every 20s (200 ticks)
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# tick-0 extreme probe: post at ±200 ticks at session start, see if aggressors fill
+MEMBER_OVERRIDES["v4_F5_probe_t0"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            # Multi-distance probe at session start: tests 4 depths in 1 submission.
+            # If any distance fills, we know aggressors cross at that level.
+            probe_t0_distances=[30, 60, 100, 150],
+            probe_t0_qty=1,
+            probe_t0_max_ts=500,   # fire within first 5 ticks
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# momentum follower: take aggressively in direction of recent market-trade flow
+MEMBER_OVERRIDES["v4_F5_follower"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            momentum_window=15,
+            momentum_threshold=0.7,
+            momentum_qty=3,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
 MEMBER_OVERRIDES["v4_F5_champion"] = {
     2: {
         "ASH_COATED_OSMIUM": _osm_v4(
