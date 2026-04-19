@@ -10,11 +10,17 @@ Strategy : `champion_19april_am` (v4_F5 OSM + Theo v4 IPR shift=85)
 ⚠️ **Attention aux unités** : live PnL = simu-test XIRECs, bid MAF = simu-finale XIRECs
 (scaling ×8.9 empirique R1 : 12k test → 107k finale)
 
+### Valuation (V) mesurée
 - **Gain MAF en simu-test : +1,258 ± 338 XIRECs_test (+12.4% du PnL live)**
 - **Gain MAF en simu-finale : +11,194 ± 3,007 XIRECs_finale**
 - **Break-even bid (finale, là où on paie) : 11,194 XIRECs**
-- **Conservateur (−1σ, finale) : 8,186 XIRECs**
 - **100% du gain vient d'OSM** — IPR (Theo v4 far-quote) profite pas du +25% de flow
+
+### 🎯 BID FINAL RETENU : **2,173 XIRECs finale**
+- Hedge tournament-regret contre top competitors (mean estimé 2,800, médiane 2,000)
+- Markup anti-focal sur 2,000 (+173, prime number, évite clusters stratèges)
+- Capture 80% de la valeur MAF si accepté (net +9,021 XIRECs)
+- Reste à 19% de notre V → 81% marge sécurité vs break-even
 
 ---
 
@@ -141,17 +147,112 @@ recherche à faire ensuite.
 
 ---
 
-## Recommandation finale (en XIRECs **finale**, là où se paie le bid)
+## Phase 2 — Médiane adverse (scripts 09-13)
 
-🏆 **Bid dans la zone 8,000 — 13,000 XIRECs_finale**
+Scripts produits :
+- `09_leaderboard_stats.py` : analyse leaderboard R1 global (600 teams) + France (207)
+- `10_r2_field_analysis.py` : analyse R2 field (3,065 teams) + V distribution
+- `11_median_simulator.py` : Monte Carlo médiane, 5 scénarios paramétriques
+- `12_sensitivity_grid.py` : grid `frac_no_bid × frac_wiki` + shading + V threshold
+- `13_final_recommendation.py` : rapport consolidé
 
-- **8,000** : conservateur (−1σ, couvre variance live + uplift)
-- **11,194** : break-even (EV = 0 si gagné)
-- **13,000** : plafond max (garde marge si uplift live < backtest)
+### Données intégrées
 
-Au-delà de 17k, EV négatif même dans le meilleur scénario observé.
-En-dessous de 5k, on laisse énormément de value sur la table.
+- R2 field : 3,065 teams de-duplicated (denominator ferme)
+- Wiki ancres : `return 15` (exemple principal), secondary {10, 19, 20, 21, 34}
+- V model : V_test = 12.2% × PnL_test pour PnL > 7,000 seuil
+- Notre V : 11,194 finale (break-even)
 
-⚠ Ce break-even est **indépendant de la médiane adverse** — c'est le point où
-notre EV = 0 **si on gagne l'auction**. L'optimal sous first-price doit intégrer
-`P(accepté)` et sera **plus bas** (voir phase recherche médiane adverse à venir).
+### Médianes simulées par scénario (finale XIRECs)
+
+| Scénario | Frac no-bid | Frac wiki | Médiane adverse | Bid optimal |
+|---|---|---|---|---|
+| optimistic | 75% | 15% | 0 | 1 |
+| central | 55% | 15% | 0 | 1 |
+| wiki_heavy | 40% | 40% | 15 | 50 |
+| pessimistic | 30% | 10% | 594 | 2,000 |
+| competitive | 15% | 5% | 5,102 | 7,000 |
+
+### Grid sensitivity — optimal bid selon (frac_no_bid × frac_wiki)
+
+```
+frac_no_bid \ wiki   5%    10%    20%    30%
+  20%              6000   5000   5000    100
+  30%              5000   1500    100     25
+  40%              1000    100     25     25
+  50%                25     25     25     25
+  60%                 1      1      1      1
+  70%+                1      1      1      1
+```
+
+**Point de bascule critique : frac_no_bid ≈ 50%.**
+- Au-dessus → médiane=0 → bid 1-25 suffit
+- En-dessous → bid 100-7,000 selon fraction wiki
+
+### Robust bid p75 (beats 75% des cellules) = **100 XIRECs finale**
+### Expected-value optimal (prior uniforme sur scénarios) = **1,000 XIRECs finale**
+
+## Phase 3 — Level-k / Tournament-regret (scripts 14-17)
+
+Scripts produits :
+- `14_participation_sensitivity.py` : variation n_teams → scale-invariance confirmée
+- `15_level_k_reasoning.py` : cognitive hierarchy (Poisson λ) → 2 régimes (stable/spiral)
+- `16_tournament_regret.py` : relative ranking vs top competitors
+- `17_stress_test_2173.py` : contre-argumentation sur bid 2,173
+
+### Raisonnement tournament-regret (clé)
+
+Si on bid bas + top teams bid haut → on loose l'auction, eux gagnent → **on tombe
+de ~V en ranking** (perte asymétrique non capturée par EV absolue).
+
+Top 50-100 teams R2 (rang > 98%) : quasi-tous avec bid() + analyse de V →
+distribution estimée mean 2,800, médiane 2,000 finale.
+
+→ Bid > médiane top ⇒ bid ≥ 2,000.
+
+### Focal point + anti-focal
+
+2,000 = nombre rond focal → cluster de stratèges attendu.
+Markup +173 (prime number) évite aussi les anti-focals 2,100, 2,500.
+
+---
+
+## 🏆 RECOMMANDATION FINALE — Bid = **2,173 XIRECs finale**
+
+### Cheminement du raisonnement (6 étapes)
+
+| # | Étape | Raisonnement | Bid |
+|---|---|---|---|
+| 1 | Break-even brut | V mesurée empiriquement | 11,194 |
+| 2 | EV naïf (scénarios stables) | Monte Carlo médiane field central_eng | 500 |
+| 3 | Tournament-regret | Si on loose ET top teams win → −V en classement | hedge nécessaire |
+| 4 | Estimation top competitors | Top 50-100 R2 : 95% avec bid(), mean ≈ 2,800 | bid > 2,000 |
+| 5 | Focal point | 2,000 = nombre rond, cluster de stratèges | markup +100 à +200 |
+| 6 | Anti-focal prime | 2,173 (prime) évite clusters 2,100 / 2,500 | **2,173** |
+
+### Economics
+
+- **Coût si accepté** : 2,173 XIRECs
+- **Gain si accepté** : V − bid = 11,194 − 2,173 = **+9,021** (80% de V captured)
+- **Coût si rejeté** : 0 (first-price auction)
+- **Marge au break-even** : 81% (9,021/11,194)
+
+### Message Discord équipe (archivé)
+
+> Break-even (V mesurée) = 11,194 finale. Bid proposé = 2,173.
+> Hedge tournament-regret vs top 50-100 teams qui vont bidder ~2,000 mean.
+> Markup anti-focal (+173, prime). Capture 80% de la value si accepté.
+
+### Alternatives conservées (ne pas prendre mais documentées)
+
+- **500** : optimal EV pur (sans effet tournoi) — mais perd relatif si top teams bident haut
+- **5,000** : ultra-safe mais laisse 2,800 sur la table dans scénarios stables
+- **Jamais > 11,194** : break-even absolu, au-delà = EV négatif garanti
+
+### Implémentation
+
+Ajouter dans `class Trader` du submission R2 :
+```python
+def bid(self):
+    return 2173
+```
