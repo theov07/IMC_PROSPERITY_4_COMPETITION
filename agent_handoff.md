@@ -143,10 +143,12 @@ Backtest is ~24-100× more optimistic than simu test in absolute terms.
 - Re-run script 02 to get proper V
 - Expected V range (post-fix) : likely 5-15% of PnL (in %) vs current 0.27%
 
-### 🥈 Priority 2 — Finalize bid
-- Once V is measured properly, run script 04 with correct V
-- Expected optimal bid : probably 500-2000 XIRECs
-- Add `def bid(self): return X` to Trader template in submission
+### ~~🥈 Priority 2 — Finalize bid~~ ✅ DONE
+- V mesurée via 80% subsampling = **11,194 finale (break-even)**
+- Bid décidé = **2,173 XIRECs finale**
+- Raisonnement : hedge tournament-regret + markup anti-focal prime
+- Add `def bid(self): return 2173` to Trader template in submission
+- Analyse complète : `research/round_2_MAF/FINDINGS.md` + scripts 05-17
 
 ### 🥉 Priority 3 — More sims of champion_19april_am
 - Currently 2 sims of each variant (shift=85 and shift=89)

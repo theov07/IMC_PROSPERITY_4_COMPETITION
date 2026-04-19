@@ -111,12 +111,12 @@ See `research/round_2_MAF/` for the pricing pipeline.
 - **Known fix needed** : enrich `trades_round_2_day_X.csv` too, because
   MAF gives +25% of TOTAL order flow (book quotes + aggressive trades).
 
-### Bid recommendation (preliminary)
+### Bid — DÉCIDÉ : **2,173 XIRECs finale**
 
-Uncertainty on V is high. Range:
-- If V ≈ 500 finale XIRECs → bid 100-300
-- If V ≈ 10,000 finale → bid 1,000-1,500
-- If V ≈ 15,000 finale → bid 1,200-1,500
+- V mesurée (break-even) = **11,194 finale**
+- Bid = 2,173 = hedge tournament-regret + anti-focal (prime)
+- Capture 80% de la value MAF si accepté (+9,021 net)
+- Voir `research/round_2_MAF/FINDINGS.md` pour raisonnement complet
 
 **Adversary distribution estimate** (first principles):
 - 35% no bid() method → 0
