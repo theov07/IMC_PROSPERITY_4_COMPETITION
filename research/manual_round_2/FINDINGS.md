@@ -279,13 +279,42 @@ Overbid Speed est presque aussi coûteux que underbid.
 
 ---
 
-## ⚠️ Caveats
+## ⚠️ Caveats et prise en compte des FAQ wiki
 
-1. **Modèle de sophistication par tier est une abstraction** — aucune data directe sur les intentions Speed des teams, seulement proxy via rang R1.
-2. **Le default UI n'existe pas** (confirmé par Léo) — notre premier modèle avait un biais vers 35 qui a été corrigé.
-3. **Variance attendue** : rank exact ± 150 → m ± 0.05 → PnL ± 15-20k.
-4. **Speed multiplier "infinite precision"** (wiki FAQ) : les multiplicateurs réels peuvent légèrement différer des valeurs arrondies qu'on voit dans l'UI.
-5. **Manual submitters ≠ trader.py submitters** : on assume 3,065 (même ordre de grandeur) mais pourrait être différent. Scale-invariance confirme que ça ne change pas la reco.
+### Règles FAQ respectées
+
+**FAQ 1 — "Teams who do not submit Manual will NOT be used for speed ranks"**
+
+✓ Pris en compte : `compute_rank` ne considère QUE les submitters.
+Denominator = manual submitters only (≠ 20k registered).
+Estimation : N ≈ 3,065 (= R2 trader.py count) mais **scale-invariant** :
+
+| n_teams | best z | PnL |
+|---|---|---|
+| 1,000 | 50 | +174k |
+| 3,065 | 50 | +171k |
+| 5,000 | 50 | +172k |
+| 10,000 | 50 | +171k |
+
+→ La taille absolue du denominator n'affecte pas la reco.
+
+**FAQ 2 — "Multipliers retain infinite precision, % inputs are int"**
+
+✓ Code utilise `math.log()` et floats natifs Python (64-bit), pas d'arrondi intermédiaire.
+- `research(x)` = `200_000 * ln(1+x) / ln(101)` — full precision
+- `scale(y)` = `7.0 * y / 100.0` — exact float
+- `speed_mult(rank, N)` = `0.9 - 0.8 * (rank-1)/(N-1)` — exact
+- Seul `pnl` finale est rounded en affichage (pas en calcul).
+
+% inputs (x, y, z) sont bien des entiers ∈ [0, 100] dans mon grid search.
+
+### Autres caveats
+
+1. **Modèle de sophistication par tier = abstraction** — aucune data directe sur les intentions Speed des teams, seulement proxy via rang R1.
+2. **Default UI n'existe pas** (confirmé) — notre premier modèle avait un biais vers 35 qui a été corrigé.
+3. **Variance rank** : rank exact ± 150 → m ± 0.05 → PnL ± 15-20k.
+4. **Composition manual submitters potentiellement différente** : si + de casual que prévu → field plus naïf → best z glisserait vers 40 (au lieu de 50).
+5. **Tie-breaking non-documenté par IMC** : en cas d'égalité exacte à z, on assume que le wiki spec (ties share rank) s'applique strictement. Si IMC utilise un tie-breaking caché (alphabétique, submission time…), notre modèle reste valide en espérance.
 
 ---
 
