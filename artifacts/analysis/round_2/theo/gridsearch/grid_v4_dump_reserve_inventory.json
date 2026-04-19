@@ -1,0 +1,786 @@
+[
+  {
+    "dump_reserve_inventory": 5,
+    "dump_reserve_release_min_position": 75,
+    "ask_gap_sell_enable_position": 75,
+    "gap_trap_floor_position": 73,
+    "total_pnl": 238296.0,
+    "per_day": [
+      79419.0,
+      79488.0,
+      79389.0
+    ],
+    "per_product": {
+      "ASH_COATED_OSMIUM": 0.0,
+      "INTARIAN_PEPPER_ROOT": 238296.0
+    },
+    "robustness": {
+      "submitted_volume": 100482,
+      "traded_volume": 240,
+      "aggressive_qty": 240,
+      "passive_qty": 0,
+      "aggressive_trades": 30,
+      "passive_trades": 0,
+      "tick_count": 60000,
+      "avg_abs_position_ratio": 0.4996125,
+      "near_limit_tick_count": 29977,
+      "near_limit_tick_ratio": 0.49961666666666665,
+      "fill_efficiency": 0.0023884874902967697,
+      "aggressive_share": 1.0,
+      "passive_eval_qty": 0,
+      "passive_adverse_qty": 0,
+      "passive_adverse_rate": null,
+      "passive_post_fill_edge": null,
+      "max_drawdown": 1113840.0,
+      "bid_submitted_volume": 624,
+      "ask_submitted_volume": 99858,
+      "buy_filled_qty": 240,
+      "sell_filled_qty": 0,
+      "bid_fill_efficiency": 0.38461538461538464,
+      "ask_fill_efficiency": 0.0,
+      "quote_metrics": {
+        "active_tick_count": 28898,
+        "avg_quote_age_ticks": 5.638262163471521,
+        "max_quote_age_ticks": 72,
+        "refresh_count": 5387,
+        "bid_refresh_count": 44,
+        "ask_refresh_count": 5344,
+        "stale_tick_count": 19778,
+        "stale_tick_ratio": 0.6844072254135234,
+        "stale_submitted_volume": 60861
+      },
+      "inventory_episode_metrics": {
+        "positive_tick_count": 30000,
+        "negative_tick_count": 0,
+        "flat_tick_count": 30000,
+        "one_sided_tick_ratio": 0.5,
+        "sign_flip_count": 0,
+        "episode_count": 0,
+        "avg_unwind_ticks": null,
+        "max_unwind_ticks": null,
+        "total_unwind_ticks": 0,
+        "open_episode_ticks": 30000
+      },
+      "markout_mean_by_horizon": {
+        "2": -4.564583333333333,
+        "1": -5.4625,
+        "5": -4.89375,
+        "10": -4.84375
+      },
+      "passive_markout_mean_by_horizon": {
+        "2": null,
+        "1": null,
+        "5": null,
+        "10": null
+      },
+      "aggressive_markout_mean_by_horizon": {
+        "2": -4.564583333333333,
+        "1": -5.4625,
+        "5": -4.89375,
+        "10": -4.84375
+      },
+      "markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "passive_markout_eval_qty_by_horizon": {
+        "2": 0,
+        "1": 0,
+        "5": 0,
+        "10": 0
+      },
+      "aggressive_markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "pnl_attribution": {
+        "inventory_drift": 239844.5,
+        "spread_capture": -1548.5,
+        "aggressive_adverse_selection_1": 237.5,
+        "execution_edge_total": -1548.5,
+        "adverse_selection_1": 237.5,
+        "residual_vs_final_pnl": 0.0,
+        "make_edge": 0.0,
+        "take_edge": -1548.5,
+        "passive_adverse_selection_1": 0.0
+      },
+      "conversions_requested": 0
+    }
+  },
+  {
+    "dump_reserve_inventory": 4,
+    "dump_reserve_release_min_position": 76,
+    "ask_gap_sell_enable_position": 76,
+    "gap_trap_floor_position": 74,
+    "total_pnl": 238289.0,
+    "per_day": [
+      79422.0,
+      79491.0,
+      79376.0
+    ],
+    "per_product": {
+      "ASH_COATED_OSMIUM": 0.0,
+      "INTARIAN_PEPPER_ROOT": 238289.0
+    },
+    "robustness": {
+      "submitted_volume": 100496,
+      "traded_volume": 240,
+      "aggressive_qty": 240,
+      "passive_qty": 0,
+      "aggressive_trades": 30,
+      "passive_trades": 0,
+      "tick_count": 60000,
+      "avg_abs_position_ratio": 0.49962874999999995,
+      "near_limit_tick_count": 29977,
+      "near_limit_tick_ratio": 0.49961666666666665,
+      "fill_efficiency": 0.002388154752427957,
+      "aggressive_share": 1.0,
+      "passive_eval_qty": 0,
+      "passive_adverse_qty": 0,
+      "passive_adverse_rate": null,
+      "passive_post_fill_edge": null,
+      "max_drawdown": 1113840.0,
+      "bid_submitted_volume": 638,
+      "ask_submitted_volume": 99858,
+      "buy_filled_qty": 240,
+      "sell_filled_qty": 0,
+      "bid_fill_efficiency": 0.3761755485893417,
+      "ask_fill_efficiency": 0.0,
+      "quote_metrics": {
+        "active_tick_count": 28898,
+        "avg_quote_age_ticks": 5.638262163471521,
+        "max_quote_age_ticks": 72,
+        "refresh_count": 5387,
+        "bid_refresh_count": 44,
+        "ask_refresh_count": 5344,
+        "stale_tick_count": 19778,
+        "stale_tick_ratio": 0.6844072254135234,
+        "stale_submitted_volume": 60867
+      },
+      "inventory_episode_metrics": {
+        "positive_tick_count": 30000,
+        "negative_tick_count": 0,
+        "flat_tick_count": 30000,
+        "one_sided_tick_ratio": 0.5,
+        "sign_flip_count": 0,
+        "episode_count": 0,
+        "avg_unwind_ticks": null,
+        "max_unwind_ticks": null,
+        "total_unwind_ticks": 0,
+        "open_episode_ticks": 30000
+      },
+      "markout_mean_by_horizon": {
+        "2": -4.614583333333333,
+        "1": -5.472916666666666,
+        "5": -4.95,
+        "10": -4.9
+      },
+      "passive_markout_mean_by_horizon": {
+        "2": null,
+        "1": null,
+        "5": null,
+        "10": null
+      },
+      "aggressive_markout_mean_by_horizon": {
+        "2": -4.614583333333333,
+        "1": -5.472916666666666,
+        "5": -4.95,
+        "10": -4.9
+      },
+      "markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "passive_markout_eval_qty_by_horizon": {
+        "2": 0,
+        "1": 0,
+        "5": 0,
+        "10": 0
+      },
+      "aggressive_markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "pnl_attribution": {
+        "inventory_drift": 239845.0,
+        "spread_capture": -1556.0,
+        "aggressive_adverse_selection_1": 242.5,
+        "execution_edge_total": -1556.0,
+        "adverse_selection_1": 242.5,
+        "residual_vs_final_pnl": 0.0,
+        "make_edge": 0.0,
+        "take_edge": -1556.0,
+        "passive_adverse_selection_1": 0.0
+      },
+      "conversions_requested": 0
+    }
+  },
+  {
+    "dump_reserve_inventory": 3,
+    "dump_reserve_release_min_position": 77,
+    "ask_gap_sell_enable_position": 77,
+    "gap_trap_floor_position": 75,
+    "total_pnl": 238282.0,
+    "per_day": [
+      79425.0,
+      79494.0,
+      79363.0
+    ],
+    "per_product": {
+      "ASH_COATED_OSMIUM": 0.0,
+      "INTARIAN_PEPPER_ROOT": 238282.0
+    },
+    "robustness": {
+      "submitted_volume": 100495,
+      "traded_volume": 240,
+      "aggressive_qty": 240,
+      "passive_qty": 0,
+      "aggressive_trades": 30,
+      "passive_trades": 0,
+      "tick_count": 60000,
+      "avg_abs_position_ratio": 0.49964499999999995,
+      "near_limit_tick_count": 29977,
+      "near_limit_tick_ratio": 0.49961666666666665,
+      "fill_efficiency": 0.0023881785163440967,
+      "aggressive_share": 1.0,
+      "passive_eval_qty": 0,
+      "passive_adverse_qty": 0,
+      "passive_adverse_rate": null,
+      "passive_post_fill_edge": null,
+      "max_drawdown": 1113840.0,
+      "bid_submitted_volume": 637,
+      "ask_submitted_volume": 99858,
+      "buy_filled_qty": 240,
+      "sell_filled_qty": 0,
+      "bid_fill_efficiency": 0.37676609105180536,
+      "ask_fill_efficiency": 0.0,
+      "quote_metrics": {
+        "active_tick_count": 28898,
+        "avg_quote_age_ticks": 5.638262163471521,
+        "max_quote_age_ticks": 72,
+        "refresh_count": 5387,
+        "bid_refresh_count": 44,
+        "ask_refresh_count": 5344,
+        "stale_tick_count": 19778,
+        "stale_tick_ratio": 0.6844072254135234,
+        "stale_submitted_volume": 60867
+      },
+      "inventory_episode_metrics": {
+        "positive_tick_count": 30000,
+        "negative_tick_count": 0,
+        "flat_tick_count": 30000,
+        "one_sided_tick_ratio": 0.5,
+        "sign_flip_count": 0,
+        "episode_count": 0,
+        "avg_unwind_ticks": null,
+        "max_unwind_ticks": null,
+        "total_unwind_ticks": 0,
+        "open_episode_ticks": 30000
+      },
+      "markout_mean_by_horizon": {
+        "2": -4.664583333333334,
+        "1": -5.483333333333333,
+        "5": -5.00625,
+        "10": -4.95625
+      },
+      "passive_markout_mean_by_horizon": {
+        "2": null,
+        "1": null,
+        "5": null,
+        "10": null
+      },
+      "aggressive_markout_mean_by_horizon": {
+        "2": -4.664583333333334,
+        "1": -5.483333333333333,
+        "5": -5.00625,
+        "10": -4.95625
+      },
+      "markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "passive_markout_eval_qty_by_horizon": {
+        "2": 0,
+        "1": 0,
+        "5": 0,
+        "10": 0
+      },
+      "aggressive_markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "pnl_attribution": {
+        "inventory_drift": 239845.5,
+        "spread_capture": -1563.5,
+        "aggressive_adverse_selection_1": 247.5,
+        "execution_edge_total": -1563.5,
+        "adverse_selection_1": 247.5,
+        "residual_vs_final_pnl": 0.0,
+        "make_edge": 0.0,
+        "take_edge": -1563.5,
+        "passive_adverse_selection_1": 0.0
+      },
+      "conversions_requested": 0
+    }
+  },
+  {
+    "dump_reserve_inventory": 6,
+    "dump_reserve_release_min_position": 74,
+    "ask_gap_sell_enable_position": 74,
+    "gap_trap_floor_position": 72,
+    "total_pnl": 238280.0,
+    "per_day": [
+      79406.0,
+      79472.0,
+      79402.0
+    ],
+    "per_product": {
+      "ASH_COATED_OSMIUM": 0.0,
+      "INTARIAN_PEPPER_ROOT": 238280.0
+    },
+    "robustness": {
+      "submitted_volume": 100516,
+      "traded_volume": 240,
+      "aggressive_qty": 240,
+      "passive_qty": 0,
+      "aggressive_trades": 32,
+      "passive_trades": 0,
+      "tick_count": 60000,
+      "avg_abs_position_ratio": 0.49959625,
+      "near_limit_tick_count": 29977,
+      "near_limit_tick_ratio": 0.49961666666666665,
+      "fill_efficiency": 0.0023876795734012494,
+      "aggressive_share": 1.0,
+      "passive_eval_qty": 0,
+      "passive_adverse_qty": 0,
+      "passive_adverse_rate": null,
+      "passive_post_fill_edge": null,
+      "max_drawdown": 1113840.0,
+      "bid_submitted_volume": 610,
+      "ask_submitted_volume": 99906,
+      "buy_filled_qty": 240,
+      "sell_filled_qty": 0,
+      "bid_fill_efficiency": 0.39344262295081966,
+      "ask_fill_efficiency": 0.0,
+      "quote_metrics": {
+        "active_tick_count": 28917,
+        "avg_quote_age_ticks": 5.641629491302694,
+        "max_quote_age_ticks": 72,
+        "refresh_count": 5389,
+        "bid_refresh_count": 44,
+        "ask_refresh_count": 5349,
+        "stale_tick_count": 19802,
+        "stale_tick_ratio": 0.6847874952450116,
+        "stale_submitted_volume": 60890
+      },
+      "inventory_episode_metrics": {
+        "positive_tick_count": 30000,
+        "negative_tick_count": 0,
+        "flat_tick_count": 30000,
+        "one_sided_tick_ratio": 0.5,
+        "sign_flip_count": 0,
+        "episode_count": 0,
+        "avg_unwind_ticks": null,
+        "max_unwind_ticks": null,
+        "total_unwind_ticks": 0,
+        "open_episode_ticks": 30000
+      },
+      "markout_mean_by_horizon": {
+        "2": -4.610416666666667,
+        "1": -5.547916666666667,
+        "5": -4.933333333333334,
+        "10": -4.883333333333334
+      },
+      "passive_markout_mean_by_horizon": {
+        "2": null,
+        "1": null,
+        "5": null,
+        "10": null
+      },
+      "aggressive_markout_mean_by_horizon": {
+        "2": -4.610416666666667,
+        "1": -5.547916666666667,
+        "5": -4.933333333333334,
+        "10": -4.883333333333334
+      },
+      "markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "passive_markout_eval_qty_by_horizon": {
+        "2": 0,
+        "1": 0,
+        "5": 0,
+        "10": 0
+      },
+      "aggressive_markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "pnl_attribution": {
+        "inventory_drift": 239844.0,
+        "spread_capture": -1564.0,
+        "aggressive_adverse_selection_1": 232.5,
+        "execution_edge_total": -1564.0,
+        "adverse_selection_1": 232.5,
+        "residual_vs_final_pnl": 0.0,
+        "make_edge": 0.0,
+        "take_edge": -1564.0,
+        "passive_adverse_selection_1": 0.0
+      },
+      "conversions_requested": 0
+    }
+  },
+  {
+    "dump_reserve_inventory": 2,
+    "dump_reserve_release_min_position": 78,
+    "ask_gap_sell_enable_position": 78,
+    "gap_trap_floor_position": 76,
+    "total_pnl": 238275.0,
+    "per_day": [
+      79428.0,
+      79497.0,
+      79350.0
+    ],
+    "per_product": {
+      "ASH_COATED_OSMIUM": 0.0,
+      "INTARIAN_PEPPER_ROOT": 238275.0
+    },
+    "robustness": {
+      "submitted_volume": 100494,
+      "traded_volume": 240,
+      "aggressive_qty": 240,
+      "passive_qty": 0,
+      "aggressive_trades": 30,
+      "passive_trades": 0,
+      "tick_count": 60000,
+      "avg_abs_position_ratio": 0.49966125,
+      "near_limit_tick_count": 29977,
+      "near_limit_tick_ratio": 0.49961666666666665,
+      "fill_efficiency": 0.0023882022807331783,
+      "aggressive_share": 1.0,
+      "passive_eval_qty": 0,
+      "passive_adverse_qty": 0,
+      "passive_adverse_rate": null,
+      "passive_post_fill_edge": null,
+      "max_drawdown": 1113840.0,
+      "bid_submitted_volume": 636,
+      "ask_submitted_volume": 99858,
+      "buy_filled_qty": 240,
+      "sell_filled_qty": 0,
+      "bid_fill_efficiency": 0.37735849056603776,
+      "ask_fill_efficiency": 0.0,
+      "quote_metrics": {
+        "active_tick_count": 28898,
+        "avg_quote_age_ticks": 5.638262163471521,
+        "max_quote_age_ticks": 72,
+        "refresh_count": 5387,
+        "bid_refresh_count": 44,
+        "ask_refresh_count": 5344,
+        "stale_tick_count": 19778,
+        "stale_tick_ratio": 0.6844072254135234,
+        "stale_submitted_volume": 60867
+      },
+      "inventory_episode_metrics": {
+        "positive_tick_count": 30000,
+        "negative_tick_count": 0,
+        "flat_tick_count": 30000,
+        "one_sided_tick_ratio": 0.5,
+        "sign_flip_count": 0,
+        "episode_count": 0,
+        "avg_unwind_ticks": null,
+        "max_unwind_ticks": null,
+        "total_unwind_ticks": 0,
+        "open_episode_ticks": 30000
+      },
+      "markout_mean_by_horizon": {
+        "2": -4.714583333333334,
+        "1": -5.49375,
+        "5": -5.0625,
+        "10": -5.0125
+      },
+      "passive_markout_mean_by_horizon": {
+        "2": null,
+        "1": null,
+        "5": null,
+        "10": null
+      },
+      "aggressive_markout_mean_by_horizon": {
+        "2": -4.714583333333334,
+        "1": -5.49375,
+        "5": -5.0625,
+        "10": -5.0125
+      },
+      "markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "passive_markout_eval_qty_by_horizon": {
+        "2": 0,
+        "1": 0,
+        "5": 0,
+        "10": 0
+      },
+      "aggressive_markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "pnl_attribution": {
+        "inventory_drift": 239846.0,
+        "spread_capture": -1571.0,
+        "aggressive_adverse_selection_1": 252.5,
+        "execution_edge_total": -1571.0,
+        "adverse_selection_1": 252.5,
+        "residual_vs_final_pnl": 0.0,
+        "make_edge": 0.0,
+        "take_edge": -1571.0,
+        "passive_adverse_selection_1": 0.0
+      },
+      "conversions_requested": 0
+    }
+  },
+  {
+    "dump_reserve_inventory": 1,
+    "dump_reserve_release_min_position": 79,
+    "ask_gap_sell_enable_position": 79,
+    "gap_trap_floor_position": 77,
+    "total_pnl": 238268.0,
+    "per_day": [
+      79431.0,
+      79500.0,
+      79337.0
+    ],
+    "per_product": {
+      "ASH_COATED_OSMIUM": 0.0,
+      "INTARIAN_PEPPER_ROOT": 238268.0
+    },
+    "robustness": {
+      "submitted_volume": 100493,
+      "traded_volume": 240,
+      "aggressive_qty": 240,
+      "passive_qty": 0,
+      "aggressive_trades": 30,
+      "passive_trades": 0,
+      "tick_count": 60000,
+      "avg_abs_position_ratio": 0.4996775,
+      "near_limit_tick_count": 29977,
+      "near_limit_tick_ratio": 0.49961666666666665,
+      "fill_efficiency": 0.0023882260455952158,
+      "aggressive_share": 1.0,
+      "passive_eval_qty": 0,
+      "passive_adverse_qty": 0,
+      "passive_adverse_rate": null,
+      "passive_post_fill_edge": null,
+      "max_drawdown": 1113840.0,
+      "bid_submitted_volume": 635,
+      "ask_submitted_volume": 99858,
+      "buy_filled_qty": 240,
+      "sell_filled_qty": 0,
+      "bid_fill_efficiency": 0.3779527559055118,
+      "ask_fill_efficiency": 0.0,
+      "quote_metrics": {
+        "active_tick_count": 28898,
+        "avg_quote_age_ticks": 5.638262163471521,
+        "max_quote_age_ticks": 72,
+        "refresh_count": 5387,
+        "bid_refresh_count": 44,
+        "ask_refresh_count": 5344,
+        "stale_tick_count": 19778,
+        "stale_tick_ratio": 0.6844072254135234,
+        "stale_submitted_volume": 60867
+      },
+      "inventory_episode_metrics": {
+        "positive_tick_count": 30000,
+        "negative_tick_count": 0,
+        "flat_tick_count": 30000,
+        "one_sided_tick_ratio": 0.5,
+        "sign_flip_count": 0,
+        "episode_count": 0,
+        "avg_unwind_ticks": null,
+        "max_unwind_ticks": null,
+        "total_unwind_ticks": 0,
+        "open_episode_ticks": 30000
+      },
+      "markout_mean_by_horizon": {
+        "2": -4.764583333333333,
+        "1": -5.504166666666666,
+        "5": -5.11875,
+        "10": -5.06875
+      },
+      "passive_markout_mean_by_horizon": {
+        "2": null,
+        "1": null,
+        "5": null,
+        "10": null
+      },
+      "aggressive_markout_mean_by_horizon": {
+        "2": -4.764583333333333,
+        "1": -5.504166666666666,
+        "5": -5.11875,
+        "10": -5.06875
+      },
+      "markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "passive_markout_eval_qty_by_horizon": {
+        "2": 0,
+        "1": 0,
+        "5": 0,
+        "10": 0
+      },
+      "aggressive_markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "pnl_attribution": {
+        "inventory_drift": 239846.5,
+        "spread_capture": -1578.5,
+        "aggressive_adverse_selection_1": 257.5,
+        "execution_edge_total": -1578.5,
+        "adverse_selection_1": 257.5,
+        "residual_vs_final_pnl": 0.0,
+        "make_edge": 0.0,
+        "take_edge": -1578.5,
+        "passive_adverse_selection_1": 0.0
+      },
+      "conversions_requested": 0
+    }
+  },
+  {
+    "dump_reserve_inventory": 7,
+    "dump_reserve_release_min_position": 73,
+    "ask_gap_sell_enable_position": 73,
+    "gap_trap_floor_position": 71,
+    "total_pnl": 238264.0,
+    "per_day": [
+      79393.0,
+      79456.0,
+      79415.0
+    ],
+    "per_product": {
+      "ASH_COATED_OSMIUM": 0.0,
+      "INTARIAN_PEPPER_ROOT": 238264.0
+    },
+    "robustness": {
+      "submitted_volume": 100568,
+      "traded_volume": 240,
+      "aggressive_qty": 240,
+      "passive_qty": 0,
+      "aggressive_trades": 32,
+      "passive_trades": 0,
+      "tick_count": 60000,
+      "avg_abs_position_ratio": 0.49957999999999997,
+      "near_limit_tick_count": 29977,
+      "near_limit_tick_ratio": 0.49961666666666665,
+      "fill_efficiency": 0.002386444992442924,
+      "aggressive_share": 1.0,
+      "passive_eval_qty": 0,
+      "passive_adverse_qty": 0,
+      "passive_adverse_rate": null,
+      "passive_post_fill_edge": null,
+      "max_drawdown": 1113840.0,
+      "bid_submitted_volume": 596,
+      "ask_submitted_volume": 99972,
+      "buy_filled_qty": 240,
+      "sell_filled_qty": 0,
+      "bid_fill_efficiency": 0.40268456375838924,
+      "ask_fill_efficiency": 0.0,
+      "quote_metrics": {
+        "active_tick_count": 28917,
+        "avg_quote_age_ticks": 5.641629491302694,
+        "max_quote_age_ticks": 72,
+        "refresh_count": 5389,
+        "bid_refresh_count": 44,
+        "ask_refresh_count": 5349,
+        "stale_tick_count": 19802,
+        "stale_tick_ratio": 0.6847874952450116,
+        "stale_submitted_volume": 60910
+      },
+      "inventory_episode_metrics": {
+        "positive_tick_count": 30000,
+        "negative_tick_count": 0,
+        "flat_tick_count": 30000,
+        "one_sided_tick_ratio": 0.5,
+        "sign_flip_count": 0,
+        "episode_count": 0,
+        "avg_unwind_ticks": null,
+        "max_unwind_ticks": null,
+        "total_unwind_ticks": 0,
+        "open_episode_ticks": 30000
+      },
+      "markout_mean_by_horizon": {
+        "2": -4.65625,
+        "1": -5.633333333333334,
+        "5": -4.972916666666666,
+        "10": -4.922916666666667
+      },
+      "passive_markout_mean_by_horizon": {
+        "2": null,
+        "1": null,
+        "5": null,
+        "10": null
+      },
+      "aggressive_markout_mean_by_horizon": {
+        "2": -4.65625,
+        "1": -5.633333333333334,
+        "5": -4.972916666666666,
+        "10": -4.922916666666667
+      },
+      "markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "passive_markout_eval_qty_by_horizon": {
+        "2": 0,
+        "1": 0,
+        "5": 0,
+        "10": 0
+      },
+      "aggressive_markout_eval_qty_by_horizon": {
+        "2": 240,
+        "1": 240,
+        "5": 240,
+        "10": 240
+      },
+      "pnl_attribution": {
+        "inventory_drift": 239843.5,
+        "spread_capture": -1579.5,
+        "aggressive_adverse_selection_1": 227.5,
+        "execution_edge_total": -1579.5,
+        "adverse_selection_1": 227.5,
+        "residual_vs_final_pnl": 0.0,
+        "make_edge": 0.0,
+        "take_edge": -1579.5,
+        "passive_adverse_selection_1": 0.0
+      },
+      "conversions_requested": 0
+    }
+  }
+]
