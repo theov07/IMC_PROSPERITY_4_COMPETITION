@@ -1012,11 +1012,35 @@ MEMBER_OVERRIDES["theo_best_clean_generalized_v4"] = {
         "INTARIAN_PEPPER_ROOT": _override(
             MEMBER_OVERRIDES["theo_best_clean_generalized_v3"][2]["INTARIAN_PEPPER_ROOT"],
             strategy="theo_best_clean_generalized_v4",
-            dump_reserve_inventory=5,
+            dump_reserve_inventory=3,
             dump_reserve_release_threshold=3.0,
-            dump_reserve_release_min_position=75,
-            ask_gap_sell_enable_position=75,
-            gap_trap_floor_position=73,
+            dump_reserve_release_min_position=77,
+            ask_gap_sell_enable_position=77,
+            gap_trap_floor_position=75,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["theo_best_clean_generalized_v5"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["theo_best_clean_generalized_v4"][2]["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v5",
+            buy_gap_trap_floor_position=77,
+            buy_gap_trap_arm_streak=2,
+            buy_gap_trap_clear_after=4,
+            buy_gap_trap_min_trend=0.0,
+            buy_gap_trap_min_gap=3,
+            buy_gap_trap_top_bid_max=12,
+            buy_gap_trap_max_imbalance=0.05,
+            buy_gap_trap_recent_bid_window=12,
+            buy_gap_trap_fragile_bid_window=6,
+            buy_gap_trap_base_size=2,
+            buy_gap_trap_premium_size=1,
+            buy_gap_trap_premium_streak=2,
+            buy_gap_trap_premium_extra=2,
         ),
     },
 }

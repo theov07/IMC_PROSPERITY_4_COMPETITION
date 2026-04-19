@@ -110,6 +110,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
         "prosperity/strategies/round_2/theo/theo_best_clean_generalized_v4.py",
         "TheoBestCleanGeneralizedV4Strategy",
     ),
+    "theo_best_clean_generalized_v5": (
+        "prosperity/strategies/round_2/theo/theo_best_clean_generalized_v5.py",
+        "TheoBestCleanGeneralizedV5Strategy",
+    ),
     "theo_root_ask_gap_generalised": (
         "prosperity/strategies/round_2/theo/theo_root_ask_gap_generalised.py",
         "TheoRootAskGapGeneralisedStrategy",
@@ -143,6 +147,7 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_clean_generalized_v2": ["theo_best_clean_generalized"],
     "theo_best_clean_generalized_v3": ["theo_best_clean_generalized_v2"],
     "theo_best_clean_generalized_v4": ["theo_best_clean_generalized_v3"],
+    "theo_best_clean_generalized_v5": ["theo_best_clean_generalized_v4"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
 }
