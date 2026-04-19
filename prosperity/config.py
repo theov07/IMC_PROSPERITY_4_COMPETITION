@@ -1242,6 +1242,544 @@ MEMBER_OVERRIDES["v4_F_anchor_asym"] = {
     },
 }
 
+# Variant F2 — v4_F with tuned unwind params (2D grid winner)
+#   Grid searched unwind_take_edge ∈ {0..5} x pct_kept_for_takers ∈ {0.05..0.3}
+#   Best: unwind_take_edge=3.0, pct_kept_for_takers=0.05
+#   vs v4_F (unwind=1.0, kept=0.1): +658 PnL (+1.1%), inv_ratio 0.232 -> 0.209 (-10%)
+#   vs v4_A baseline: +2,391 PnL (+4.1%), inv_ratio 0.282 -> 0.209 (-26%)
+MEMBER_OVERRIDES["v4_F2_tuned_unwind"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=3.0,           # tuned up from 1.0
+            pct_kept_for_takers=0.05,       # tuned down from 0.1 (less strict hard-stop)
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# Variant F3 — v4_F2 + maker-aggressive passive unwind skew
+MEMBER_OVERRIDES["v4_F3_maker_unwind"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            anchor_drift_bound=10.0,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=3.0,
+            pct_kept_for_takers=0.05,
+            # New: maker-aggressive unwind via passive skew (live probe)
+            # Backtest can't validate this (no queue model) — live test only.
+            # Start minimal (1 tick) to limit backtest-visible downside.
+            passive_unwind_skew_ticks=1,   # max 1 tick shift toward mid
+            passive_unwind_trigger=0.3,    # activate above 30% position
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# Variant F4 — v4_F2 + 4 grid search winners cumulated
+#   Grid 1: take_edge_lo=0.3, take_edge_hi=0.8 (vs 0.7/1.0) → +117 PnL
+#   Grid 2: taker_buy/sell thresholds unchanged (baseline optimal)
+#   Grid 3: maker_size_base_pct unchanged (marginal gain, inventory cost too high)
+#   Grid 4: anchor_drift_bound=2 (vs 10) → +2,907 PnL (biggest win)
+#          + fine grid confirmed drift=2 better than 5
+MEMBER_OVERRIDES["v4_F4_champion"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            # From v4_F2 (kept)
+            anchor_price=10000.0,
+            anchor_alpha=0.02,
+            ar_gain=0.3,
+            ar_shift_source="mid_smooth",
+            unwind_take_edge=3.0,
+            pct_kept_for_takers=0.05,
+            # Grid 1 winner
+            take_edge_lo=0.3,
+            take_edge_hi=0.8,
+            # Grid 4 winner
+            anchor_drift_bound=2.0,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# ── v4_F5 feature probes: v4_F4 + 1 new feature each ───────────────────
+# Base = v4_F4 champion params + add ONE new feature per variant to isolate effect.
+
+_V4_F4_BASE_PARAMS = dict(
+    anchor_price=10000.0,
+    anchor_alpha=0.02,
+    anchor_drift_bound=2.0,       # from grid 4
+    ar_gain=0.3,
+    ar_shift_source="mid_smooth",
+    unwind_take_edge=3.0,
+    pct_kept_for_takers=0.05,
+    take_edge_lo=0.3,             # from grid 1
+    take_edge_hi=0.8,
+)
+
+# v4_F5_wall — volume-filtered mid (wall_mid)
+MEMBER_OVERRIDES["v4_F5_wall"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            mid_vol_filter=10,   # filter out book levels with vol < 10
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F5_cooldown — taker cooldown
+MEMBER_OVERRIDES["v4_F5_cooldown"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            taker_cooldown_ticks=5,   # block takers 5 ticks (500ms) after firing
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F5_invbias — inventory-aversion fair value bias (AS-lite)
+MEMBER_OVERRIDES["v4_F5_invbias"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            inventory_aversion_gamma=0.03,   # moderate bias
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F5_micro — microprice size tilt (predictive)
+MEMBER_OVERRIDES["v4_F5_micro"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            microprice_size_gain=0.5,
+            microprice_size_threshold=0.2,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# v4_F5 champion — v4_F4 + inventory_aversion_gamma (AS-lite tuned)
+#   Grid searched gamma ∈ {0.0005..0.03} → optimal 0.0015
+#   +248 PnL vs v4_F4, inv ratio 0.214 -> 0.181 (-15%)
+#   Other 3 features tested (wall_mid, taker_cooldown, microprice_size_tilt)
+#   all degraded the backtest, abandoned.
+_V4_F5_PARAMS = {**_V4_F4_BASE_PARAMS, "inventory_aversion_gamma": 0.0015}
+
+# v4_F6_spreadwiden
+MEMBER_OVERRIDES["v4_F6_spreadwiden"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            spread_widen_vol_threshold=2.0,
+            spread_widen_extra_ticks=1,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F6_postarget
+MEMBER_OVERRIDES["v4_F6_postarget"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            inventory_target=5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F6_filltox
+MEMBER_OVERRIDES["v4_F6_filltox"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            fill_toxicity_window=10,
+            fill_toxicity_threshold=0.7,
+            fill_toxicity_frac=0.5,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# v4_F6_spreadz
+MEMBER_OVERRIDES["v4_F6_spreadz"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            spread_zscore_window=100,
+            spread_zscore_threshold=1.5,
+            spread_zscore_shift=1,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["v4_F6_microfair"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            use_microprice_as_fair=True,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# ── Live-probe variants (test on IMC, backtest-invisible) ───────────────
+
+# Multi-shift probes: test OB_cleared_shift at different depths
+# to find other potential hole levels where aggressors cross.
+MEMBER_OVERRIDES["v4_F5_shift5"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS, OB_cleared_shift=5),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+MEMBER_OVERRIDES["v4_F5_shift30"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS, OB_cleared_shift=30),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+MEMBER_OVERRIDES["v4_F5_shift60"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS, OB_cleared_shift=60),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+MEMBER_OVERRIDES["v4_F5_shift120"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS, OB_cleared_shift=120),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# Empty-book probe: ALWAYS post far quotes (not just when book empty)
+# to detect aggressors that cross at extreme depths under normal conditions.
+MEMBER_OVERRIDES["v4_F5_probe"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            probe_distance=80,          # 80 ticks from best
+            probe_qty=1,                # minimal size to limit risk
+            probe_interval_ticks=200,   # every 20s (200 ticks)
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# tick-0 extreme probe: post at ±200 ticks at session start, see if aggressors fill
+MEMBER_OVERRIDES["v4_F5_probe_t0"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            # Multi-distance probe at session start: tests 4 depths in 1 submission.
+            # If any distance fills, we know aggressors cross at that level.
+            probe_t0_distances=[30, 60, 100, 150],
+            probe_t0_qty=1,
+            probe_t0_max_ts=500,   # fire within first 5 ticks
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+# momentum follower: take aggressively in direction of recent market-trade flow
+MEMBER_OVERRIDES["v4_F5_follower"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            momentum_window=15,
+            momentum_threshold=0.7,
+            momentum_qty=3,
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# ── Champion combined 19-04-2026 AM ─────────────────────────────────────
+# OSM: v4_F5 (anchor_drift=2, unwind=3, invbias=0.0015 — all grid-tuned)
+# IPR: theo_best_clean_generalized_v4 (Theo's live-winning strategy, sub 307401)
+MEMBER_OVERRIDES["champion_19april_am"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(**_V4_F5_PARAMS),
+        "INTARIAN_PEPPER_ROOT": _override(
+            ROUND_2["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v4",
+            # Params lifted from Theo's best live IPR submission (307401)
+            aggravate_cut=0.04,
+            ask_gap_quote_size=8,
+            ask_gap_sell_enable_position=75,
+            ask_spread_bull=9.0,
+            bid_spread_bull=1.0,
+            block_size=200,
+            bootstrap_confidence=0.55,
+            bull_threshold=1.0,
+            chase_threshold=1.25,
+            cheap_buy_boost_per_z=0.18,
+            cheap_residual_z=0.9,
+            dip_threshold=1.0,
+            dump_reserve_inventory=1,
+            dump_reserve_release_min_position=75,
+            dump_reserve_release_threshold=3.0,
+            empty_side_shift=85,
+            fastfill_buy_edge_boost=0.0,
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+            fastfill_end_ts=12000,
+            fastfill_min_passive_buy=10,
+            fastfill_target=80,
+            fv_alpha=0.05,
+            gap_fill_min_premium=35,
+            gap_rebuy_buy_edge=-10.0,
+            gap_rebuy_min_discount=20.0,
+            gap_rebuy_passive_buy=6,
+            gap_rebuy_take_cap=8,
+            gap_rebuy_window=2500,
+            gap_trap_arm_streak=2,
+            gap_trap_base_size=4,
+            gap_trap_clear_after=4,
+            gap_trap_floor_position=73,
+            gap_trap_fragile_ask_window=6,
+            gap_trap_min_gap=3,
+            gap_trap_min_imbalance=-0.05,
+            gap_trap_min_trend=0.0,
+            gap_trap_premium_extra=2,
+            gap_trap_premium_size=3,
+            gap_trap_premium_streak=2,
+            gap_trap_recent_ask_window=12,
+            gap_trap_top_ask_max=12,
+            hold_sell_offset=0,
+            hold_sell_size=0,
+            log_flush_ts=1000,
+            maker_size=80,
+            max_bid_extra_ticks=2,
+            max_inventory_sell_guard_position=80,
+            max_inventory_sell_guard_threshold=0.0,
+            min_completed_blocks=5,
+            neut_spread_ask=5.0,
+            neut_spread_bid=2.0,
+            one_sided_target_gap=24,
+            rebuy_block_ticks=25,
+            reg_horizon=25,
+            reg_r2_cap=0.98,
+            reg_r2_floor=0.85,
+            reg_residual_reversion=0.25,
+            reg_rmse_floor=1.0,
+            resid_inv_per_z=14.0,
+            rich_residual_z=1.0,
+            rich_sell_boost_per_z=0.14,
+            seed_slope=0.1015,
+            short_alpha=0.22,
+            slope_window=20,
+            startup_anchor_bid_spread=1.0,
+            startup_anchor_gap_ticks=1,
+            startup_anchor_size=4,
+            startup_chase_passive_buy=1,
+            startup_chase_take_cap=1,
+            startup_chase_take_edge=4.0,
+            startup_cold_join_ticks=0,
+            startup_cold_passive_buy=3,
+            startup_cold_take_cap=4,
+            startup_cold_take_edge=3.0,
+            startup_delayed_finish_ts=3000,
+            startup_dip_take_edge_boost=1.0,
+            startup_end_ts=30000,
+            startup_fast_passive_buy=8,
+            startup_fast_take_cap=12,
+            startup_fast_target=64,
+            startup_post_pullback_target=72,
+            startup_pre_pullback_target=48,
+            startup_pullback_ticks=2.0,
+            startup_release_stretch=1.0,
+            startup_release_take_cap=8,
+            startup_target=80,
+            strong_trend_ticks=0.9,
+            take_buy_edge_bull=-8.0,
+            take_buy_edge_neut=2.0,
+            take_sell_edge_neut=2.0,
+            target_gap_scale=26.0,
+            tighten_ticks=1,
+            trend_buy_boost_per_tick=0.24,
+            trend_inv_per_tick=16.0,
+            trend_inventory_cap=80,
+            trend_sell_boost_per_tick=0.2,
+            trim_ask_local_edge=0.0,
+            trim_cooldown_ticks=20,
+            trim_extension_threshold=0.75,
+            trim_floor_position=78,
+            trim_reference_slope_weight=0.15,
+            trim_sell_size=1,
+            trim_signal_edge=1.0,
+            trim_start_position=79,
+            trim_take_edge=2.0,
+            trim_take_position=80,
+            trim_take_sell_size=1,
+            trim_take_stretch=999.0,
+            ts_increment=100,
+            last_ts_value=999900,
+            unwind_take_edge=10.0,
+            very_strong_trend_ticks=1.6,
+        ),
+    },
+}
+
+
+# IPR-only variant: Theo v4 with empty_side_shift=89 (matching OSM value)
+# Used to test if OSM's shift value transposes to IPR.
+MEMBER_OVERRIDES["ipr_theo_v4_shift89"] = {
+    2: {
+        "ASH_COATED_OSMIUM": None,   # OSM disabled
+        "INTARIAN_PEPPER_ROOT": _override(
+            ROUND_2["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v4",
+            # Same as champion_19april_am IPR params except empty_side_shift=89
+            aggravate_cut=0.04,
+            ask_gap_quote_size=8,
+            ask_gap_sell_enable_position=75,
+            ask_spread_bull=9.0,
+            bid_spread_bull=1.0,
+            block_size=200,
+            bootstrap_confidence=0.55,
+            bull_threshold=1.0,
+            chase_threshold=1.25,
+            cheap_buy_boost_per_z=0.18,
+            cheap_residual_z=0.9,
+            dip_threshold=1.0,
+            dump_reserve_inventory=1,
+            dump_reserve_release_min_position=75,
+            dump_reserve_release_threshold=3.0,
+            empty_side_shift=89,   # ← CHANGED from 85 to 89 (match OSM)
+            fastfill_buy_edge_boost=0.0,
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+            fastfill_end_ts=12000,
+            fastfill_min_passive_buy=10,
+            fastfill_target=80,
+            fv_alpha=0.05,
+            gap_fill_min_premium=35,
+            gap_rebuy_buy_edge=-10.0,
+            gap_rebuy_min_discount=20.0,
+            gap_rebuy_passive_buy=6,
+            gap_rebuy_take_cap=8,
+            gap_rebuy_window=2500,
+            gap_trap_arm_streak=2,
+            gap_trap_base_size=4,
+            gap_trap_clear_after=4,
+            gap_trap_floor_position=73,
+            gap_trap_fragile_ask_window=6,
+            gap_trap_min_gap=3,
+            gap_trap_min_imbalance=-0.05,
+            gap_trap_min_trend=0.0,
+            gap_trap_premium_extra=2,
+            gap_trap_premium_size=3,
+            gap_trap_premium_streak=2,
+            gap_trap_recent_ask_window=12,
+            gap_trap_top_ask_max=12,
+            hold_sell_offset=0,
+            hold_sell_size=0,
+            log_flush_ts=1000,
+            maker_size=80,
+            max_bid_extra_ticks=2,
+            max_inventory_sell_guard_position=80,
+            max_inventory_sell_guard_threshold=0.0,
+            min_completed_blocks=5,
+            neut_spread_ask=5.0,
+            neut_spread_bid=2.0,
+            one_sided_target_gap=24,
+            rebuy_block_ticks=25,
+            reg_horizon=25,
+            reg_r2_cap=0.98,
+            reg_r2_floor=0.85,
+            reg_residual_reversion=0.25,
+            reg_rmse_floor=1.0,
+            resid_inv_per_z=14.0,
+            rich_residual_z=1.0,
+            rich_sell_boost_per_z=0.14,
+            seed_slope=0.1015,
+            short_alpha=0.22,
+            slope_window=20,
+            startup_anchor_bid_spread=1.0,
+            startup_anchor_gap_ticks=1,
+            startup_anchor_size=4,
+            startup_chase_passive_buy=1,
+            startup_chase_take_cap=1,
+            startup_chase_take_edge=4.0,
+            startup_cold_join_ticks=0,
+            startup_cold_passive_buy=3,
+            startup_cold_take_cap=4,
+            startup_cold_take_edge=3.0,
+            startup_delayed_finish_ts=3000,
+            startup_dip_take_edge_boost=1.0,
+            startup_end_ts=30000,
+            startup_fast_passive_buy=8,
+            startup_fast_take_cap=12,
+            startup_fast_target=64,
+            startup_post_pullback_target=72,
+            startup_pre_pullback_target=48,
+            startup_pullback_ticks=2.0,
+            startup_release_stretch=1.0,
+            startup_release_take_cap=8,
+            startup_target=80,
+            strong_trend_ticks=0.9,
+            take_buy_edge_bull=-8.0,
+            take_buy_edge_neut=2.0,
+            take_sell_edge_neut=2.0,
+            target_gap_scale=26.0,
+            tighten_ticks=1,
+            trend_buy_boost_per_tick=0.24,
+            trend_inv_per_tick=16.0,
+            trend_inventory_cap=80,
+            trend_sell_boost_per_tick=0.2,
+            trim_ask_local_edge=0.0,
+            trim_cooldown_ticks=20,
+            trim_extension_threshold=0.75,
+            trim_floor_position=78,
+            trim_reference_slope_weight=0.15,
+            trim_sell_size=1,
+            trim_signal_edge=1.0,
+            trim_start_position=79,
+            trim_take_edge=2.0,
+            trim_take_position=80,
+            trim_take_sell_size=1,
+            trim_take_stretch=999.0,
+            ts_increment=100,
+            last_ts_value=999900,
+            unwind_take_edge=10.0,
+            very_strong_trend_ticks=1.6,
+        ),
+    },
+}
+
+
+MEMBER_OVERRIDES["v4_F5_champion"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F4_BASE_PARAMS,
+            inventory_aversion_gamma=0.0015,   # new winner
+        ),
+        "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
 # Variant G — all Leo mechanisms combined
 MEMBER_OVERRIDES["v4_G_all"] = {
     2: {
