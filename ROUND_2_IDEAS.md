@@ -1,161 +1,172 @@
 # Round 2 — Alpha Ideas & Roadmap
 
-## Current state (v4_F2 — best confirmed backtest)
+## Current champion state (19 April AM)
 
-- **60,383 PnL OSM 3j** (vs baseline 57,992, +4.1%)
-- inventory ratio **0.209** (vs baseline 0.282, −26%)
-- Params tuned: `unwind_take_edge=3.0`, `pct_kept_for_takers=0.05`
-- Live alpha (far-quote at 89 ticks on empty book) preserved in `_gap_exploit`
+**`champion_19april_am`** — combined OSM + IPR
 
-## v4_F3 (maker-aggressive unwind) — ⛔ ABANDONED
+| Product | Strategy | Key params |
+|---|---|---|
+| ASH_COATED_OSMIUM | `mm_first_v4_combo` (v4_F5) | anchor_drift=2, unwind=3.0, kept=0.05, invbias=0.0015, take_edge_lo=0.3/hi=0.8 |
+| INTARIAN_PEPPER_ROOT | `theo_best_clean_generalized_v4` | empty_side_shift=85 (Theo default) |
 
-- Adds `_asym_passive_skew` helper (shifts passives toward mid on unwind side)
-- Tested live on IMC: **+132 MM core vs baseline v4_F, only +13 vs v4_F2** (within noise)
-- Backtest: −821 PnL (artifact — backtest has no queue-priority model)
-- **Conclusion: abandon** — complexity not justified by marginal live edge
-- v4_F2 is mechanically equivalent for the far-quote alpha (even more permissive
-  via `pct_kept_for_takers=0.05`), so we don't lose anything by staying on v4_F2
+- **Backtest 3 days** : 301,688 PnL (OSM 63,420 + IPR 238,268)
+- **Live simu test** : 3,000-10,000 per sim (high variance on far-quote fills)
+- **Slim export** : 92.4 KB (under 100KB IMC limit)
 
-## Live A/B test analysis (3 submissions, 1 simu each)
+Variants uploaded:
+- `champion_19april_am` (IPR shift=85)
+- `champion_19april_am_s89` (IPR shift=89, test)
 
-After isolating the far-quote alpha (fills at |price - 10000| > 30 ticks):
+---
 
-| Config | Total PnL | Far fills | Far-PnL | **MM Core PnL** |
-|---|---|---|---|---|
-| v4_F (unwind=1.0, kept=0.1) | 2,926 | 3 | 1,321 | 1,605 |
-| **v4_F2 (unwind=3.0, kept=0.05)** | **1,724** | **0** | **0** | **1,724** |
-| v4_F3 (skew=1, trigger=0.3) | 2,706 | 2 | 969 | 1,737 |
+## OSM progression summary
 
-**Key learnings**:
-1. Total PnL dominated by far-quote lottery (variance massive on 0-3 fills)
-2. MM core stable at 1,605-1,737 across configs (spread only 8%)
-3. v4_F2 tuned unwind confirmed in live: +119 MM core vs baseline
-4. v4_F3 maker edge too small to justify; abandon
+| Config | PnL OSM 3j | Δ baseline | inv |
+|---|---|---|---|
+| Baseline Tibo v3 | 57,992 | — | 0.282 |
+| v4_F | 59,725 | +3.0% | 0.232 |
+| v4_F2 (tuned unwind) | 60,383 | +4.1% | 0.209 |
+| v4_F4 (grid winners) | 63,172 | +8.9% | 0.214 |
+| **v4_F5 champion** 🏆 | **63,420** | **+9.4%** | **0.181** |
+
+**v4_F5 = v4_F4 + `inventory_aversion_gamma=0.0015` (AS-lite)**
 
 ---
 
 ## Grid searches — ALL COMPLETE
 
-| Grid | Winner | Δ PnL | Adopted in v4_F4 |
+| Grid | Winner | Δ PnL | In champion |
 |---|---|---|---|
-| 1: `take_edge_lo` × `take_edge_hi` | `lo=0.3, hi=0.8` | +117 | ✅ |
-| 2: `taker_buy_threshold` × `taker_sell_threshold` | baseline 9990/10025 | 0 | — |
-| 3: `mid_smooth_half_life` × `maker_size_base_pct` | marginal (+47 but inv+7%) | rejected | ❌ |
-| 4: `anchor_drift_bound` × `ar_gain` | `drift=2, ar_gain=0.3` | **+2,907** | ✅ |
-
-## v4_F5 champion (latest)
-
-- **63,420 PnL** (+248 vs v4_F4, +9.4% vs baseline)
-- inventory ratio **0.181** (−37% vs baseline, best yet)
-- One new feature added: `inventory_aversion_gamma=0.0015` (Avellaneda-Stoikov lite)
-  - Grid searched γ ∈ {0.0005..0.03}, sweet spot at 0.0015
-- Other 3 features tested but abandoned:
-  - wall_mid (volume-filtered fair value): ALL values > 0 degrade
-  - taker_cooldown: ALL values > 1 degrade
-  - microprice_size_tilt: ALL values > 0 degrade
-
-## v4_F4 champion (previous best)
-
-- **63,172 PnL OSM 3j** (+5,180 vs baseline, +8.9%)
-- inventory ratio 0.214 (baseline 0.282, -24%)
-- Cumulative gains from grid 1 + grid 4: +2,789 (92% additivity vs expected +3,024)
-- Params vs v4_F2: `take_edge_lo=0.3, take_edge_hi=0.8, anchor_drift_bound=2.0`
-- Live alpha preserved: `OB_cleared_shift=89` far-quote intact
+| 1: take_edge_lo × take_edge_hi | lo=0.3, hi=0.8 | +117 | ✅ |
+| 2: taker_buy × taker_sell | baseline 9990/10025 | 0 | — |
+| 3: half_life × maker_size | marginal (+47 but inv+7%) | rejected | ❌ |
+| 4: anchor_drift × ar_gain | drift=2, ar_gain=0.3 | **+2,907** | ✅ (biggest win) |
+| 4-fine: anchor_drift | drift=2 > 3 > 5 | +118 | ✅ |
+| 5: unwind_take_edge + pct_kept | unwind=3, kept=0.05 | +658 | ✅ |
+| 6-10: (various) | see below | mostly dead | — |
 
 ---
 
-## Ideas to implement after grids (ranked by priority)
+## Ideas tested in order — full tally
 
-### 🔥 High priority (backtestable, orthogonal to current features)
+### ✅ WINNERS (in v4_F5 champion)
 
-**Idea 1 — Volume-filtered mid ("wall mid")**
-- Compute mid from book levels with volume ≥ threshold (e.g. 10)
-- Excludes toxic small orders from fair value
-- New params: `mid_vol_filter=False` (default off), `mid_vol_threshold=10`
-- Implementation: new helper `_compute_wall_mid(book, threshold)` that scans
-  `book.bid_levels` / `ask_levels` and returns filtered mid
-- Use as input to `_compute_anchor_signal` and `_fire_takers`
+1. **Anchor drift bound = 2** (grid 4) — **+2,907 PnL** 🏆
+2. **Unwind take edge = 3.0** + **pct_kept = 0.05** — **+658 PnL**
+3. **take_edge_lo = 0.3** + **hi = 0.8** — +117 PnL
+4. **Inventory aversion γ = 0.0015** (AS-lite fair value bias) — +248 PnL
 
-**Idea 2 — Size scaling by microprice deviation**
-- Signal: `delta = microprice − mid`
-- If `delta > 0` (bid-heavy), expect price up → increase sell_size, reduce buy_size
-- If `delta < 0`, inverse
-- New params: `microprice_size_gain=0.0` (off), `microprice_size_threshold=0.2`
-- Predictive, not just reactive (unlike current z-score size tilt which is mean-rev)
+### ❌ DEAD ENDS (tested, all fail)
 
-**Idea 3 — Taker cooldown**
-- After firing a taker on side X, block takers on same side for N ticks
-- Prevents overtrading in volatile sequences (backtest fires 5 takers then all revert)
-- New params: `taker_cooldown_ticks=0` (default off)
-- Memory: `_last_taker_buy_ts`, `_last_taker_sell_ts`
+**Backtestable tests that failed**:
+- Pure fixed anchor (v4_B) — −2,690 PnL
+- Wall mid (volume-filtered fair value, any threshold) — all dead
+- Taker cooldown (any value ≥ 2) — all dead
+- Microprice size tilt (any gain) — all dead
+- Spread widening (any threshold) — dead
+- Soft position target ≠ 0 — dead
+- Fill-rate toxicity filter — dead
+- Spread z-score skew — dead
+- Toxic flow filter — dead
+- Jump filter — dead
+- Maker-aggressive passive skew (v4_F3, kept as opt-in, not in champion)
 
-**Idea 4 — Fair value biased by inventory (Avellaneda-Stoikov lite)**
-- Shift fair value toward zero-inventory: `fair_biased = fair − gamma × position × sigma`
-- Alternative to current asymmetric take edges (maker-style instead of taker-style)
-- New params: `inventory_aversion_gamma=0.0` (off)
-- More subtle than `unwind_take_edge`, captures more spread
+**Live-only tests (no backtest signal, validated live)**:
+- Multi-shift far-quote (5, 30, 60, 89, 120) — only 89 viable
+- Empty-book probe (always-on at 80) — no additional alpha
+- Probe_t0 (multi-distance at session start) — 0 fills
+- Momentum follower — MM core −76 (within noise)
+- shift=5 on OB_cleared — 0 far fills (too shallow)
+- shift=89 on IPR — comparable to 85, inconclusive
 
-### 🟡 Medium priority
+### Notable helper code kept but disabled
+All opt-in helpers in `mm_first_v4_combo.py` (disabled by default params):
+- `_compute_base_mid` (wall mid)
+- `_probe_quotes` / `_probe_tick0`
+- `_apply_momentum_follower`
+- `_apply_toxic_flow` / `_apply_jump_filter` / `_apply_fill_rate_toxicity`
+- `_taker_cooldown_active`
+- `_microprice_size_tilt`
+- `_apply_spread_widening` / `_apply_spread_zscore_skew`
+- `_asym_passive_skew`
+- `_apply_eod_flatten`
 
-**Idea 5 — Adaptive spread widening in high vol**
-- When `sigma > spread_widen_threshold`, post at `best_ask − 2` instead of `−1`
-- Reduces adverse selection in volatile regimes
-- New params: `spread_widen_vol_threshold=0`, `spread_widen_extra_ticks=0`
-
-**Idea 6 — Soft position target ≠ 0**
-- If OSM has a slight drift (confirm via data), target a small biased position
-- Grid search on `inventory_target` (default 0)
-
-**Idea 7 — Order flow toxicity via fill-rate asymmetry**
-- Track recent fill rate on bid vs ask sides
-- If our asks fill 5× faster than our bids → market dropping → pause bid quoting
-- New helper `_fill_rate_toxicity`
-
-**Idea 8 — Mean-rev z-score on SPREAD (not mid)**
-- Wide spread (z > 2) often reverts → post more aggressively in this state
-- Opposite of current behavior which tightens in high vol
-
-### 🔴 Live-only (cannot backtest)
-
-**Idea 9 — Multi-shift far-quote probing**
-- Upload 3 variants with `OB_cleared_shift` ∈ {50, 70, 110}
-- Find the sweet spot where aggressors cross
-
-**Idea 10 — Empty-book probe**
-- Post a probe quote far from mid at t=0 to measure aggressor behavior
-- Passive, no downside
-
-**Idea 11 — Bot-follower**
-- Analyze live logs for consistently profitable participants
-- Follow their direction with delay
+These are dead weight for champion but live in the combo source for potential
+future reuse. They're stripped by `scripts/_strip_dead_helpers.py` during export.
 
 ---
 
-## Dead ends (don't revisit)
+## MAF (Market Access Fee) — IN PROGRESS
 
-- **Pure fixed anchor** (v4_B: −2,690 PnL vs baseline)
-- **Toxic flow filter** (noise in backtest)
-- **Jump filter** (noise in backtest)
-- **Maker-aggressive passive skew (v4_F3)**: live-tested, +13 MM core vs v4_F2
-  (within noise), backtest -821, complexity not justified — helper stays in code
-  as opt-in but not used in champion config
+See `research/round_2_MAF/` for the pricing pipeline.
+
+### Current state
+
+- **V measurement** (V = MAF value in XIRECs) :
+  - Synthetic book enrichment (+25% book depth)
+  - ΔPnL backtest: +967 ± 333 = **+0.27% of baseline**
+  - **Issue** : synthetic doesn't enrich TRADES, only book quotes
+  - → V is UNDERESTIMATED
+
+- **Known fix needed** : enrich `trades_round_2_day_X.csv` too, because
+  MAF gives +25% of TOTAL order flow (book quotes + aggressive trades).
+
+### Bid recommendation (preliminary)
+
+Uncertainty on V is high. Range:
+- If V ≈ 500 finale XIRECs → bid 100-300
+- If V ≈ 10,000 finale → bid 1,000-1,500
+- If V ≈ 15,000 finale → bid 1,200-1,500
+
+**Adversary distribution estimate** (first principles):
+- 35% no bid() method → 0
+- 25% wiki copy-paste → 15
+- 15% round small → 50-500
+- 10% value-anchored low → 1k-5k
+- 10% value-anchored high → 5k-20k
+- 5% aggressive → 20k+
+
+Simulated median adverse bid: **~15-100 XIRECs**
+
+### Next steps for MAF
+
+1. Fix script 01 to also enrich trades CSVs
+2. Re-run script 02 → get proper V
+3. Run script 04 with final V → final bid recommendation
+4. Add `def bid(self): return X` to Trader template
 
 ---
 
-## Implementation workflow for each idea
+## Implementation workflow (for future ideas)
 
 1. Add helper in `mm_first_v4_combo.py` with opt-in params (no-op default)
-2. Integrate in `compute_orders` at correct position (respect ordering — asym_passive_skew must stay AFTER _gap_exploit to preserve far-quote)
+2. Integrate in `compute_orders` at correct position (respect ordering)
 3. Create config variant in `config.py` with feature enabled
-4. Backtest on R2 days -1/0/1, compare per-product vs v4_F2
+4. Backtest on R2 days -1/0/1, compare per-product vs current champion
 5. Grid search params if positive signal
-6. If confirmed winner: merge into v4_F4 champion + export for IMC
+6. If confirmed winner: merge into champion + export for IMC
+7. Run minify + strip pipeline to stay under 100KB
 
 ---
 
-## Scaling reminders
+## Scaling reminders (CRITICAL)
 
-- Backtest (realistic mode) ≈ 24× too optimistic vs live
-- Simu test IMC → Simu finale IMC ≈ 10× scaling
-- **Rule**: always compare strategies **in ratio**, never in absolute PnL across regimes
-- Per-product PnL (not aggregated) is the source of truth for tuning
+- **Backtest (realistic mode)** ≈ 24-100× too optimistic vs live absolute
+- **Simu test IMC → Simu finale IMC** ≈ ×8.9 scaling
+- **Rule** : always compare strategies **in ratio (%)**, never in absolute PnL across regimes
+- **Per-product PnL** (not aggregated) is the source of truth for tuning
+- **Far-quote variance** dominates total PnL in live (0-3 fills/sim, ±1500 PnL)
+- MM core is the stable signal to optimize
+
+---
+
+## Files to know
+
+| What | Where |
+|---|---|
+| Champion config | `MEMBER_OVERRIDES["champion_19april_am"]` in `prosperity/config.py` |
+| OSM strategy code | `prosperity/strategies/round_2/leo/mm_first_v4_combo.py` |
+| IPR strategy code | `prosperity/strategies/round_2/theo/theo_best_clean_generalized.py` |
+| Slim submission | `artifacts/submissions/round_2/champion_19april_am_SLIM.py` |
+| MAF research | `research/round_2_MAF/` |
+| Synthetic data (incomplete) | `data/round_2_synthetic_s{42,43,44}/` |
