@@ -1927,6 +1927,345 @@ MEMBER_OVERRIDES["v4_G_all"] = {
 }
 
 
+
+# ── CHAMPION FINAL v7 : OSM full_capacity + IPR v7_continuous ──
+MEMBER_OVERRIDES["champion_final_v7"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            full_capacity_on_empty=True,  # post full sell_cap / buy_cap when OB empty
+        ),
+        "INTARIAN_PEPPER_ROOT": _override(
+            ROUND_2["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v7",
+            # Base Theo params (from champion_19april_am live winner)
+            aggravate_cut=0.04,
+            ask_gap_quote_size=160,
+            ask_gap_sell_enable_position=75,
+            ask_spread_bull=9.0,
+            bid_spread_bull=1.0,
+            block_size=200,
+            bootstrap_confidence=0.55,
+            bull_threshold=1.0,
+            chase_threshold=1.25,
+            cheap_buy_boost_per_z=0.18,
+            cheap_residual_z=0.9,
+            dip_threshold=1.0,
+            dump_reserve_inventory=6,
+            dump_reserve_release_min_position=74,
+            dump_reserve_release_threshold=3.0,
+            # Option B trim: reserve permanente de 5 unités maintenue post-fill
+            reserve_target_position=75,
+            reserve_trim_per_tick=3,
+            empty_side_shift=85,
+            empty_side_shift_buy=85,
+            empty_side_shift_sell=89,
+            standing_deep_qty=15,
+            startup_recent_low_crash_drop_ticks=3.0,
+            startup_recent_low_start_position=48,
+            startup_recent_low_window=12,
+            startup_recent_low_gap_threshold=2.0,
+            startup_recent_low_release_gap=0.5,
+            startup_recent_low_hot_stretch=0.4,
+            startup_recent_low_take_cap=2,
+            startup_recent_low_passive_buy_cap=3,
+            startup_recent_low_anchor_extra_spread=1.0,
+            startup_recent_low_buy_edge_floor=1.0,
+            startup_recent_low_holdback=6,
+            startup_recent_low_end_ts=3000,
+            fastfill_buy_edge_boost=0.0,
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+            fastfill_end_ts=12000,
+            fastfill_min_passive_buy=10,
+            fastfill_target=80,
+            fv_alpha=0.05,
+            gap_fill_min_premium=35,
+            gap_rebuy_buy_edge=-10.0,
+            gap_rebuy_min_discount=20.0,
+            gap_rebuy_passive_buy=6,
+            gap_rebuy_take_cap=8,
+            gap_rebuy_window=2500,
+            gap_trap_arm_streak=2,
+            gap_trap_base_size=4,
+            gap_trap_clear_after=4,
+            gap_trap_floor_position=73,
+            gap_trap_fragile_ask_window=6,
+            gap_trap_min_gap=3,
+            gap_trap_min_imbalance=-0.05,
+            gap_trap_min_trend=0.0,
+            gap_trap_premium_extra=2,
+            gap_trap_premium_size=3,
+            gap_trap_premium_streak=2,
+            gap_trap_recent_ask_window=12,
+            gap_trap_top_ask_max=12,
+            hold_sell_offset=0,
+            hold_sell_size=0,
+            log_flush_ts=1000,
+            maker_size=80,
+            max_bid_extra_ticks=2,
+            max_inventory_sell_guard_position=80,
+            max_inventory_sell_guard_threshold=0.0,
+            min_completed_blocks=5,
+            neut_spread_ask=5.0,
+            neut_spread_bid=2.0,
+            one_sided_target_gap=24,
+            rebuy_block_ticks=25,
+            reg_horizon=25,
+            reg_r2_cap=0.98,
+            reg_r2_floor=0.85,
+            reg_residual_reversion=0.25,
+            reg_rmse_floor=1.0,
+            resid_inv_per_z=14.0,
+            rich_residual_z=1.0,
+            rich_sell_boost_per_z=0.14,
+            seed_slope=0.1015,
+            short_alpha=0.22,
+            slope_window=20,
+            startup_anchor_bid_spread=1.0,
+            startup_anchor_gap_ticks=1,
+            startup_anchor_size=4,
+            startup_chase_passive_buy=1,
+            startup_chase_take_cap=1,
+            startup_chase_take_edge=4.0,
+            startup_cold_join_ticks=0,
+            startup_cold_passive_buy=3,
+            startup_cold_take_cap=4,
+            startup_cold_take_edge=3.0,
+            startup_delayed_finish_ts=3000,
+            startup_dip_take_edge_boost=1.0,
+            startup_end_ts=30000,
+            startup_fast_passive_buy=8,
+            startup_fast_take_cap=12,
+            startup_fast_target=64,
+            startup_post_pullback_target=72,
+            startup_pre_pullback_target=48,
+            startup_pullback_ticks=2.0,
+            startup_release_stretch=1.0,
+            startup_release_take_cap=8,
+            startup_target=80,
+            strong_trend_ticks=0.9,
+            take_buy_edge_bull=-8.0,
+            take_buy_edge_neut=2.0,
+            take_sell_edge_neut=2.0,
+            target_gap_scale=26.0,
+            tighten_ticks=1,
+            trend_buy_boost_per_tick=0.24,
+            trend_inv_per_tick=16.0,
+            trend_inventory_cap=80,
+            trend_sell_boost_per_tick=0.2,
+            trim_ask_local_edge=0.0,
+            trim_cooldown_ticks=20,
+            trim_extension_threshold=0.75,
+            trim_floor_position=78,
+            trim_reference_slope_weight=0.15,
+            trim_sell_size=1,
+            trim_signal_edge=1.0,
+            trim_start_position=79,
+            trim_take_edge=2.0,
+            trim_take_position=80,
+            trim_take_sell_size=1,
+            trim_take_stretch=999.0,
+            ts_increment=100,
+            last_ts_value=999900,
+            unwind_take_edge=10.0,
+            very_strong_trend_ticks=1.6,
+        ),
+    },
+}
+
+# ── CHAMPION FINAL v7 WITH OSM STANDING DEEPS ──
+# Identical to champion_final_v7 except OSM posts preemptive deep quotes
+# at last_best_bid - 89 and last_best_ask + 89 every tick (qty=15).
+import copy as _copy_cfv7
+MEMBER_OVERRIDES["champion_final_v7_osm_deeps"] = _copy_cfv7.deepcopy(
+    MEMBER_OVERRIDES["champion_final_v7"]
+)
+# OSM: preemptive standing deeps at last ± 89 every tick
+MEMBER_OVERRIDES["champion_final_v7_osm_deeps"][2]["ASH_COATED_OSMIUM"].params[
+    "osm_standing_deep_qty"
+] = 15
+# IPR: cap normal MM at 75, gap exploit baisse can push to 80, trim back to 75
+_ipr_dp = MEMBER_OVERRIDES["champion_final_v7_osm_deeps"][2]["INTARIAN_PEPPER_ROOT"].params
+_ipr_dp["fastfill_target"] = 75
+_ipr_dp["dump_reserve_inventory"] = 5  # reserve_normal_cap = 80 - 5 = 75
+# HARD CAP: normal MM buys cap position at 75. Only standing_deep (gap exploit
+# baisse at last_bid-85) can push past 75, up to 80. Option B trim then pulls
+# back to 75, recycling the reserve for future gap exploit fills.
+_ipr_dp["normal_mm_buy_cap"] = 75
+
+# ── CHAMPION FINAL v8 : v7 + 5 corrections pour matcher exactement best_root ──
+# Corrects 5 param drifts vs champion_root standalone (the real best ROOT):
+#   - buy_gap_trap_floor_position: 77 (not default 74)
+#   - buy_gap_trap_premium_size: 1 (not default 4)
+#   - startup_price_improve_start_position: 56 (not default 53)
+#   - ask_gap_sell_enable_position: 0 (always active, not 75)
+#   - gap_trap_floor_position: 75 (not 73)
+MEMBER_OVERRIDES["champion_final_v8"] = _copy_cfv7.deepcopy(
+    MEMBER_OVERRIDES["champion_final_v7"]
+)
+_ipr_v8 = MEMBER_OVERRIDES["champion_final_v8"][2]["INTARIAN_PEPPER_ROOT"].params
+_ipr_v8["buy_gap_trap_floor_position"] = 77
+_ipr_v8["buy_gap_trap_premium_size"] = 1
+_ipr_v8["startup_price_improve_start_position"] = 56
+_ipr_v8["ask_gap_sell_enable_position"] = 0
+_ipr_v8["gap_trap_floor_position"] = 75
+
+# V8 with OSM standing deeps variant
+MEMBER_OVERRIDES["champion_final_v8_osm_deeps"] = _copy_cfv7.deepcopy(
+    MEMBER_OVERRIDES["champion_final_v8"]
+)
+MEMBER_OVERRIDES["champion_final_v8_osm_deeps"][2]["ASH_COATED_OSMIUM"].params[
+    "osm_standing_deep_qty"
+] = 15
+_ipr_v8dp = MEMBER_OVERRIDES["champion_final_v8_osm_deeps"][2]["INTARIAN_PEPPER_ROOT"].params
+_ipr_v8dp["fastfill_target"] = 75
+_ipr_v8dp["dump_reserve_inventory"] = 5
+_ipr_v8dp["normal_mm_buy_cap"] = 75
+
+# TEST variant A: disable standing_deep, keep trend_inventory_cap=80
+MEMBER_OVERRIDES["_test_nodeep"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_nodeep"][2]["INTARIAN_PEPPER_ROOT"].params["standing_deep_qty"] = 0
+
+# TEST variant B: keep standing_deep=15, cap trend at 74
+MEMBER_OVERRIDES["_test_capcut"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_capcut"][2]["INTARIAN_PEPPER_ROOT"].params["trend_inventory_cap"] = 74
+MEMBER_OVERRIDES["_test_capcut"][2]["INTARIAN_PEPPER_ROOT"].params["maker_size"] = 75
+
+# TEST variant C: both (full cap 75)
+MEMBER_OVERRIDES["_test_both"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_both"][2]["INTARIAN_PEPPER_ROOT"].params["standing_deep_qty"] = 0
+MEMBER_OVERRIDES["_test_both"][2]["INTARIAN_PEPPER_ROOT"].params["trend_inventory_cap"] = 74
+MEMBER_OVERRIDES["_test_both"][2]["INTARIAN_PEPPER_ROOT"].params["maker_size"] = 75
+
+MEMBER_OVERRIDES["champion_osm_v4only"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            full_capacity_on_empty=False,  # BASELINE  # post full sell_cap / buy_cap when OB empty
+        ),
+        "INTARIAN_PEPPER_ROOT": _override(
+            ROUND_2["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v4",
+            # Base Theo params (from champion_19april_am live winner)
+            aggravate_cut=0.04,
+            ask_gap_quote_size=8,
+            ask_gap_sell_enable_position=75,
+            ask_spread_bull=9.0,
+            bid_spread_bull=1.0,
+            block_size=200,
+            bootstrap_confidence=0.55,
+            bull_threshold=1.0,
+            chase_threshold=1.25,
+            cheap_buy_boost_per_z=0.18,
+            cheap_residual_z=0.9,
+            dip_threshold=1.0,
+            dump_reserve_inventory=1,
+            dump_reserve_release_min_position=75,
+            dump_reserve_release_threshold=3.0,
+            empty_side_shift=85,
+            fastfill_buy_edge_boost=0.0,
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+            fastfill_end_ts=12000,
+            fastfill_min_passive_buy=10,
+            fastfill_target=80,
+            fv_alpha=0.05,
+            gap_fill_min_premium=35,
+            gap_rebuy_buy_edge=-10.0,
+            gap_rebuy_min_discount=20.0,
+            gap_rebuy_passive_buy=6,
+            gap_rebuy_take_cap=8,
+            gap_rebuy_window=2500,
+            gap_trap_arm_streak=2,
+            gap_trap_base_size=4,
+            gap_trap_clear_after=4,
+            gap_trap_floor_position=73,
+            gap_trap_fragile_ask_window=6,
+            gap_trap_min_gap=3,
+            gap_trap_min_imbalance=-0.05,
+            gap_trap_min_trend=0.0,
+            gap_trap_premium_extra=2,
+            gap_trap_premium_size=3,
+            gap_trap_premium_streak=2,
+            gap_trap_recent_ask_window=12,
+            gap_trap_top_ask_max=12,
+            hold_sell_offset=0,
+            hold_sell_size=0,
+            log_flush_ts=1000,
+            maker_size=80,
+            max_bid_extra_ticks=2,
+            max_inventory_sell_guard_position=80,
+            max_inventory_sell_guard_threshold=0.0,
+            min_completed_blocks=5,
+            neut_spread_ask=5.0,
+            neut_spread_bid=2.0,
+            one_sided_target_gap=24,
+            rebuy_block_ticks=25,
+            reg_horizon=25,
+            reg_r2_cap=0.98,
+            reg_r2_floor=0.85,
+            reg_residual_reversion=0.25,
+            reg_rmse_floor=1.0,
+            resid_inv_per_z=14.0,
+            rich_residual_z=1.0,
+            rich_sell_boost_per_z=0.14,
+            seed_slope=0.1015,
+            short_alpha=0.22,
+            slope_window=20,
+            startup_anchor_bid_spread=1.0,
+            startup_anchor_gap_ticks=1,
+            startup_anchor_size=4,
+            startup_chase_passive_buy=1,
+            startup_chase_take_cap=1,
+            startup_chase_take_edge=4.0,
+            startup_cold_join_ticks=0,
+            startup_cold_passive_buy=3,
+            startup_cold_take_cap=4,
+            startup_cold_take_edge=3.0,
+            startup_delayed_finish_ts=3000,
+            startup_dip_take_edge_boost=1.0,
+            startup_end_ts=30000,
+            startup_fast_passive_buy=8,
+            startup_fast_take_cap=12,
+            startup_fast_target=64,
+            startup_post_pullback_target=72,
+            startup_pre_pullback_target=48,
+            startup_pullback_ticks=2.0,
+            startup_release_stretch=1.0,
+            startup_release_take_cap=8,
+            startup_target=80,
+            strong_trend_ticks=0.9,
+            take_buy_edge_bull=-8.0,
+            take_buy_edge_neut=2.0,
+            take_sell_edge_neut=2.0,
+            target_gap_scale=26.0,
+            tighten_ticks=1,
+            trend_buy_boost_per_tick=0.24,
+            trend_inv_per_tick=16.0,
+            trend_inventory_cap=80,
+            trend_sell_boost_per_tick=0.2,
+            trim_ask_local_edge=0.0,
+            trim_cooldown_ticks=20,
+            trim_extension_threshold=0.75,
+            trim_floor_position=78,
+            trim_reference_slope_weight=0.15,
+            trim_sell_size=1,
+            trim_signal_edge=1.0,
+            trim_start_position=79,
+            trim_take_edge=2.0,
+            trim_take_position=80,
+            trim_take_sell_size=1,
+            trim_take_stretch=999.0,
+            ts_increment=100,
+            last_ts_value=999900,
+            unwind_take_edge=10.0,
+            very_strong_trend_ticks=1.6,
+        ),
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))

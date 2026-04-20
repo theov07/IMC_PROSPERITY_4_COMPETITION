@@ -92,6 +92,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "theo_best_clean_generalized_v2": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV2Strategy"),
     "theo_best_clean_generalized_v3": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV3Strategy"),
     "theo_best_clean_generalized_v4": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV4Strategy"),
+    "theo_best_clean_generalized_v7": ("prosperity/strategies/round_2/theo/theo_v7_continuous.py", "TheoBestCleanGeneralizedV7Strategy"),
     "mean_reversion":     ("prosperity/strategies/round_1/mean_reversion.py",          "MeanReversionStrategy"),
     "zscore":             ("prosperity/strategies/metal_winner/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/base/buy_and_hold.py",       "BuyAndHoldStrategy"),

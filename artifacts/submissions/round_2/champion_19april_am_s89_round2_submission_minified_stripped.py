@@ -1910,7 +1910,7 @@ class Trader:
             cls = STRATEGY_CLASSES[strat_name]
             self.strategies[symbol] = cls(product=symbol, params=params)
     def bid(self) -> int:
-        return 15
+        return 2951
     def run(self, state: TradingState):
         saved = load_state(state.traderData)
         product_memories = saved.setdefault("products", {})
