@@ -2123,6 +2123,23 @@ _ipr_v8dp["fastfill_target"] = 75
 _ipr_v8dp["dump_reserve_inventory"] = 5
 _ipr_v8dp["normal_mm_buy_cap"] = 75
 
+# TEST ISOLATION: revert dump_reserve_inventory 5→6 from V2, keep everything else
+MEMBER_OVERRIDES["_test_v2_dump6"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_v2_dump6"][2]["INTARIAN_PEPPER_ROOT"].params["dump_reserve_inventory"] = 6
+
+# TEST ISOLATION: revert hard cap (normal_mm_buy_cap 75→80)
+MEMBER_OVERRIDES["_test_v2_nocap"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_v2_nocap"][2]["INTARIAN_PEPPER_ROOT"].params["normal_mm_buy_cap"] = 80
+
+# TEST ISOLATION: revert fastfill_target 75→80
+MEMBER_OVERRIDES["_test_v2_ff80"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_v2_ff80"][2]["INTARIAN_PEPPER_ROOT"].params["fastfill_target"] = 80
+
+# TEST ISOLATION: remove Option B trim (keep everything else in V2)
+MEMBER_OVERRIDES["_test_v2_notrim"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+del MEMBER_OVERRIDES["_test_v2_notrim"][2]["INTARIAN_PEPPER_ROOT"].params["reserve_target_position"]
+del MEMBER_OVERRIDES["_test_v2_notrim"][2]["INTARIAN_PEPPER_ROOT"].params["reserve_trim_per_tick"]
+
 # TEST variant A: disable standing_deep, keep trend_inventory_cap=80
 MEMBER_OVERRIDES["_test_nodeep"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
 MEMBER_OVERRIDES["_test_nodeep"][2]["INTARIAN_PEPPER_ROOT"].params["standing_deep_qty"] = 0
