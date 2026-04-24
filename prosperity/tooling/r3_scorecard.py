@@ -125,17 +125,25 @@ def _load_mid_table(loader: MarketDataLoader, round_num: int, day: str) -> pd.Da
     return prices.pivot_table(index="timestamp", columns="product", values="mid_price", aggfunc="last")
 
 
-def _fills_by_timestamp(summary: DaySummary) -> Dict[int, List]:
+def _fill_value(fill, name: str):
+    if isinstance(fill, dict):
+        return fill.get(name)
+    return getattr(fill, name)
+
+
+def _fills_by_timestamp(summary) -> Dict[int, List]:
     out: Dict[int, List] = {}
-    for fill in summary.fills:
-        out.setdefault(int(fill.timestamp), []).append(fill)
+    fills = summary.get("fills", []) if isinstance(summary, dict) else summary.fills
+    for fill in fills:
+        out.setdefault(int(_fill_value(fill, "timestamp")), []).append(fill)
     return out
 
 
 def _update_positions(positions: Dict[str, int], fills: List) -> None:
     for fill in fills:
-        sign = 1 if str(fill.side).upper() == "BUY" else -1
-        positions[fill.symbol] = positions.get(fill.symbol, 0) + sign * int(fill.quantity)
+        sign = 1 if str(_fill_value(fill, "side")).upper() == "BUY" else -1
+        symbol = str(_fill_value(fill, "symbol"))
+        positions[symbol] = positions.get(symbol, 0) + sign * int(_fill_value(fill, "quantity"))
 
 
 def _portfolio_greeks(
@@ -143,7 +151,8 @@ def _portfolio_greeks(
     loader: MarketDataLoader,
     round_num: int,
     days: List[str],
-    summaries: List[DaySummary],
+    summaries: List[DaySummary | Dict],
+    sample_step: int,
 ) -> Dict[str, float | int | None]:
     samples = 0
     abs_delta_sum = 0.0
@@ -163,13 +172,16 @@ def _portfolio_greeks(
 
         for timestamp, row in mid_table.sort_index().iterrows():
             _update_positions(positions, fills_at.get(int(timestamp), []))
+            timestamp_i = int(timestamp)
+            if sample_step > 0 and timestamp_i % sample_step != 0:
+                continue
 
             spot_raw = row.get(ROUND_3_UNDERLYING)
             if not _is_valid_number(spot_raw):
                 continue
             spot = float(spot_raw)
             tte = time_to_expiry_days(
-                float(timestamp),
+                timestamp_i,
                 tte0,
                 timestamp_units_per_day=ROUND_3_TIMESTAMP_UNITS_PER_DAY,
             )
@@ -394,24 +406,37 @@ def build_scorecard(
     days: List[str],
     execution_rule: str,
     sample_step: int,
+    greek_step: int,
+    backtest_json: str | None = None,
 ) -> Dict[str, object]:
     mode = TradeMatchingMode(execution_rule)
     loader = MarketDataLoader(data_dir)
-    summaries = _run_backtests(
-        strategy=strategy,
-        round_num=round_num,
-        data_dir=data_dir,
-        days=days,
-        mode=mode,
-    )
-    aggregate = aggregate_day_summaries(summaries)
+    if backtest_json:
+        backtest_payload = json.loads(Path(backtest_json).read_text(encoding="utf-8"))
+        aggregate = backtest_payload.get("summary", backtest_payload)
+        summaries = backtest_payload.get("days", [])
+    else:
+        summaries = _run_backtests(
+            strategy=strategy,
+            round_num=round_num,
+            data_dir=data_dir,
+            days=days,
+            mode=mode,
+        )
+        aggregate = aggregate_day_summaries(summaries)
     product_rows = _product_rows(aggregate)
 
     options_pnl = sum(row["pnl"] for row in product_rows if _option_strike(str(row["product"])) is not None)
     delta_one_pnl = sum(row["pnl"] for row in product_rows if row["product"] in ROUND_3_DELTA_ONE)
     robustness = aggregate.get("robustness", {})
 
-    greeks = _portfolio_greeks(loader=loader, round_num=round_num, days=days, summaries=summaries)
+    greeks = _portfolio_greeks(
+        loader=loader,
+        round_num=round_num,
+        days=days,
+        summaries=summaries,
+        sample_step=greek_step,
+    )
     edges = _edge_stats(loader=loader, round_num=round_num, days=days, sample_step=sample_step)
 
     return {
@@ -447,6 +472,8 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         choices=["queue", "all", "worse", "none", "realistic"],
     )
     parser.add_argument("--sample-step", type=int, default=5000, help="Raw timestamp step for smile residual sampling")
+    parser.add_argument("--greek-step", type=int, default=5000, help="Raw timestamp step for portfolio greek sampling")
+    parser.add_argument("--backtest-json", help="Reuse an existing backtest.py JSON output instead of rerunning")
     parser.add_argument("--outdir", default="artifacts/scorecards/round_3")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -461,6 +488,8 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         days=days,
         execution_rule=args.execution_rule,
         sample_step=args.sample_step,
+        greek_step=args.greek_step,
+        backtest_json=args.backtest_json,
     )
 
     outdir = Path(args.outdir)

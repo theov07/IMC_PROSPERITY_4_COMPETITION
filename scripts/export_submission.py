@@ -146,6 +146,11 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
 }
 
+# Params useful for local analysis/backtests but pointless in the live upload.
+EXPORT_PARAM_DROP = {
+    "historical_tte_by_day",
+}
+
 
 # ── Source processing ──────────────────────────────────────────────────────
 
@@ -452,7 +457,10 @@ def main() -> int:
     # Embed config as a plain dict.
     products: dict = {}
     for symbol, pc in config.items():
-        products[symbol] = {"strategy": pc.strategy, "position_limit": pc.position_limit, **pc.params}
+        params = {k: v for k, v in pc.params.items() if k not in EXPORT_PARAM_DROP}
+        if "timestamp_units_per_day" in params:
+            params.pop("ticks_per_day", None)
+        products[symbol] = {"strategy": pc.strategy, "position_limit": pc.position_limit, **params}
 
     # Strategy class dispatch (only needed strategies).
     strat_entries = ", ".join(
