@@ -14,6 +14,8 @@ and `artifacts/analysis/round_3/FINDINGS.md` before editing anything.
 - `r3_hydrogel_only` : passive ladder (3 levels inside spread). Safe baseline.
 - `r3_hydrogel_mean_rev` : passive + z-score size skew (window=500, gain=3.0).
   Based on ACF(1)=-0.199 at 500-tick horizon (see `artifacts/analysis/round_3/hydrogel_acf_pacf.png`).
+- `r3_hydrogel_asym_mm` v2 : Theo's asymmetric MM + ACF z-score (live +672 / DD -201).
+- `r3_hydrogel_follow_mm` : trend-follow + aggressive unwind (latest, ready to test live).
 
 ### Open problem
 **50x volume gap between backtest and live** (700 trades backtest vs 10-20 live). Queue
@@ -21,7 +23,7 @@ priority is the bottleneck, not edge per trade (live fills are +6.8 ticks favora
 
 ---
 
-## Round 3 Status (original entry)
+## Round 3 Status (current — origin/main)
 
 **Products**: HYDROGEL_PACK (limit 200), VELVETFRUIT_EXTRACT (limit 200, underlying), VEV_4000..VEV_6500 (10 European call vouchers, limit 300 each).
 **TTE at Round 3 final**: 5 days. Historical data TTE: day 0 = 8d, day 1 = 7d, day 2 = 6d.
