@@ -9,7 +9,9 @@ Updated: 2026-04-24
 | Strategy (HYDROGEL-only) | Day2 backtest | Live | 3d backtest | Verdict |
 |---|---|---|---|---|
 | `r3_hydrogel_only` passive ladder | **−116** | +610 | +23,282 | Safe baseline, edge per fill OK (+6.8 ticks) |
-| `r3_hydrogel_mean_rev` z-skew (gain=3, win=500) | **+10,523** | +385 | +44,306 | **Best generalizable** (ACF/PACF-driven) |
+| `r3_hydrogel_mean_rev` z-skew (gain=3, win=500) | **+10,523** | +385 | +44,306 | Best passive, generalizable |
+| **`codex_exhaustion`** (taker fade LB=200 TH=60 H=300) | — | **+2,294** | +480 (3d) | **Best live** but day-2-leaning |
+| `theo_one_side_mm` (asym MM + taker) | — | +587 HYDROGEL, +1088 total | — | Asymmetric passive, VELVET inclus |
 | `r3_oracle_day2_l1` (Codex overfit) | — | ~140k expected | — | Overfit oracle, L1-only, validator-safe |
 | `r3_oracle_day2` (Codex overfit, off-L1) | — | 154,245 (rejected) | — | Validator flagged off-L1 fills |
 
@@ -172,6 +174,74 @@ entry conditions cannot replicate the exit timing.
 1. Passive multi-level MM: +23k 3d, -116 day 2, +610 live.
 2. Passive + z-score size skew: +44k 3d, **+10.5k day 2**, +385 live.
 3. Taker strategies: NEGATIVE day 2 in all tested configs.
+
+## Follow vs Fade informed traders — which works on HYDROGEL ? (Claude 2026-04-25)
+
+User asked: does it make sense to **follow** informed traders short-term (momentum
+continues) rather than **fade** them (mean-revert) ?
+
+**Unconditional markout** of random BUY taker on day 2 (hold H ticks then mid-mid):
+| Horizon | Mean | Median | Std |
+|---|---|---|---|
+| +100 | -7.89 | -9.00 | 17.8 |
+| +500 | -7.90 | -7.00 | 32.1 |
+| +1000 | -5.30 | -2.00 | 39.4 |
+| +5000 | +28.37 | +21.00 | 39.8 |
+
+The market price went up ~+28 ticks on average 5000 ticks later — specific to day 2.
+
+### Follow-momentum test (BUY after rise, hold H) — 3 days
+
+| Day | BUY after rise (LB=1000, TH=20, H=5000) | SELL after drop |
+|---|---|---|
+| 0 | **-29,446** (down-trend day, bought the top) | -80,881 |
+| 1 | **+25,602** (up-trend day, follow works) | -134,527 |
+| 2 | +8,246 | -118,560 |
+
+**Verdict**: "follow short-term" is asymmetric and regime-dependent:
+- BUY-after-rise **wins on up-trend days** (days 1, 2), **loses on down-trend days** (day 0)
+- SELL-after-drop **loses on ALL 3 days** — drops continue, they don't revert
+- Without a regime filter, follow-momentum is NOT robust
+
+### Fade-momentum test (Codex's exhaustion) — 3 days round-trip at best prices
+
+Tuned to Codex's actual params (LB=200 ticks = 20,000 ts, H=300 ticks = 30,000 ts):
+
+| LB | TH | H | n | Total PnL | per trade |
+|---|---|---|---|---|---|
+| 200 | **60** | **300** | 46 | **+480** | **+10.4** |
+| 200 | 60 | 200 | 46 | +130 | +2.8 |
+| 100 | 40 | 200 | 123 | -395 | -3.2 |
+| Most other | | | | **negative** | |
+
+**Per day breakdown (LB=200, TH=60, H=300)**:
+- Day 0: rarely triggers (no drop >60 ticks)
+- Day 1: +126 PnL
+- Day 2: +281 PnL (biggest contributor)
+
+**Verdict**: exhaustion with very tight threshold (TH=60) is the only config that
+generalizes positively across days. It worked live at +2,294 on day 2 because day
+2 has specific exhaustion patterns — not robust alpha, but real day-2 edge.
+
+### Adverse selection diagnosis
+
+User's intuition confirmed: our passive MM on HYDROGEL gets adversely selected.
+Live data from `379328` showed 92% of v4_F5 aggressive trades had NEGATIVE
+signed edge (−6.5 ticks avg). Even our "clean" passive fills (+6.8 avg edge)
+only happen 20 times per live slice because queue priority is weak.
+
+The oracle's "+18.6 ticks markout at +10000 ts" only applies to the ORACLE's
+specific trades (hindsight-selected). Random or rule-based takers without the
+exact entry/exit timing do not capture this edge — we tested TH=30-80, LB=100-
+200, H=100-300 across days and ~80% of configs are negative.
+
+### Takeaway
+
+1. **Follow short-term informed traders**: asymmetric, works BUY on up-days only → not robust forward.
+2. **Fade / exhaustion**: works only with tight threshold (TH=60+) and only when the market has genuine over-extension (≥ specific day conditions).
+3. **Codex's +2,294 live** is legitimate day-2 alpha but NOT generalizable.
+4. **Our best generalizable forward-only**: passive MM + z-skew size (+10.5k day 2 backtest, +385 live).
+5. **Action**: build regime-aware hybrid (detect trend day vs reversion day) before choosing follow vs fade. Without regime classifier, neither works robustly.
 
 ## HYDROGEL Passive Regime MM
 

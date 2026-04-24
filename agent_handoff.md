@@ -4,6 +4,72 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 2026-04-25 01:15 — Claude: follow-vs-fade analysis + Codex exhaustion live +2.3k validated
+
+### Live log comparison (HYDROGEL-only strategies)
+
+| Strat | Live PnL | Trades | % takers | Edge immédiat | Δ vs our z-skew |
+|---|---|---|---|---|---|
+| **`codex_exhaustion`** | **+2,294** | 32 | 100% | −7.66 | **+1,909 (6x)** |
+| `theo_one_side_mm` | +587 (HY) / +1,088 total | 42 | 62% | -2.37 | +202 |
+| Our passive ladder | +610 | 20 | 0% | +6.8 | +225 |
+| Our z-skew | +385 | 10 | 0% | +6.6 | (baseline) |
+
+Codex's exhaustion taker is the **current live winner** (+2.3k on HYDROGEL).
+
+### Robustness test: is exhaustion generalizable?
+
+Tested across 3 days with proper round-trip PnL (entry at ask, exit at bid):
+
+| LB (ticks) | TH | H | Total 3d PnL | per trade | Days contributing |
+|---|---|---|---|---|---|
+| 200 | **60** | **300** | **+480** | +10.4 | Day 1 (+126), Day 2 (+281) |
+| 200 | 60 | 200 | +130 | +2.8 | mostly day 2 |
+| Most other configs | | | **negative** | | |
+
+Conclusion: Codex's strategy works live (+2.3k) BUT only at very tight threshold
+(TH=60) and primarily captures day-2-specific patterns. Day 0 rarely triggers
+(no moves >60 ticks), day 1 marginal, day 2 is the big contributor.
+
+### User's "follow short-term informed" question → NOT robust
+
+Tested BUY-after-rise and SELL-after-drop on all 3 days:
+
+| Direction | Day 0 | Day 1 | Day 2 | Robust? |
+|---|---|---|---|---|
+| BUY after rise | **-29k** | +25k | +8k | NO (day 0 trended down) |
+| SELL after drop | **-80k** | **-134k** | **-118k** | **NO (loses all days)** |
+
+→ Following short-term momentum is **asymmetric and regime-dependent**. Without
+a regime classifier (detect trend day vs reversion day), neither follow nor fade
+works robustly.
+
+### Next useful research (agreed with Codex)
+
+Codex suggested: "predict when markout 5k..10k beats sweep cost, using momentum
+HYDROGEL, VELVET/HYDROGEL regime, imbalance/spread/depth, options co-movement".
+
+Translation: build a **regime classifier** that says "in the current microstate,
+what's the expected markout at +5000 / +10000 ticks ?". This unlocks both:
+- Follow when momentum regime + positive markout expected
+- Fade when exhaustion regime + reversal markout expected
+
+### Files added this session (Codex)
+- `prosperity/strategies/round_3/hydrogel_exhaustion.py` (not reviewed by Claude)
+- `submissions/round_3/r3_hydrogel_exhaustion.py`
+- `artifacts/submissions/round_3/r3_hydrogel_exhaustion_round3_submission.py` ← **this is what live-tested at +2,294**
+- `artifacts/backtests/r3_hydrogel_exhaustion_*.json`
+
+### Files Claude touched but NOT FOR UPLOAD
+- `prosperity/strategies/round_3/hydrogel_oracle_inspired.py` (loses forward, documented)
+- `MEMBER_OVERRIDES["r3_hydrogel_oracle_inspired"]` — keep as reference
+
+### Upload recommendation
+**Upload `r3_hydrogel_exhaustion` next** for another live test (validate +2.3k)
+OR wait for Codex's regime-aware hybrid.
+
+---
+
 ## 2026-04-25 00:15 — Claude: Oracle reverse-engineering failed to generalize
 
 **Léo's directive** : extract generalizable signal from Codex's oracle day-2 overfit,
