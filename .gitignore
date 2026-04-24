@@ -36,3 +36,5 @@ artifacts/analysis/round_1/theo
 artifacts/analysis/round_1/theo/README.md
 
 logs/round_2/theo
+# R3 analysis: keep PNG plots, ignore large backtest JSON dumps
+artifacts/analysis/round_3/backtest_*.json
