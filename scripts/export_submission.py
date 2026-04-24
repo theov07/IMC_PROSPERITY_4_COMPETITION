@@ -114,6 +114,16 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
     "anchor_adaptive":    ("prosperity/strategies/round_3/anchor_adaptive.py", "AnchorAdaptiveStrategy"),
     "gamma_scalp":        ("prosperity/strategies/round_3/gamma_scalp.py", "GammaScalpStrategy"),
+    "hydrogel_mm":        ("prosperity/strategies/round_3/hydrogel_mm.py", "HydrogelMMStrategy"),
+    "hydrogel_mean_rev_taker": ("prosperity/strategies/round_3/hydrogel_mean_rev_taker.py", "HydrogelMeanRevTakerStrategy"),
+    "hydrogel_passive_regime_mm": (
+        "prosperity/strategies/round_3/hydrogel_passive_regime_mm.py",
+        "HydrogelPassiveRegimeMMStrategy",
+    ),
+    "oracle_day2_replay": (
+        "prosperity/strategies/round_3/oracle_day2_replay.py",
+        "OracleDay2ReplayStrategy",
+    ),
     "ms_regime_delta":    ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeDeltaOneStrategy"),
     "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
 }

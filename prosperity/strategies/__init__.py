@@ -96,6 +96,16 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "vol_harvest": ("prosperity.strategies.round_3.vol_harvest", "VolHarvestStrategy"),
     "anchor_adaptive": ("prosperity.strategies.round_3.anchor_adaptive", "AnchorAdaptiveStrategy"),
     "gamma_scalp": ("prosperity.strategies.round_3.gamma_scalp", "GammaScalpStrategy"),
+    "hydrogel_mm": ("prosperity.strategies.round_3.hydrogel_mm", "HydrogelMMStrategy"),
+    "hydrogel_mean_rev_taker": ("prosperity.strategies.round_3.hydrogel_mean_rev_taker", "HydrogelMeanRevTakerStrategy"),
+    "hydrogel_passive_regime_mm": (
+        "prosperity.strategies.round_3.hydrogel_passive_regime_mm",
+        "HydrogelPassiveRegimeMMStrategy",
+    ),
+    "oracle_day2_replay": (
+        "prosperity.strategies.round_3.oracle_day2_replay",
+        "OracleDay2ReplayStrategy",
+    ),
     "ms_regime_delta": ("prosperity.strategies.round_3.ms_regime_switching", "MSRegimeDeltaOneStrategy"),
     "ms_regime_option": ("prosperity.strategies.round_3.ms_regime_switching", "MSRegimeOptionMMStrategy"),
     "theo_best_clean_generalized_v7": ("prosperity.strategies.round_2.theo.theo_v7_continuous", "TheoBestCleanGeneralizedV7Strategy"),

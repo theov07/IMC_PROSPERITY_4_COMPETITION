@@ -2732,6 +2732,158 @@ MEMBER_OVERRIDES["r3_gamma_scalp_champion"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL-ONLY CHAMPION — dédié single-asset, pas de options ni VELVETFRUIT
+#
+# Discovery: HYDROGEL spread = ~15 ticks (énorme), L1 vol = 12 units, mean-rev
+# mild (autocorr -0.12). Notre meilleur live = naive_tight_mm = +610 avec seulement
+# 20 fills. Le bottleneck c'est le VOLUME, pas l'edge par trade (~6.5 ticks).
+#
+# Strategy: ladder 3 quotes inside the spread (l1 penny, l2 inside, l3 near-mid)
+# to accumulate more fills. Inventory-aversion pour pas saturer. Pas de takers.
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_only"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_mm",
+            position_limit=200,
+            l1_size=150,                # scaled up from naive's 30
+            level2_inside=3,
+            l2_size=0,                 # DISABLE level 2 (hurts in backtest)
+            level3_inside=6,
+            l3_size=0,                 # DISABLE level 3 (hurts in backtest)
+            inventory_aversion=0.5,
+            min_spread_for_l2=999,     # effectively off
+            min_spread_for_l3=999,     # effectively off
+            max_position=200,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        # Disable all other products — this bot ONLY trades HYDROGEL.
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydrogel_passive_regime"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_passive_regime_mm",
+            position_limit=200,
+            maker_size=60,
+            improve_ticks=1,
+            min_spread=3,
+            max_position=200,
+            regime_window=120,
+            regime_min_samples=60,
+            node_threshold=0.10,
+            pos_corr_threshold=0.55,
+            neg_corr_threshold=-0.55,
+            decorr_threshold=0.15,
+            cap_warmup=0.35,
+            cap_node=0.30,
+            cap_neg=0.25,
+            cap_pos=0.40,
+            cap_decoupled=0.55,
+            cap_mixed=0.45,
+            size_warmup=0.75,
+            size_node=0.55,
+            size_neg=0.35,
+            size_pos=0.70,
+            size_decoupled=1.15,
+            size_mixed=0.85,
+            inventory_power=2.0,
+            inventory_exit_boost=1.4,
+            soft_inventory_ratio=0.55,
+            soft_worsen_mult=0.15,
+            min_worsen_mult=0.0,
+            fast_alpha=0.25,
+            slow_alpha=0.03,
+            momentum_lookback=40,
+            kill_position=120,
+            kill_dist_ticks=8.0,
+            kill_momentum_ticks=12.0,
+            kill_exit_mult=2.0,
+            kill_exit_improve_ticks=3,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+_R3_ORACLE_DAY2_PRODUCTS = {
+    "HYDROGEL_PACK": 200,
+    "VELVETFRUIT_EXTRACT": 200,
+    "VEV_4000": 300,
+    "VEV_4500": 300,
+    "VEV_5000": 300,
+    "VEV_5100": 300,
+    "VEV_5200": 300,
+    "VEV_5300": 300,
+    "VEV_5400": 300,
+    "VEV_5500": 300,
+}
+
+MEMBER_OVERRIDES["r3_oracle_day2"] = {
+    3: {
+        **{
+            symbol: ProductConfig(
+                symbol=symbol,
+                strategy="oracle_day2_replay",
+                position_limit=limit,
+                params={},
+            )
+            for symbol, limit in _R3_ORACLE_DAY2_PRODUCTS.items()
+        },
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL MEAN-REV TAKER — based on ACF/PACF analysis
+# Tick returns: AR(1) φ=-0.13 (bid-ask noise, no edge).
+# 500-tick agg: ACF(1)=-0.20 (strong mean-rev), std=28 ticks.
+# At |z|>=2 → sell/buy taker, edge = 2σ × 0.4 = 11 ticks minus 7 spread = 4 net.
+# Passive MM overlay stays on always (+23k baseline).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_mean_rev"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_mean_rev_taker",
+            position_limit=200,
+            window=500,
+            entry_z=99.0,      # effectively disable taker entry
+            exit_z=0.5,
+            taker_size_base=0,
+            taker_size_per_z=0,
+            max_taker_position=0,
+            z_passive_skew_gain=3.0,   # z-skew on passive sizes
+            exit_chunk_size=30,
+            passive_l1_size=30,
+            inventory_aversion=0.5,
+            enable_passive_mm=True,
+            min_samples=100,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
     3: {
         "HYDROGEL_PACK": _override(
