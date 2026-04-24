@@ -2606,6 +2606,78 @@ MEMBER_OVERRIDES["r3_hedged_champion"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 VOL HARVEST CHAMPION — long-vol pivot based on realized 2.15% vs implied 1.25%.
+# HYDROGEL = naive_tight_mm. VELVET = velvet_delta_hedger with higher threshold.
+# ATM vouchers (VEV_5000..5500) = vol_harvest (buy when market < BS@realized_vol).
+# ITM (4000/4500) and deep OTM (6000/6500) keep option_mm_bs default.
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_VOL_HARVEST_STRIKES = [5000, 5100, 5200, 5300, 5400, 5500]
+
+MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_delta_hedger",
+            position_limit=200,
+            underlying_symbol="VELVETFRUIT_EXTRACT",
+            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500],
+            strike_prefix="VEV_",
+            tte_days_initial=5.0,
+            timestamp_units_per_day=1000000,
+            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+            target_delta=0.0,
+            hedge_taker_edge=30.0,
+            max_hedge_size=50,
+            passive_base_size=30,
+            passive_skew_per_delta=0.5,
+            quote_inside_book=True,
+            sigma_floor=0.005,
+            sigma_cap=0.10,
+            prior_vol=0.0215,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{
+            f"VEV_{k}": ProductConfig(
+                symbol=f"VEV_{k}",
+                strategy="vol_harvest",
+                position_limit=300,
+                params=dict(
+                    strike=k,
+                    tte_days_initial=5.0,
+                    ticks_per_day=10000,
+                    timestamp_units_per_day=1000000,
+                    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+                    realized_vol_prior=0.0215,
+                    entry_edge=1.0,
+                    exit_edge=2.0,
+                    target_position=60,
+                    entry_size=10,
+                    exit_size=20,
+                    passive_bid_size=5,
+                    post_passive=True,
+                    min_quote_price=2.0,
+                    underlying_symbol="VELVETFRUIT_EXTRACT",
+                    log_flush_ts=1000,
+                    ts_increment=100,
+                    last_ts_value=999900,
+                ),
+            )
+            for k in _R3_VOL_HARVEST_STRIKES
+        },
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
