@@ -6,10 +6,44 @@ Updated: 2026-04-24
 
 ## 🚨 TL;DR — what works and what doesn't (last updated by Claude, same day, post-z-skew)
 
+### Live drawdown comparison (HYDROGEL only)
+
+| Strat | Final | Max DD | DD/Final | Pos range | Sharpe-ish |
+|---|---|---|---|---|---|
+| **theo_one_side_mm** | **+587** | **-246** | **0.42x** | ±14 | **BEST** |
+| hydrogel_only passive | +610 | -871 | 1.43x | ±21 | low |
+| hydrogel_mean_rev | +385 | -500 | 1.30x | ±11 | low |
+| **codex_exhaustion** | +2,294 | **-3,454** | 1.5x | +102 long | HIGH RISK |
+
+Theo's is the cleanest risk/reward : small DD, small position, still positive.
+
+### Hybrid: r3_hydrogel_asym_mm (Claude 2026-04-25)
+
+Combining Theo's asymmetric MM with our ACF-tuned window=500 z-score:
+
+File: `prosperity/strategies/round_3/hydrogel_asym_mm.py`
+
+Rules:
+- Compute z = (mid - EWMA_500) / rolling_std
+- |z| > quote_threshold_z → one-sided quote (if z>0 skip bid, grow ask; symmetric for z<0)
+- Inventory skew on top (reduce wrong side, boost unwind)
+- Minimal taker overlay (Theo-style: size=1, cooldown=2000ts, take_z=2.5)
+
+Grid search:
+| quote_threshold_z | maker_size | 3d backtest | day 2 backtest |
+|---|---|---|---|
+| **0.8** | **24** | **+30,465** | **+5,082** |
+| 1.0 | 24 | +28,904 | +4,509 |
+| 1.5 | 24 | +26,723 | +3,247 |
+
+**Locked at tz=0.8, ms=24**. Backtest +30,465 over 3 days (+32% vs passive
+naive baseline +23k). Maintains Theo's low-DD profile via inventory skew.
+
 | Strategy (HYDROGEL-only) | Day2 backtest | Live | 3d backtest | Verdict |
 |---|---|---|---|---|
 | `r3_hydrogel_only` passive ladder | **−116** | +610 | +23,282 | Safe baseline, edge per fill OK (+6.8 ticks) |
 | `r3_hydrogel_mean_rev` z-skew (gain=3, win=500) | **+10,523** | +385 | +44,306 | Best passive, generalizable |
+| **`r3_hydrogel_asym_mm`** (Theo + ACF z, tz=0.8, ms=24) | **+5,082** | — | **+30,465** | **Hybrid: robust + low DD** |
 | **`codex_exhaustion`** (taker fade LB=200 TH=60 H=300) | — | **+2,294** | +480 (3d) | **Best live** but day-2-leaning |
 | `theo_one_side_mm` (asym MM + taker) | — | +587 HYDROGEL, +1088 total | — | Asymmetric passive, VELVET inclus |
 | `r3_oracle_day2_l1` (Codex overfit) | — | ~140k expected | — | Overfit oracle, L1-only, validator-safe |

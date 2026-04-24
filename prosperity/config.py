@@ -2880,6 +2880,44 @@ MEMBER_OVERRIDES["r3_oracle_day2_l1"] = {
 #   SELL when z>+0.5 AND trend_100>+10
 # Forward move median +33 ticks EOD, spread 15 ticks -> ~18 ticks net per trade.
 # ──────────────────────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL ASYM MM — Theo's one-sided quoting + our ACF z-score window=500
+# Combines the safest live strategy (Theo +587, drawdown -246, 0.42x ratio)
+# with our ACF-tuned signal (window=500, the true mean-rev horizon).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_asym_mm"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_asym_mm",
+            position_limit=200,
+            window=500,
+            quote_threshold_z=2.0,
+            maker_size=24,
+            min_maker_size=3,
+            signal_boost_max=12,
+            signal_boost_per_z=6,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            unwind_boost_max=20,
+            tighten_ticks=1,
+            enable_taker=True,
+            take_z=2.5,
+            take_size=1,
+            take_cooldown_ts=2000,
+            soft_position_limit=60,
+            min_samples=100,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_hydrogel_oracle_inspired"] = {
     3: {
         "HYDROGEL_PACK": _override(

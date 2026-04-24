@@ -99,6 +99,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydrogel_mm": ("prosperity.strategies.round_3.hydrogel_mm", "HydrogelMMStrategy"),
     "hydrogel_mean_rev_taker": ("prosperity.strategies.round_3.hydrogel_mean_rev_taker", "HydrogelMeanRevTakerStrategy"),
     "hydrogel_oracle_inspired": ("prosperity.strategies.round_3.hydrogel_oracle_inspired", "HydrogelOracleInspiredStrategy"),
+    "hydrogel_asym_mm": ("prosperity.strategies.round_3.hydrogel_asym_mm", "HydrogelAsymMMStrategy"),
     "hydrogel_exhaustion_taker": (
         "prosperity.strategies.round_3.hydrogel_exhaustion_taker",
         "HydrogelExhaustionTakerStrategy",
