@@ -92,6 +92,34 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "theo_best_clean_generalized_v4": ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedV4Strategy"),
     # ── Round 3 ──
     "option_mm_bs": ("prosperity.strategies.round_3.option_mm_bs", "OptionMMBSStrategy"),
+    "velvet_delta_hedger": ("prosperity.strategies.round_3.velvet_delta_hedger", "VelvetDeltaHedgerStrategy"),
+    "vol_harvest": ("prosperity.strategies.round_3.vol_harvest", "VolHarvestStrategy"),
+    "anchor_adaptive": ("prosperity.strategies.round_3.anchor_adaptive", "AnchorAdaptiveStrategy"),
+    "gamma_scalp": ("prosperity.strategies.round_3.gamma_scalp", "GammaScalpStrategy"),
+    "hydrogel_mm": ("prosperity.strategies.round_3.hydrogel_mm", "HydrogelMMStrategy"),
+    "hydrogel_mean_rev_taker": ("prosperity.strategies.round_3.hydrogel_mean_rev_taker", "HydrogelMeanRevTakerStrategy"),
+    "hydrogel_oracle_inspired": ("prosperity.strategies.round_3.hydrogel_oracle_inspired", "HydrogelOracleInspiredStrategy"),
+    "hydrogel_asym_mm": ("prosperity.strategies.round_3.hydrogel_asym_mm", "HydrogelAsymMMStrategy"),
+    "hydrogel_follow_mm": ("prosperity.strategies.round_3.hydrogel_follow_mm", "HydrogelFollowMMStrategy"),
+    "hydrogel_exhaustion_taker": (
+        "prosperity.strategies.round_3.hydrogel_exhaustion_taker",
+        "HydrogelExhaustionTakerStrategy",
+    ),
+    "hydrogel_passive_regime_mm": (
+        "prosperity.strategies.round_3.hydrogel_passive_regime_mm",
+        "HydrogelPassiveRegimeMMStrategy",
+    ),
+    "oracle_day2_replay": (
+        "prosperity.strategies.round_3.oracle_day2_replay",
+        "OracleDay2ReplayStrategy",
+    ),
+    "oracle_day2_l1_replay": (
+        "prosperity.strategies.round_3.oracle_day2_l1_replay",
+        "OracleDay2L1ReplayStrategy",
+    ),
+    "ms_regime_delta": ("prosperity.strategies.round_3.ms_regime_switching", "MSRegimeDeltaOneStrategy"),
+    "ms_regime_option": ("prosperity.strategies.round_3.ms_regime_switching", "MSRegimeOptionMMStrategy"),
+    "theo_best_clean_generalized_v7": ("prosperity.strategies.round_2.theo.theo_v7_continuous", "TheoBestCleanGeneralizedV7Strategy"),
     "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
 }
 
