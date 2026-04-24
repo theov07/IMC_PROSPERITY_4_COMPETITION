@@ -273,6 +273,75 @@ Research hypothesis to test next:
   - spread/depth imbalance and sudden one-sided depth refresh,
   - option strip co-movement for VEV strikes.
 
+## HYDROGEL Alpha Direction From Overfit
+
+The HYDROGEL part of `r3_oracle_day2` is not a simple trend-following sweep.
+It is closer to an exhaustion / medium-horizon reversal pattern.
+
+HYDROGEL oracle actions on `day2 0..99900`:
+
+- Actions: `129`
+- Volume: `2,502`
+- BUY volume: `1,351`
+- SELL volume: `1,151`
+- Average cost vs L1 for non-L1 sweeps: about `2.6` ticks
+- Same-tick markout: strongly negative
+- Markout turns positive after roughly `2,000` timestamps
+
+Average HYDROGEL oracle markout per unit:
+
+| Horizon | Markout / unit |
+| ---: | ---: |
+| +100 | -7.53 |
+| +500 | -5.52 |
+| +1,000 | -3.20 |
+| +2,000 | +1.55 |
+| +5,000 | +6.66 |
+| +10,000 | +18.60 |
+
+Direction vs previous momentum:
+
+- BUY actions happen after negative momentum on average.
+- SELL actions happen after positive momentum on average.
+- Versus `10,000` timestamp lookback, actions are opposite prior momentum
+  about `101` times vs same direction about `9` times.
+
+This means the likely generalized HYDROGEL alpha is:
+
+- do not quote passive blindly;
+- detect large prior displacement / exhaustion;
+- then take L1 or selectively L2 in the reversal direction;
+- hold / let inventory mean-revert over a medium horizon rather than scalp
+  immediately.
+
+Simple sanity grid, contrarian HYDROGEL taker:
+
+| Rule | Train days 0-1 | Test day 2 | Live slice day2 `0..99900` |
+| --- | ---: | ---: | ---: |
+| lookback `10,000`, threshold `40`, horizon `20,000`, L1 | +3.19 ticks/u | +8.03 ticks/u | +19.08 ticks/u |
+| lookback `10,000`, threshold `35`, horizon `20,000`, L1 | +2.68 ticks/u | +8.54 ticks/u | +19.33 ticks/u |
+| lookback `20,000`, threshold `40`, horizon `20,000`, L1 | +1.92 ticks/u | +7.98 ticks/u | +26.78 ticks/u |
+| lookback `10,000`, threshold `40`, horizon `20,000`, L2 | +1.88 ticks/u | +6.20 ticks/u | +17.91 ticks/u |
+
+These rules are much smaller than the oracle, but they are train/test positive
+and match the oracle's qualitative behavior. They should be treated as alpha
+research candidates, not final strategies.
+
+Implementation direction:
+
+- `HydrogelExhaustionTaker`: L1 first, optional L2 only under stronger
+  displacement.
+- Signal:
+  - if `mid - mid_10000 <= -35/-40`, buy;
+  - if `mid - mid_10000 >= +35/+40`, sell.
+- Stronger regime:
+  - if `abs(mid - mid_20000) >= 40`, allow more size.
+- Risk:
+  - hard inventory cap below exchange limit, e.g. `80..120`;
+  - cooldown around `1,000` timestamps;
+  - no passive MM by default;
+  - unwind when displacement normalizes or after timeout.
+
 ### Oracle Replay L1 Variant
 
 Strategy: `r3_oracle_day2_l1`

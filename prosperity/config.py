@@ -492,7 +492,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 trim_ask_improve_ticks=1,
                 trim_floor_position=75,
                 trim_signal_edge=1.0,
-                trim_cooldown_ticks=8,
+                trim_cooldown_ticks=200,
                 accum_band_trend_threshold=4.0,
                 accum_mid_start_position=60,
                 accum_top_start_position=75,
@@ -2872,6 +2872,69 @@ MEMBER_OVERRIDES["r3_oracle_day2_l1"] = {
 # At |z|>=2 → sell/buy taker, edge = 2σ × 0.4 = 11 ticks minus 7 spread = 4 net.
 # Passive MM overlay stays on always (+23k baseline).
 # ──────────────────────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL ORACLE-INSPIRED — rules distilled from Codex day-2 oracle
+# Reverse-engineered pattern:
+#   BUY  when z<-1.6 AND trend_100<-20 (oracle q75/avg)
+#   SELL when z>+0.5 AND trend_100>+10
+# Forward move median +33 ticks EOD, spread 15 ticks -> ~18 ticks net per trade.
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_oracle_inspired"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_oracle_inspired",
+            position_limit=200,
+            window=500,
+            trend_lookback=100,
+            buy_z_threshold=-2.5,
+            buy_trend_threshold=-40.0,
+            sell_z_threshold=0.5,
+            sell_trend_threshold=20.0,
+            taker_size=10,
+            max_position=100,
+            unwind_z_threshold=0.3,
+            unwind_chunk_size=10,
+            passive_l1_size=0,
+            enable_passive_mm=False,
+            min_samples=200,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydrogel_exhaustion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_exhaustion_taker",
+            position_limit=200,
+            fast_lookback_ts=10000,
+            slow_lookback_ts=20000,
+            entry_fast_ticks=40.0,
+            entry_slow_ticks=40.0,
+            max_position=120,
+            taker_size=15,
+            exit_size=15,
+            cooldown_ts=1000,
+            hold_ts=20000,
+            allow_l2=False,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_hydrogel_mean_rev"] = {
     3: {
         "HYDROGEL_PACK": _override(

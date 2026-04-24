@@ -116,6 +116,11 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "gamma_scalp":        ("prosperity/strategies/round_3/gamma_scalp.py", "GammaScalpStrategy"),
     "hydrogel_mm":        ("prosperity/strategies/round_3/hydrogel_mm.py", "HydrogelMMStrategy"),
     "hydrogel_mean_rev_taker": ("prosperity/strategies/round_3/hydrogel_mean_rev_taker.py", "HydrogelMeanRevTakerStrategy"),
+    "hydrogel_oracle_inspired": ("prosperity/strategies/round_3/hydrogel_oracle_inspired.py", "HydrogelOracleInspiredStrategy"),
+    "hydrogel_exhaustion_taker": (
+        "prosperity/strategies/round_3/hydrogel_exhaustion_taker.py",
+        "HydrogelExhaustionTakerStrategy",
+    ),
     "hydrogel_passive_regime_mm": (
         "prosperity/strategies/round_3/hydrogel_passive_regime_mm.py",
         "HydrogelPassiveRegimeMMStrategy",
@@ -123,6 +128,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "oracle_day2_replay": (
         "prosperity/strategies/round_3/oracle_day2_replay.py",
         "OracleDay2ReplayStrategy",
+    ),
+    "oracle_day2_l1_replay": (
+        "prosperity/strategies/round_3/oracle_day2_l1_replay.py",
+        "OracleDay2L1ReplayStrategy",
     ),
     "ms_regime_delta":    ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeDeltaOneStrategy"),
     "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
