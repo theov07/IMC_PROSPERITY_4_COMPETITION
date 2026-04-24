@@ -1,3 +1,26 @@
+## Round 3 Status (current)
+
+**Products**: HYDROGEL_PACK (limit 200), VELVETFRUIT_EXTRACT (limit 200, underlying), VEV_4000..VEV_6500 (10 European call vouchers, limit 300 each).
+**TTE at Round 3 final**: 5 days. Historical data TTE: day 0 = 8d, day 1 = 7d, day 2 = 6d.
+
+**Baseline**: `r3_naive_champion` = **+123,526 PnL on 3-day realistic backtest**.
+- HYDROGEL_PACK v4_F5 anchor=10000 → ~18k/day ✓
+- VELVETFRUIT_EXTRACT v4_F5 anchor=5250 → ~15k/day ✓
+- VEV_xxxx `option_mm_bs` penny-improve around market → near 0/day (neutral, no blow-ups)
+
+**Framework added**:
+- `prosperity/options/` — `black_scholes.py`, `implied_vol.py`, `smile.py` (polynomial fit in log-moneyness)
+- `prosperity/strategies/round_3/option_mm_bs.py` — naive BS-aware MM with skip-guard for deep OTM
+
+**Observed edge**: Realized vol (2.15%/day) vs implied vol (1.25%/day) → **long-vol overlay** potentially profitable.
+VEV_6000/VEV_6500 mid stuck at 0.5 (near-worthless floor) — skipped via `min_quote_price=2.0`.
+
+**Magritte riddle**: image = "Ceci n'est pas une pipe" = BS fair ≠ market price on options → fade mispricings.
+
+**Round 2 final**: 82,352 PnL with V8_osm_deeps (archived).
+
+---
+
 ## IMC Queue / FIFO Reality
 
 ## V8 Direction

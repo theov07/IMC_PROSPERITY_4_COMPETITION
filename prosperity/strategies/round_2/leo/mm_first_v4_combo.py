@@ -451,6 +451,550 @@ class MMFirstV4ComboStrategy(BaseStrategy):
             buy_size = max(1.0, buy_size * jump_size_frac)
         return buy_size, sell_size
 
+    # ── NEW: wall mid (volume-filtered fair value) ──────────────────────
+
+    def _compute_base_mid(
+        self,
+        raw_mid: float,
+        book: BookSnapshot,
+    ) -> float:
+        """Return a volume-filtered mid that ignores book levels with vol < threshold.
+
+        Small resting orders at extreme prices are often toxic (informed traders
+        baiting fills). Computing mid only from "substantial" levels gives a
+        more robust fair value.
+
+        Params:
+          mid_vol_filter — minimum level volume to include (default 0 = off)
+
+        Returns raw_mid when filter is off, or when no levels pass the filter.
+        """
+        vol_filter = int(self.params.get("mid_vol_filter", 0))
+        if vol_filter <= 0:
+            return raw_mid
+
+        wall_bid = None
+        for (p, v) in book.bid_levels:
+            if v >= vol_filter:
+                wall_bid = p
+                break
+
+        wall_ask = None
+        for (p, v) in book.ask_levels:
+            if v >= vol_filter:
+                wall_ask = p
+                break
+
+        if wall_bid is None or wall_ask is None:
+            return raw_mid
+        return (wall_bid + wall_ask) / 2.0
+
+    # ── NEW: taker cooldown (prevents overtrading) ──────────────────────
+
+    def _taker_cooldown_active(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+    ) -> Tuple[bool, bool]:
+        """Return (buy_blocked, sell_blocked) based on time since last taker fire.
+
+        After firing a taker on side X, block new takers on that side for
+        taker_cooldown_ticks ticks. Helps avoid overtrading in volatile spikes
+        where the backtest fires repeatedly then reverses.
+
+        Params:
+          taker_cooldown_ticks — cooldown duration in ticks (default 0 = off)
+        """
+        cooldown = int(self.params.get("taker_cooldown_ticks", 0))
+        if cooldown <= 0:
+            return False, False
+
+        now = int(state.timestamp)
+        ts_increment = int(self.params.get("ts_increment", 100))
+        last_buy = memory.get("_last_taker_buy_ts")
+        last_sell = memory.get("_last_taker_sell_ts")
+
+        buy_blocked = last_buy is not None and (now - last_buy) < cooldown * ts_increment
+        sell_blocked = last_sell is not None and (now - last_sell) < cooldown * ts_increment
+        return buy_blocked, sell_blocked
+
+    def _update_taker_cooldown(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+        taker_buy_px: Set[int],
+        taker_sell_px: Set[int],
+    ) -> None:
+        """Record timestamp of this tick's taker fires for next-tick cooldown."""
+        now = int(state.timestamp)
+        if taker_buy_px:
+            memory["_last_taker_buy_ts"] = now
+        if taker_sell_px:
+            memory["_last_taker_sell_ts"] = now
+
+    # ── NEW: inventory-aversion bias on fair value (AS-lite) ────────────
+
+    def _apply_inventory_bias(
+        self,
+        fair_value: float,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> float:
+        """Shift fair value toward zero-inventory (Avellaneda-Stoikov lite).
+
+        fair_biased = fair - gamma * position * sigma^2
+
+        When long (position > 0):  fair shifts DOWN -> more likely to sell,
+                                   less likely to buy at old fair.
+        When short (position < 0): fair shifts UP.
+
+        Complements _compute_asym_take_edges but at the fair-value level
+        (affects both takers AND passives, more holistic).
+
+        Params:
+          inventory_aversion_gamma — scale factor (default 0.0 = off)
+                                     typical 0.01-0.05 for OSM (sigma~1)
+        """
+        gamma = float(self.params.get("inventory_aversion_gamma", 0.0))
+        if gamma <= 0 or position == 0:
+            return fair_value
+
+        sigma = memory.get("sigma_smoothed", 1.0)
+        return fair_value - gamma * position * (sigma ** 2)
+
+    # ── NEW: microprice size tilt (order flow predictive) ───────────────
+
+    def _microprice_size_tilt(
+        self,
+        book: BookSnapshot,
+        raw_mid: float,
+        bid_size: float,
+        ask_size: float,
+    ) -> Tuple[float, float]:
+        """Tilt passive sizes based on microprice - mid deviation.
+
+        When microprice > mid (bid-heavy book), expect price UP:
+          increase ask_size (sell more — capture the rise)
+          decrease bid_size (don't load more into a rising market)
+
+        Orthogonal to z-score size tilt which is mean-reversion based.
+        This is order-flow based (predictive, not reactive).
+
+        Params:
+          microprice_size_gain — linear gain on deviation (default 0.0 = off)
+          microprice_size_threshold — min |delta| to activate (default 0.2)
+        """
+        gain = float(self.params.get("microprice_size_gain", 0.0))
+        if gain <= 0:
+            return bid_size, ask_size
+
+        threshold = float(self.params.get("microprice_size_threshold", 0.2))
+        micro = self._microprice(book)
+        delta = micro - raw_mid
+        if abs(delta) < threshold:
+            return bid_size, ask_size
+
+        scale = 1.0 + gain * (abs(delta) - threshold)
+        if delta > 0:  # bid-heavy -> expect up -> sell more
+            return bid_size / scale, ask_size * scale
+        else:  # ask-heavy -> expect down -> buy more
+            return bid_size * scale, ask_size / scale
+
+    # ── NEW: adaptive spread widening in high vol ──────────────────────
+
+    def _apply_spread_widening(
+        self,
+        bid_price: Optional[int],
+        ask_price: Optional[int],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> Tuple[Optional[int], Optional[int]]:
+        """Widen passive quotes further from mid when volatility is elevated.
+
+        Reduces adverse selection during volatile regimes. Applied AFTER
+        _asym_passive_skew so it can counter it (skew pulls toward mid,
+        widening pushes away).
+
+        Params:
+          spread_widen_vol_threshold — sigma above which widening kicks in (default 0 = off)
+          spread_widen_extra_ticks   — ticks to widen each side (default 1)
+
+        Only fires on two-sided books (preserves far-quote alpha).
+        """
+        threshold = float(self.params.get("spread_widen_vol_threshold", 0.0))
+        if threshold <= 0 or bid_price is None or ask_price is None:
+            return bid_price, ask_price
+        if book.best_bid is None or book.best_ask is None:
+            return bid_price, ask_price
+
+        sigma = memory.get("sigma_smoothed", 0.0)
+        if sigma < threshold:
+            return bid_price, ask_price
+
+        extra = int(self.params.get("spread_widen_extra_ticks", 1))
+        # Push bid down, ask up (widen), but respect crossing bounds
+        new_bid = max(1, bid_price - extra)
+        new_ask = ask_price + extra
+        if book.best_ask is not None:
+            new_bid = min(new_bid, book.best_ask - 1)
+        if book.best_bid is not None:
+            new_ask = max(new_ask, book.best_bid + 1)
+        return new_bid, new_ask
+
+    # ── NEW: soft position target ≠ 0 ──────────────────────────────────
+
+    def _effective_position(self, position: int) -> int:
+        """Return position adjusted by a soft target for downstream helpers.
+
+        If inventory_target != 0, helpers that react to position (asym takers,
+        sizing, inv_bias) see position - target instead of raw position.
+
+        Example: target=+5 means we want to hold +5 long, so:
+          - at raw position=5, effective=0 (helpers see "flat")
+          - at raw position=10, effective=+5 (helpers see "long 5")
+
+        Params:
+          inventory_target — signed target position (default 0)
+        """
+        target = int(self.params.get("inventory_target", 0))
+        return position - target
+
+    # ── NEW: fill-rate toxicity detector ───────────────────────────────
+
+    def _apply_fill_rate_toxicity(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+        bid_size: float,
+        ask_size: float,
+    ) -> Tuple[float, float]:
+        """Detect asymmetric fill rate and pause exposed side.
+
+        If our buy fills vastly outnumber sell fills in recent window, the
+        market is dropping (we buy the dip repeatedly but can't sell).
+        Conversely: sell-heavy fills -> market rising.
+        Shrink the exposed side size.
+
+        Params:
+          fill_toxicity_window   — rolling window size in own_trades (default 10)
+          fill_toxicity_threshold — |imbalance| ratio to trigger (default 0.7)
+          fill_toxicity_frac     — size multiplier on exposed side (default 0.5)
+        """
+        window = int(self.params.get("fill_toxicity_window", 0))
+        if window <= 0:
+            return bid_size, ask_size
+
+        history = memory.setdefault("_fill_history", [])
+        for trade in state.own_trades.get(self.product, []):
+            qty = float(trade.quantity)
+            # +1 for buy, -1 for sell (sign of recent position change)
+            if trade.buyer == "SUBMISSION":
+                history.append(qty)
+            elif trade.seller == "SUBMISSION":
+                history.append(-qty)
+        if len(history) > window:
+            del history[:-window]
+
+        if not history:
+            return bid_size, ask_size
+
+        signed = sum(history)
+        total = sum(abs(x) for x in history)
+        if total <= 0:
+            return bid_size, ask_size
+
+        imbalance = signed / total
+        threshold = float(self.params.get("fill_toxicity_threshold", 0.7))
+        frac = float(self.params.get("fill_toxicity_frac", 0.5))
+
+        # Strong buying = we just bought repeatedly = price likely falling = adverse for us
+        # -> shrink BUY side (stop buying more into falling market)
+        if imbalance > threshold and bid_size > 0:
+            bid_size = max(1.0, bid_size * frac)
+        elif imbalance < -threshold and ask_size > 0:
+            ask_size = max(1.0, ask_size * frac)
+        return bid_size, ask_size
+
+    # ── NEW: mean-rev z-score on SPREAD ────────────────────────────────
+
+    def _apply_spread_zscore_skew(
+        self,
+        bid_price: Optional[int],
+        ask_price: Optional[int],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> Tuple[Optional[int], Optional[int]]:
+        """When spread is abnormally wide (z > threshold), post more aggressively.
+
+        Spread tends to mean-revert after shocks. Wide spread → about to tighten →
+        post inside the regular penny-improve (one more tick closer to mid).
+
+        Params:
+          spread_zscore_window     — rolling window for spread stats (default 100)
+          spread_zscore_threshold  — z above which to skew (default 1.5)
+          spread_zscore_shift      — ticks to push quotes toward mid (default 1)
+        """
+        window = int(self.params.get("spread_zscore_window", 0))
+        if window <= 0 or bid_price is None or ask_price is None:
+            return bid_price, ask_price
+        if book.best_bid is None or book.best_ask is None:
+            return bid_price, ask_price
+
+        spread = book.best_ask - book.best_bid
+        buf: List[float] = memory.setdefault("_spread_buf", [])
+        buf.append(spread)
+        if len(buf) > window:
+            del buf[:-window]
+        if len(buf) < max(10, window // 4):
+            return bid_price, ask_price
+
+        mean = sum(buf) / len(buf)
+        var = sum((x - mean) ** 2 for x in buf) / max(len(buf) - 1, 1)
+        std = var ** 0.5
+        if std < 1e-9:
+            return bid_price, ask_price
+
+        z = (spread - mean) / std
+        threshold = float(self.params.get("spread_zscore_threshold", 1.5))
+        if z < threshold:
+            return bid_price, ask_price
+
+        # Spread wide → expect tighten → post MORE aggressive (closer to mid)
+        shift = int(self.params.get("spread_zscore_shift", 1))
+        new_bid = min(book.best_ask - 1, bid_price + shift)
+        new_ask = max(book.best_bid + 1, ask_price - shift)
+        if new_bid >= new_ask:
+            new_ask = new_bid + 1
+        return new_bid, new_ask
+
+    # ── NEW: tick-0 extreme probe (detect aggressors at extreme depths) ─
+
+    def _probe_tick0(
+        self,
+        book: BookSnapshot,
+        state: TradingState,
+        memory: Dict[str, Any],
+        buy_cap: int,
+        sell_cap: int,
+    ) -> Tuple[List[Order], int, int]:
+        """Fire one-shot probes at MULTIPLE distances at session start.
+
+        Posts bids/asks at best ± each of probe_t0_distances ticks (minimal qty)
+        within the first probe_t0_max_ts timestamps. Tests multiple depths
+        in a single submission — if a specific distance gets filled, we know
+        aggressors cross at that depth.
+
+        Params:
+          probe_t0_distances — list/tuple of tick distances (default [] = off)
+          probe_t0_qty       — qty per probe (default 1)
+          probe_t0_max_ts    — last timestamp to fire (default 500)
+        """
+        distances = self.params.get("probe_t0_distances")
+        if not distances or book.best_bid is None or book.best_ask is None:
+            return [], buy_cap, sell_cap
+
+        max_ts = int(self.params.get("probe_t0_max_ts", 500))
+        now = int(state.timestamp)
+        if now > max_ts:
+            return [], buy_cap, sell_cap
+        if memory.get("_probe_t0_fired", False):
+            return [], buy_cap, sell_cap
+
+        qty = int(self.params.get("probe_t0_qty", 1))
+        orders: List[Order] = []
+        for dist in distances:
+            d = int(dist)
+            if d <= 0:
+                continue
+            b_qty = min(qty, buy_cap)
+            a_qty = min(qty, sell_cap)
+            if b_qty > 0:
+                orders.append(Order(self.product, book.best_bid - d, b_qty))
+                buy_cap -= b_qty
+            if a_qty > 0:
+                orders.append(Order(self.product, book.best_ask + d, -a_qty))
+                sell_cap -= a_qty
+        if orders:
+            memory["_probe_t0_fired"] = True
+        return orders, buy_cap, sell_cap
+
+    # ── NEW: momentum follower (no names, uses market_trades signed flow) ─
+
+    def _apply_momentum_follower(
+        self,
+        state: TradingState,
+        order_depth: OrderDepth,
+        memory: Dict[str, Any],
+        buy_cap: int,
+        sell_cap: int,
+    ) -> Tuple[List[Order], int, int]:
+        """Follow strong one-sided market trade flow with aggressive takers.
+
+        No named participants in R2 logs, so we approximate "bot-follower" by:
+          1. Track signed market trade volume in rolling window
+          2. If flow > threshold → aggressive buyers dominate → add taker BUY
+          3. If flow < -threshold → aggressive sellers dominate → add taker SELL
+        Directional bet that momentum continues.
+
+        Params:
+          momentum_window    — rolling window (default 0 = off)
+          momentum_threshold — |signed/total| to trigger (default 0.8)
+          momentum_qty       — taker qty (default 3)
+        """
+        window = int(self.params.get("momentum_window", 0))
+        if window <= 0:
+            return [], buy_cap, sell_cap
+
+        history = memory.setdefault("_momentum_history", [])
+        prev_bid = memory.get("_prev_best_bid")
+        prev_ask = memory.get("_prev_best_ask")
+        for trade in state.market_trades.get(self.product, []):
+            qty = float(trade.quantity)
+            if prev_ask is not None and trade.price >= prev_ask:
+                history.append(qty)
+            elif prev_bid is not None and trade.price <= prev_bid:
+                history.append(-qty)
+        if len(history) > window:
+            del history[:-window]
+        if not history:
+            return [], buy_cap, sell_cap
+
+        signed = sum(history)
+        total = sum(abs(x) for x in history)
+        if total <= 0:
+            return [], buy_cap, sell_cap
+        flow = signed / total
+
+        threshold = float(self.params.get("momentum_threshold", 0.8))
+        qty = int(self.params.get("momentum_qty", 3))
+        orders: List[Order] = []
+
+        if flow > threshold and buy_cap > 0:
+            # Strong buying aggressors → join them, take best ask
+            asks = sorted(order_depth.sell_orders.keys())
+            if asks:
+                ask_p = asks[0]
+                available = -order_depth.sell_orders[ask_p]
+                q = min(qty, buy_cap, available)
+                if q > 0:
+                    orders.append(Order(self.product, ask_p, q))
+                    buy_cap -= q
+        elif flow < -threshold and sell_cap > 0:
+            bids = sorted(order_depth.buy_orders.keys(), reverse=True)
+            if bids:
+                bid_p = bids[0]
+                volume = order_depth.buy_orders[bid_p]
+                q = min(qty, sell_cap, volume)
+                if q > 0:
+                    orders.append(Order(self.product, bid_p, -q))
+                    sell_cap -= q
+        return orders, buy_cap, sell_cap
+
+    # ── NEW: always-on far-quote probe (live aggressor detection) ───────
+
+    def _probe_quotes(
+        self,
+        book: BookSnapshot,
+        state: TradingState,
+        memory: Dict[str, Any],
+        position: int,
+        buy_cap: int,
+        sell_cap: int,
+    ) -> Tuple[List[Order], int, int]:
+        """Post small far-quote probes regardless of book state.
+
+        Unlike gap_exploit's far-quote (fires only when a side is empty),
+        this probe ALWAYS posts at last_best ± probe_distance to measure
+        whether aggressors cross at that depth even in normal book conditions.
+
+        Runs at most once every probe_interval_ticks to limit risk.
+
+        Params:
+          probe_distance        — ticks from best to post probe (default 0 = off)
+          probe_qty             — size per side (default 1)
+          probe_interval_ticks  — minimum ticks between probes (default 100)
+        """
+        probe_dist = int(self.params.get("probe_distance", 0))
+        if probe_dist <= 0 or book.best_bid is None or book.best_ask is None:
+            return [], buy_cap, sell_cap
+
+        probe_qty = int(self.params.get("probe_qty", 1))
+        probe_interval = int(self.params.get("probe_interval_ticks", 100))
+        ts_increment = int(self.params.get("ts_increment", 100))
+
+        now = int(state.timestamp)
+        last_probe = memory.get("_last_probe_ts", -10**9)
+        if (now - last_probe) < probe_interval * ts_increment:
+            return [], buy_cap, sell_cap
+
+        orders: List[Order] = []
+        actual_bid_qty = min(probe_qty, buy_cap)
+        actual_ask_qty = min(probe_qty, sell_cap)
+
+        if actual_bid_qty > 0:
+            probe_bid = book.best_bid - probe_dist
+            orders.append(Order(self.product, probe_bid, actual_bid_qty))
+            buy_cap -= actual_bid_qty
+
+        if actual_ask_qty > 0:
+            probe_ask = book.best_ask + probe_dist
+            orders.append(Order(self.product, probe_ask, -actual_ask_qty))
+            sell_cap -= actual_ask_qty
+
+        if orders:
+            memory["_last_probe_ts"] = now
+        return orders, buy_cap, sell_cap
+
+    # ── NEW: asymmetric passive skew (maker-aggressive unwind) ────────────
+
+    def _asym_passive_skew(
+        self,
+        bid_price: Optional[int],
+        ask_price: Optional[int],
+        position: int,
+        book: BookSnapshot,
+    ) -> Tuple[Optional[int], Optional[int]]:
+        """Push passive quote toward mid on the unwind side when long/short.
+
+        Complements _compute_asym_take_edges: instead of only unwinding via
+        takers (which pay the spread), also post passives closer to mid on
+        the unwind side to capture partial spread + higher fill probability.
+
+        Params:
+          passive_unwind_skew_ticks — max ticks to shift toward mid (default 0 = off)
+          passive_unwind_trigger    — |pos|/limit above which skew activates
+                                      (default 0.3; avoids skew at low inventory)
+
+        Only fires on two-sided books (preserves far-quote live alpha).
+        Scales linearly with pressure beyond the trigger.
+        """
+        skew_max = int(self.params.get("passive_unwind_skew_ticks", 0))
+        if skew_max <= 0 or bid_price is None or ask_price is None:
+            return bid_price, ask_price
+        if book.best_bid is None or book.best_ask is None:
+            return bid_price, ask_price  # preserve far-quote when one side empty
+
+        trigger = float(self.params.get("passive_unwind_trigger", 0.3))
+        limit = self.position_limit()
+        pressure = abs(position) / max(1.0, float(limit))
+        if pressure < trigger:
+            return bid_price, ask_price
+
+        # Scale: 0 at trigger, skew_max at pressure=1.0
+        scaled = (pressure - trigger) / max(1e-9, 1.0 - trigger)
+        skew = int(round(skew_max * scaled))
+        if skew <= 0:
+            return bid_price, ask_price
+
+        if position > 0:
+            # long: push ask DOWN toward mid (floor = best_bid + 1 to avoid crossing)
+            ask_price = max(book.best_bid + 1, ask_price - skew)
+        elif position < 0:
+            # short: push bid UP toward mid (cap = best_ask - 1)
+            bid_price = min(book.best_ask - 1, bid_price + skew)
+
+        return bid_price, ask_price
+
     # ── NEW: Leo's EOD flatten (opt-in via eod_flatten_ts) ────────────────
 
     def _apply_eod_flatten(
@@ -582,12 +1126,27 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         if raw_mid is not None:
             memory["_last_mid"] = raw_mid
 
-        mid_smooth = self._smooth_mid(mid, memory)
-        self._compute_zscore(mid, memory)
-        sigma = self._update_volatility(mid, memory)
+        # NEW: base_mid = volume-filtered mid if mid_vol_filter > 0, else raw_mid
+        # If use_microprice_as_fair=True, use microprice instead of mid as input
+        if self.params.get("use_microprice_as_fair", False):
+            micro = self._microprice(book)
+            base_mid = micro if micro else mid
+        else:
+            base_mid = self._compute_base_mid(mid, book)
+
+        mid_smooth = self._smooth_mid(base_mid, memory)
+        self._compute_zscore(base_mid, memory)
+        sigma = self._update_volatility(base_mid, memory)
 
         # NEW: compute fair value (anchor-based if anchor_price set, else mid_smooth)
-        fair_value = self._compute_anchor_signal(mid, book, mid_smooth, memory)
+        fair_value = self._compute_anchor_signal(base_mid, book, mid_smooth, memory)
+
+        # NEW: compute effective position (for soft inventory_target != 0)
+        eff_position = self._effective_position(position)
+
+        # NEW: inventory-aversion bias on fair value (Avellaneda-Stoikov lite)
+        # Uses eff_position so the target=0 assumption shifts by inventory_target
+        fair_value = self._apply_inventory_bias(fair_value, eff_position, memory)
 
         limit = self.position_limit()
         inventory_ratio = position / float(limit) if limit else 0.0
@@ -602,14 +1161,27 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         bid_size = max(0.0, bid_size * bid_factor)
         ask_size = max(0.0, ask_size * ask_factor)
 
-        # NEW: asymmetric take edges
+        # NEW: microprice size tilt (order-flow predictive)
+        bid_size, ask_size = self._microprice_size_tilt(book, mid, bid_size, ask_size)
+
+        # NEW: asymmetric take edges (uses effective position for target support)
         base_edge = self._dynamic_take_edge(memory)
-        buy_edge, sell_edge = self._compute_asym_take_edges(base_edge, position, memory)
+        buy_edge, sell_edge = self._compute_asym_take_edges(base_edge, eff_position, memory)
+
+        # NEW: taker cooldown — if active, raise edge to effectively block takers that side
+        buy_blocked, sell_blocked = self._taker_cooldown_active(state, memory)
+        if buy_blocked:
+            buy_edge = 1_000_000.0   # effectively block buy takers this tick
+        if sell_blocked:
+            sell_edge = 1_000_000.0
 
         taker_orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px = self._fire_takers(
             order_depth, fair_value, bid_size, ask_size, buy_cap, sell_cap,
             buy_edge=buy_edge, sell_edge=sell_edge,
         )
+
+        # NEW: update taker cooldown timestamps for next tick
+        self._update_taker_cooldown(state, memory, taker_buy_px, taker_sell_px)
 
         gap_orders, buy_cap, sell_cap, bid_price, ask_price = self._gap_exploit(
             order_depth, memory, limit, bid_size, ask_size,
@@ -617,13 +1189,43 @@ class MMFirstV4ComboStrategy(BaseStrategy):
             taker_buy_px, taker_sell_px,
         )
 
+        # NEW: asym passive skew (maker-aggressive unwind, uses effective position)
+        bid_price, ask_price = self._asym_passive_skew(bid_price, ask_price, eff_position, book)
+
+        # NEW: spread widening on high vol (reduces adverse selection)
+        bid_price, ask_price = self._apply_spread_widening(bid_price, ask_price, book, memory)
+
+        # NEW: spread z-score skew (when spread is abnormally wide, tighten our quotes)
+        bid_price, ask_price = self._apply_spread_zscore_skew(bid_price, ask_price, book, memory)
+
         # NEW: toxic flow + jump filters on passive sizing
         bid_size, ask_size = self._apply_toxic_flow(state, memory, bid_size, ask_size)
         bid_size, ask_size = self._apply_jump_filter(book, memory, bid_size, ask_size)
 
+        # NEW: fill-rate toxicity on sizing
+        bid_size, ask_size = self._apply_fill_rate_toxicity(state, memory, bid_size, ask_size)
+
         passive_orders, buy_cap, sell_cap = self._passive_quotes(
             bid_price, ask_price, bid_size, ask_size, buy_cap, sell_cap, position, limit
         )
+
+        # NEW: always-on far-quote probe (live-only alpha detection)
+        probe_orders, buy_cap, sell_cap = self._probe_quotes(
+            book, state, memory, position, buy_cap, sell_cap,
+        )
+        passive_orders.extend(probe_orders)
+
+        # NEW: tick-0 extreme probe (one-shot at session start)
+        probe_t0_orders, buy_cap, sell_cap = self._probe_tick0(
+            book, state, memory, buy_cap, sell_cap,
+        )
+        passive_orders.extend(probe_t0_orders)
+
+        # NEW: momentum follower (opt-in, uses market_trades direction)
+        momentum_orders, buy_cap, sell_cap = self._apply_momentum_follower(
+            state, order_depth, memory, buy_cap, sell_cap,
+        )
+        taker_orders.extend(momentum_orders)
 
         # Persist state for next tick
         if book.best_bid is not None:
