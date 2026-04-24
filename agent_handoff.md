@@ -19,122 +19,145 @@ Use this file to:
 
 ---
 
-## Current Context (2026-04-18 — Round 2 live)
+## Current Context (2026-04-19 — Round 2 ongoing, compaction point)
 
-### Round 1 results (official)
+### Team ranking
+- **R1 final** : 1st France, 77th Global on algo trading
+- **R1 champion** : `champion_generalized` (107k finale PnL)
+- **R2 ongoing** : same 2 products (OSM + IPR), with Market Access Fee (MAF) mechanic
 
-- Final ranking: **1st France, 77th Global** on algo trading.
-- Champion submitted: `champion_generalized` (combines Tibo's `mm_first_v2` on OSM + Théo's `theo_best_generalized` on IPR).
-- Final simu PnL: **107,673.56 XIRECs** (submission 273329).
-- Logs archived at `logs/round_1/final_submission_champion_generalized/`.
-- Manual trading: weaker than algo, team's point to improve.
+### Current champion — `champion_19april_am`
 
-### Round 2 status
+Combines best-of-both products:
+- **OSM** : `mm_first_v4_combo` with v4_F5 tuned params
+- **IPR** : `theo_best_clean_generalized_v4` (Theo's live-winning IPR strat, sub 307401)
+- Backtest 3 days: **301,688 PnL** (OSM 63,420 + IPR 238,268)
+- Live simu test: 3,000-10,000 per sim (variance due to far-quote randomness)
+- Uploaded variants :
+  - `champion_19april_am` : IPR empty_side_shift=85 (Theo default)
+  - `champion_19april_am_s89` : IPR empty_side_shift=89 (to match OSM)
+- Slim exports (under 100KB limit) via `scripts/_minify_submission.py` + `scripts/_strip_dead_helpers.py`
 
-- **Same products**: `ASH_COATED_OSMIUM` (OSM) and `INTARIAN_PEPPER_ROOT` (IPR), same position limits (80).
-- **New mechanic — Market Access Fee (MAF)**: blind auction to get +25% extra volume in the book. Top 50% of bidders accepted, fee deducted from final PnL. Ignored during testing (backtest can't evaluate it). **Decision pending — see open points.**
-- **Manual challenge**: "Invest & Expand" — 50k XIRECs across 3 growth pillars. Doc still needs to be pulled from Notion (the `docs/wiki/round_2_info.txt` file truncates at the manual section).
-- **Data**: 3 days in `data/round_2/` (days -1, 0, 1), 10k ticks each.
+### Strategy stack (OSM) — v4_F5 params
 
-### Team workstreams
-
-- **Léo (this branch)**: focus on alpha R&D + decision-making (MAF bid, baseline choice, this handoff).
-- **Théo**: IPR specialist. Built `theo_best_generalized.py` with block-OLS regression, regime detection, trim system. Has a gap study (`artifacts/analysis/round_2/theo/gap_study_official/`) analyzing one-sided book events — v2/v4/v6/v7 each captured ~7-8k PnL in simu final. Multiple R2 submission candidates in `artifacts/submissions/round_2/theo/`.
-- **Tibo**: OSM specialist. Maintains `mm_first_v2.py` (modular template — the canonical starting point for new strategies). Added dynamic take_edge, z-score skew, gap exploit with `OB_cleared_shift` for far-quote posting.
-- **Another Claude agent**: actively grid-searching strategies in parallel. **Coordinate to avoid conflict on `mm_first_v2` / `theo_best_generalized` / configs.**
-
----
-
-## Code structure (post-refactor)
-
-```
-prosperity/strategies/
-├── base/                     # BaseStrategy, AS, BS, MM, stat_arb, conversion_arb
-├── round_1/                  # All R1 iterations (naive_tight_mm_v34..v41, fusion_a..d, regression_mm_v3..v5)
-│   ├── metal_winner/         # The winners: mm_first_v2 + (mm_first legacy)
-│   ├── theo_best_generalized.py
-│   └── ... 
-├── round_2/{leo,theo,tibo}/  # Per-member R2 folders (mostly empty, to be filled)
-├── alpha_osm.py              # Léo's earlier alpha experiments (pistes 1-3, all underperformed)
-└── alpha_ipr.py              # Léo's earlier IPR dip alpha (underperformed)
+```python
+# Grid-searched winning params
+anchor_price=10000.0
+anchor_alpha=0.02
+anchor_drift_bound=2.0         # Biggest win: grid 4 found this
+ar_gain=0.3
+ar_shift_source="mid_smooth"
+unwind_take_edge=3.0           # Grid 4: boost vs Tibo's 1.0
+pct_kept_for_takers=0.05       # Grid 4: loosen from 0.1
+take_edge_lo=0.3               # Grid 1
+take_edge_hi=0.8               # Grid 1
+inventory_aversion_gamma=0.0015  # Added in v4_F5 (AS-lite)
+# + OB_cleared_shift=89 (live far-quote alpha, invisible in backtest)
 ```
 
-**Canonical MM template going forward**: `prosperity/strategies/round_1/metal_winner/mm_first_v2.py`. Highly modular with helpers (`_compute_quote_prices`, `_compute_zscore`, `_zscore_size_factors`, `_compute_sizes`, `_dynamic_take_edge`, `_fire_takers`, `_gap_exploit`, `_zscore_price_skew`, `_passive_quotes`, `_log_taker_fills`). New variants should subclass or duplicate this pattern.
+Delta vs baseline Tibo v3 (63,420 vs 57,992): **+9.4% PnL, −37% inventory pressure**
+
+### Strategy stack (IPR) — Theo v4
+
+Extracted from live submission 307401.
+- Class: `TheoBestCleanGeneralizedV4Strategy` at `prosperity/strategies/round_2/theo/theo_best_clean_generalized.py`
+- Inherits from V3 → V2 → Base
+- ~100 params (regression + regime + gap_trap + startup phase)
+- Key: `empty_side_shift=85` for far-quote on empty book side
+
+### MAF (Market Access Fee) — **IN PROGRESS**
+
+**Mechanic recap**:
+- Blind auction at submission time, 1 bid per team
+- Top 50% of bids accepted → pay OWN bid (first-price pay-as-bid)
+- Bid in finale XIRECs units, deducted from R2 final PnL
+- Negative bids → treated as 0
+- Teams without `bid()` method → counted as 0 for median
+- Teams without trader.py → ignored entirely from median calc
+
+**Research pipeline** : `research/round_2_MAF/`
+- `01_generate_synthetic_data.py` : Monte Carlo +25% volume in ORDER BOOK
+- `02_measure_delta_pnl.py` : backtest normal vs enriched → V measurement
+- `03_bid_optimization.py` + `03b_sensitivity_analysis.py` : optimal bid under adversary distribution model
+- `04_final_report.py` : consolidated
+
+**Current V measurement (limited)**:
+- Synthetic adds +25% book depth (ratio 1.296 effective)
+- Backtest ΔPnL: +967 ± 333 (simu test units) = **+0.27% of baseline**
+- **Known issue**: synthetic enriches BOOK only, NOT TRADES
+  - MAF in live gives +25% of TOTAL order flow (quotes AND trades)
+  - Backtest fills are market_trades driven, not book-depth driven
+  - → V measurement is significantly UNDERESTIMATED
+
+**Open question (end of session)**:
+- Should we enrich trades too in synthetic data?
+- Leo's instinct: yes, because wiki says "extra flow to trade against" implies trades
+- Claude's analysis: likely yes, MAF = +25% of total flow (quotes + aggressive orders that become trades)
+- **Next step**: modify script 01 to also enrich `trades_round_2_day_X.csv`
+
+### PnL scaling regimes (IMPORTANT)
+
+Do NOT mix PnL across regimes. Always reason in RATIOS (%).
+
+| Regime | Example (champion R2) | Scaling vs next |
+|---|---|---|
+| Backtest local (realistic) | ~300k total 3 days | ÷104 to simu test |
+| Simu test IMC (per day) | 3,000-11,000 | ×8.9 to finale |
+| Simu finale IMC (ranking) | ~100k estimated | — |
+
+Backtest is ~24-100× more optimistic than simu test in absolute terms.
 
 ---
 
 ## Decisions (confirmed)
 
-### Market dynamics (from R2 analysis)
+### Strategy decisions
 
-- **OSM dynamics R1 → R2 essentially unchanged**: mean 10000, std ~5, AR(1) returns = **−0.50** (strong mean-reversion), spread mode 16 (59% of ticks), trades/day ~465 (vs 422 in R1). The OSM config transfers 1:1 from R1.
-- **IPR trend still +0.108/tick = +1000/day deterministic**. Perfectly linear across all 3 R2 days. Day 1 opens at 12990 (continuity from R1 day 0 close at 13000).
-- **IPR regime shifted in 2 ways**:
-  - Spread modal: **13 → 14** (+1 tick wider)
-  - Gap L1→L2 ≥3 frequency: **84% → 96%** (book much thinner on top)
-- **OSM × IPR correlation = 0** in both R1 and R2 (Pearson, Spearman, tail dependence, rolling, cross-gap-event co-occurrence). Products are fully independent — trade them as such, no cross-hedging, no basket alpha.
+- **OSM champion** : v4_F5 params (mm_first_v4_combo). Validated via grid search + live sims.
+- **IPR champion** : Theo v4 (theo_best_clean_generalized_v4) with shift=85. Shift=89 test inconclusive (need more sims).
+- **Combined champion** : champion_19april_am (uploaded as SLIM version, 92.4KB)
+- **Abandoned features (backtest-tested, all dead)** : wall_mid, taker_cooldown, maker_unwind_skew, microprice_size_tilt, spread_widen, soft_position_target, fill_toxicity, spread_zscore
+- **Kept feature** : inventory_aversion_gamma (AS-lite) — small but real gain on inventory pressure
 
-### Alpha discoveries & traps
+### Submission tooling
 
-- **The 85-tick far-quote alpha is invisible in backtests**. It comes from live-only quote-reactive bots (Valentina/Caesar-like) that react to our posted quotes. Max distance from mid in public trade tape = ~11 ticks in both R1 and R2. **Never grid-search `OB_cleared_shift` on backtest — only test in live simu.**
-- **Same alpha didn't work on IPR in R1 but works in R2.** Cause is NOT cross-product linkage (confirmed zero correlation). The internal IPR regime change (thinner top-of-book, more gaps) is what makes IPR now attract quote-reactive bots.
-- **Post-gap waiting time on IPR ~memoryless**: p50 = 22 ticks, p90 = 54 ticks before a trade prints at ≤ fair_value. Features (spread, imbalance, trend velocity) explain <1% of variance. Use a fixed-timeout unwind rule, don't build a fancy predictor.
-- **Net economics of a gap sell on IPR**: capture ~85 ticks, pay ~2.4 ticks in adverse carry during wait → ~82 ticks net/fill. Highly profitable.
+- **100KB limit enforced by IMC** — minify/strip pipeline in place
+- **Export workflow** : `scripts/export_submission.py --member X --round 2`
+- **Minify** : `scripts/_minify_submission.py` strips docstrings + blanks (≈22% reduction)
+- **Strip dead** : `scripts/_strip_dead_helpers.py` removes no-op opt-in helpers (≈15% more)
+- Typical result: 142KB → 92.4KB
 
-### Scaling between regimes
+### MAF decision inputs
 
-| Regime | Units |
-|---|---|
-| Backtest local (`realistic` mode) | ~24× optimistic vs live |
-| Simu test IMC (during round) | 1× baseline |
-| Simu final IMC (ranking) | **~10× simu test** |
-
-**Rule**: never compare absolute PnL across regimes. Use only relative ranking between strategies on the same regime. Teams confirmed: R1 simu test = 12k, simu final = 107k → factor 8.9× ≈ 10×.
-
-### Historical lessons (R0, still valid)
-
-- **Queue priority matters**: backtest fills "join" orders as if they have queue priority. In live IMC, joining = behind existing orders → 0 fills. **Always tighten (1 tick inside) or take aggressively — never just join.**
-- `qty_join_threshold` is a backtest-only artifact. Discarded.
-- Trade CSV has `buyer/seller = None`: no named counterparty signal available. No Olivia-style copy-trade alpha exists in R1/R2 data.
-- `flow_window`, `asym_strength`, `spread_min_frac`, `cooldown_ticks`: all neutral or harmful.
-
-### Failed alpha experiments
-
-Léo's earlier alpha round (`prosperity/strategies/alpha_osm.py`, `alpha_ipr.py`) tested 4 pistes: volume-filtered fair value, AR(1) calibrated fair value, regime detection dual-window, IPR micro-dip entry. **All 4 underperformed the baseline by 1-4% on OSM** and IPR dip entry lost on trend carry. Root cause: fair value was integrated only into taker decisions, not into passive quote prices where most PnL comes from. Archived, do not reuse as-is — the lesson is "integrate signals into passive quotes, not just takers".
+- Adversary bid distribution : 35% no-bid, 25% wiki-copy (@15), rest value-anchored
+- Median adversary bid estimated : ~15-100 XIRECs
+- V measurement pending proper methodology (trades enrichment)
+- **Preliminary bid range** : 100-1500 XIRECs depending on V refinement
 
 ---
 
 ## Open Points / Next Actions
 
-### 🚨 Priority 1 — MAF bid decision (critical, blind auction)
+### 🚨 Priority 1 — Finish V measurement
+- Fix `research/round_2_MAF/01_generate_synthetic_data.py` to also enrich `trades_*.csv`
+- Re-run script 02 to get proper V
+- Expected V range (post-fix) : likely 5-15% of PnL (in %) vs current 0.27%
 
-- Top 50% = +25% extra order book volume
-- Bid is deducted from final PnL only if accepted
-- Backtest can't evaluate it (MAF ignored during testing)
-- Need: game-theory model — expected value of +25% volume (in simu-final units), distribution of adversary bids
-- **Rough reasonable range**: 10-20k XIRECs in final-PnL units (= 1-2k in simu-test units). Bidding more than the marginal value of +25% is money-losing.
-- **Decision pending** — Léo needs to decide before R2 closes.
+### ~~🥈 Priority 2 — Finalize bid~~ ✅ DONE
+- V mesurée via 80% subsampling = **11,194 finale (break-even)**
+- Bid décidé = **2,173 XIRECs finale**
+- Raisonnement : hedge tournament-regret + markup anti-focal prime
+- Add `def bid(self): return 2173` to Trader template in submission
+- Analyse complète : `research/round_2_MAF/FINDINGS.md` + scripts 05-17
 
-### 🥈 Priority 2 — Implement waiting time unwind timer in `mm_first_v2`
+### 🥉 Priority 3 — More sims of champion_19april_am
+- Currently 2 sims of each variant (shift=85 and shift=89)
+- Variance very high due to far-quote randomness
+- More sims would help validate which shift is better
 
-- Add helper `_unwind_timer` that blocks passive quotes on the unwind side for N ticks after a gap fill
-- Default `unwind_hold_ticks=50` (or 60 after short on IPR / 20 after long) 
-- Should be wrapped in a new variant (e.g. `mm_first_v3` or IPR-specific config) to avoid conflict with the parallel grid-search work on `mm_first_v2`
-
-### 🥉 Priority 3 — Retune `theo_best_generalized` for IPR R2 regime
-
-- **`gap_trigger_min` too high** for IPR: current 10, but with 96% of gaps ≥3 in R2 it almost never fires. Lower to 3-4.
-- Passive quote baseline should target 14-wide spread (vs 13 in R1 config).
-- `OB_cleared_shift` = 85 seems good but only confirmable in live simu — not backtest.
-
-### Analysis still needed
-
-- **Per-product PnL breakdown** of R1 submissions (to pick true best OSM and best IPR independently instead of just using `champion_generalized`). Léo: do you have these? Currently we only have the champion_generalized aggregate 107k.
-- **Manual "Invest & Expand"**: need the Notion doc for the 3 growth pillars + returns profile to optimize 50k allocation.
-
-### Tooling — confirmed OK
-
-- Per-product comparison: Léo confirms "already done" — existing tooling in `prosperity/tooling/compare.py` and `grid_search.py` shows per-product PnL (no aggregation).
+### Lower priority
+- Manual R2 "Invest & Expand" — 50k XIRECs across 3 growth pillars (doc Notion needed)
+- Grid search interactions between params (currently tuned independently)
 
 ---
 
@@ -142,37 +165,47 @@ Léo's earlier alpha round (`prosperity/strategies/alpha_osm.py`, `alpha_ipr.py`
 
 | What | Where |
 |---|---|
-| Canonical MM template | `prosperity/strategies/round_1/metal_winner/mm_first_v2.py` |
-| IPR sophisticated strategy | `prosperity/strategies/round_1/theo_best_generalized.py` |
-| Strategy registry | `prosperity/strategies/__init__.py` |
-| All member configs | `prosperity/config.py` |
-| Current champion config | `MEMBER_OVERRIDES["champion_generalized"]` in config.py |
-| R1 final log | `logs/round_1/final_submission_champion_generalized/273329.{json,log,py}` |
-| R2 data | `data/round_2/prices_round_2_day_{-1,0,1}.csv` + trades |
-| Théo's gap study | `artifacts/analysis/round_2/theo/gap_study_official/` |
-| R2 wiki (partial) | `docs/wiki/round_2_info.txt` (manual section truncated) |
-| Backtest CLI | `backtest.py --strategy <member> --round 2 --days -1 0 1 --match-trades realistic` |
+| Champion combined config | `MEMBER_OVERRIDES["champion_19april_am"]` in `prosperity/config.py` |
+| OSM strategy (mm_first_v4_combo) | `prosperity/strategies/round_2/leo/mm_first_v4_combo.py` |
+| IPR strategy (Theo v4) | `prosperity/strategies/round_2/theo/theo_best_clean_generalized.py` |
+| Slim submission (ready to upload) | `artifacts/submissions/round_2/champion_19april_am_SLIM.py` |
+| MAF research | `research/round_2_MAF/` |
+| Synthetic data (current, book-only) | `data/round_2_synthetic_s{42,43,44}/` |
+| Export script | `scripts/export_submission.py` |
+| Minify pipeline | `scripts/_minify_submission.py` + `_strip_dead_helpers.py` |
+| R1 final log (107k) | `logs/round_1/final_submission_champion_generalized/273329.*` |
 
 ---
 
 ## Log
 
-### 2026-04-18 — Claude (session: Leo2 onboarding + R2 analysis)
+### 2026-04-19 (compaction session) — Claude
 
-Thorough R2 market analysis vs R1. Delivered three major analytical pieces:
+Covered this session:
+1. **Champion combined** : built `champion_19april_am` combining v4_F5 OSM + Theo v4 IPR. Variant s89 for IPR shift test.
+2. **Slim export pipeline** : created `_minify_submission.py` + `_strip_dead_helpers.py` to fit IMC's 100KB limit.
+3. **Live sim analysis** : verified v4_F5 inventory improvement (−37% vs baseline). Tested multi-shift variants (shift=5, 30, 60, 89, 120) and probe variants — all live-only alpha tests dead (only OB_cleared_shift=89 works).
+4. **MAF pricing research** : built 4-script pipeline in `research/round_2_MAF/`. Measured V = +0.27% of backtest PnL, but noted **critical flaw** — synthetic data only enriches book, not trades. Needs fix before bid decision.
+5. **Bid analysis** : modeled adversary bid distribution, sensitivity across 7 scenarios. Robust bid range currently 200-1500 pending proper V measurement.
 
-1. **R1 vs R2 general market comparison**: OSM stable, IPR spread+gap shifted (see Decisions).
-2. **OSM × IPR cross-product dependency**: exhaustive test (Pearson/Spearman/lead-lag/copula/tail/volatility-clustering/gap-co-occurrence) → **zero linkage, both rounds**. Products fully independent.
-3. **IPR intra-product regime + waiting time model**: the 85-tick alpha's "prey" is invisible in public tape (max distance 11 ticks). It must be a live quote-reactive phenomenon. Post-gap waiting time on IPR is ~memoryless, p50=22 ticks, suggesting a fixed ~50-tick unwind timeout.
+Left hanging:
+- Fix script 01 to enrich trades too → re-measure V
+- Final bid decision
 
-Decision: no cross-product alpha exists. Focus remains on per-product optimization. Next action is Priority 1 (MAF bid) or Priority 2 (waiting time timer implementation).
+Tools / scripts committed this session:
+- `prosperity/strategies/round_2/theo/theo_best_clean_generalized.py` (extracted from Theo's 307401)
+- `scripts/_minify_submission.py`
+- `scripts/_strip_dead_helpers.py`
+- `research/round_2_MAF/0{1,2,3,3b,4}*.py`
+- `data/round_2_synthetic_s{42,43,44}/` (book-enriched data)
 
-Todo state at session close:
-- [x] Cross-product correlation analysis (done — zero)
-- [x] Intra-IPR regime analysis (done — book thinning)
-- [x] Waiting time model (done — use fixed timeout)
-- [ ] Per-product baseline selection (awaiting Léo's per-product PnL data for R1 submissions)
-- [ ] MAF bid game-theory model
-- [ ] Waiting time timer implementation in `mm_first_v2` variant
-- [ ] Retune IPR config (`gap_trigger_min=3-4`, spread 14)
-- [ ] Manual "Invest & Expand" (awaiting Notion doc)
+---
+
+### 2026-04-18 — Claude (earlier sessions summary)
+
+Covered earlier sessions this weekend:
+1. **R1 → R2 transition analysis** : OSM dynamics stable, IPR spread 13→14, gap L1→L2 frequency 84%→96%. OSM × IPR correlation = 0 in both rounds.
+2. **v4_F → v4_F2 → v4_F4 → v4_F5 progression** : grid searches on unwind, anchor_drift, take_edges. Final +9.4% PnL vs baseline.
+3. **Idea exploration** : 8 ideas tested (wall mid, taker cooldown, invbias, microprice size, spread widen, pos target, fill toxicity, spread zscore) — only invbias won.
+4. **Live-only probes** : 3 ideas tested (multi-shift far-quote, empty-book probe t0, momentum follower) — all dead.
+5. **Cleanup** : removed 42 orphan MEMBER_OVERRIDES + 31 submission files. Config 2286→771 lines.
