@@ -4,6 +4,69 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 🚨 2026-04-24 16:30 — Claude : LIVE R3 FINDINGS (critical, read before editing strategies)
+
+**Two R3 live logs received — v4_F5 LOSES, naive_tight_mm WINS**:
+
+| Submission | File size | Live PnL (1 day ~99,900 ts) | HYDROGEL | VELVET | Options |
+|---|---|---|---|---|---|
+| `r3_naive_champion` (v4_F5 anchor + option_mm_bs) | 98 KB | **-3,077 ❌** | **-4,096** | +750 | +270 |
+| `naive_base_round_3` (pure naive_tight_mm on all 12) | 22 KB | **+1,562 ✅** | +610 | +677 | +270 |
+
+**Root cause of v4_F5 failure in live**:
+- `anchor_price=10000` + `anchor_drift_bound=2.0` too rigid for live drift.
+- Position HYDROGEL finished at **+190 (quasi-limit)**, VELVET at **-183**.
+- MM kept buying at anchor while market drifted → built losing inventory.
+- In backtest the historical data hovers around 10k → anchor works.
+- In live, different dynamics → anchor is wrong fair → max inventory pain.
+
+**Option MM (option_mm_bs, penny-improve + no takers) is neutral ≈ +270 on both**.
+The option part is OK, it's the delta-1 MM that's the problem.
+
+**Immediate action items** (whoever picks this up next):
+
+1. **Add a new member** `r3_naive_champion_v2` that uses `naive_tight_mm` (or similar
+   book-following MM) for HYDROGEL + VELVETFRUIT instead of `mm_first_v4_combo` with
+   fixed anchor. Keep `option_mm_bs` for VEV_xxxx (that part works).
+2. **Backtest this new member** — should still be ≥ 33k on 3-day data (naive_base
+   baseline), but won't collapse live.
+3. **Alternative**: relax v4_F5 anchor — set `anchor_alpha=0.2` (EMA follows market)
+   and `anchor_drift_bound=50` (soft tether) instead of fixed `anchor_price=10000`.
+   Harder to validate quickly.
+4. **Upload the new champion** before the next Round 3 submission window.
+
+---
+
+## Agent coordination — WHO IS WORKING ON WHAT
+
+**Codex** (per recent commits on main):
+- Added `prosperity/options/time.py` (TTE decay helpers with `historical_tte_by_day`)
+- Extended `option_mm_bs.py` to use the time helpers
+- Added `_backtest` key to traderData in `backtest.py` to propagate round/day context
+- Touched `Makefile`, `research/visualizer/*`
+
+**Claude** (this session):
+- Built `prosperity/options/` (black_scholes, implied_vol, smile) — all pure modular
+- Built `option_mm_bs.py` naive MM (integrated with Codex's time helpers)
+- Built `prosperity/tooling/r3_analysis.py` — 8 PNG analysis plots
+- Built `ROUND_3` config + `r3_naive_champion` + `naive_base_round_3` members
+- Updated CLAUDE.md / TODO.md / NOTE.md / agent_handoff.md
+
+**Conflict-free zones** (do whatever you want):
+- `prosperity/options/hedging.py` (still TODO — delta/vega hedge utilities)
+- `prosperity/options/coordinator.py` (still TODO — shared smile fit per tick)
+- `prosperity/strategies/round_3/` (one file per strategy variant)
+- Dashboard extension for options (page "Options" with smile, greeks)
+- Manual trading Bio-Pods analysis
+
+**Zones à coordonner** (ping in this file before editing):
+- `prosperity/config.py` (ROUND_3 dict, r3_* members)
+- `prosperity/strategies/__init__.py` (_STRATEGY_SPECS)
+- `scripts/export_submission.py` (STRATEGY_REGISTRY + STRATEGY_FILE_DEPS)
+- `option_mm_bs.py` itself — if both of us edit at once, merge conflicts likely
+
+---
+
 ## Current Context (2026-04-24 — Round 3 started, naive baseline built)
 
 ### Team ranking

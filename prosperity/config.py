@@ -2024,6 +2024,40 @@ MEMBER_OVERRIDES["r3_naive_champion"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 NAIVE CHAMPION v2 — FIXED after 1st-submit live showed v4_F5 loses money
+#
+# Live findings (2026-04-24 — see agent_handoff.md, commit):
+#   v4_F5 anchor-based MM LOSES -3,077 PnL live. Its anchor=10000 with
+#   drift_bound=2.0 is too rigid: when live market drifts away from 10000 the
+#   strategy builds max inventory at a stale fair. Position HYDROGEL_PACK
+#   ended at +190 (near limit), VELVETFRUIT_EXTRACT at -183.
+#
+# Fix: use plain book-following MM (naive_tight_mm posting best_bid+1 /
+# best_ask-1) for delta-1 products. This matched +1,562 PnL live with the
+# naive_base_round_3 submission. Options keep option_mm_bs (neutral ~+270).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_naive_champion_v2"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        # Vouchers: use ROUND_3 default (option_mm_bs with penny-improve, no takers)
+    },
+}
+
+
 # Pure penny-improve baseline across all 12 Round 3 products (no signal, no takers).
 MEMBER_OVERRIDES["naive_base_round_3"] = {
     3: {
