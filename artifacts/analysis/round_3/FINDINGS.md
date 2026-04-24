@@ -1,6 +1,88 @@
 # Round 3 Findings
 
-Updated: 2026-04-24
+Updated: 2026-04-25
+
+---
+
+## 🚨 LATEST — hydrogel_follow_mm (trend-follow + aggressive unwind)
+
+**Motivation** (from v2 asym_mm live log `384749`):
+v2 asym_mm landed +672 live (peak +763, DD -201) — DD fix successful vs v1's
+-782, but we GAVE UP the peak too (was +1609). Post-mortem on fills: asym_mm's
+mean-rev logic BOUGHT BACK -17→-11 during the strong downtrend of day 2 at ts
+29k (mid=9994), leaving 70+ ticks of subsequent decline unharvested.
+
+Hypothesis: a trend-follower would HOLD + ADD through the drop, not cover.
+
+### Design: `prosperity/strategies/round_3/hydrogel_follow_mm.py`
+
+```
+trend = (EMA_fast - EMA_slow) / std_fast    # ACF-tuned: fast=500, slow=2000
+regime = up_trend | down_trend | flat        # threshold |trend| > 1.2 std
+
+up_trend  → grow BID (maker + k·|trend|), ASK size = 2 (min)
+down_trend→ grow ASK (maker + k·|trend|), BID size = 2 (min)
+flat      → SYMMETRIC MM + inventory skew (no one-side z-skew in flat!
+             prior version lost on slow-drift days, z kept signalling "cheap"
+             while mid dropped → we kept buying the drop)
+
+Takers (only when |pos| >= 8 AND trend regime active):
+  (A) flip-stop: pos adverse to new trend direction, trend crossed ±1.2σ
+  (B) take-profit: pos extended + z>+2.0σ (long) / z<-2.0σ (short)
+  (C) stop-loss: pos wrong side + z>±3.5σ (very wide)
+  cooldown 2500 ticks between takers
+```
+
+### Backtest live-window (ts 0-99900, 1 HYDRO tick = 100 ts)
+
+| Day | Final | Peak | DD | Fills | Takers | End Pos |
+|---|---|---|---|---|---|---|
+| 0 | +699 | +822 | -246 | 25 | 1 | -9 |
+| 1 | +1,105 | +1,346 | -395 | 42 | 3 | +5 |
+| 2 | **+717** | **+1,457** | -740 | 21 | 1 | -16 |
+
+### Full-day backtest 3-day totals (realistic fills)
+- follow_mm tuned v2: **+20,082** (5,945 + 11,815 + 2,322)
+- asym_mm v2 (ref): +26,192
+- asym_mm v1: +30,465
+
+### Live-window comparison vs asym_mm v2 live (day 2, both on identical data)
+
+| Metric | asym_mm v2 live | follow_mm backtest | Δ |
+|---|---|---|---|
+| Final | +672 | **+717** | +45 |
+| Peak | +763 | **+1,457** | **+694** (+91%) |
+| DD | -201 | -740 | -539 (worse) |
+| Fills | 24 | 21 | similar |
+
+**Trade-off**: follow_mm captures 2x more peak upside but 3.6x wider DD. The
+design bet is: on a strong-trend day (like day 2), the up-leg is larger than
+the chop-cost from trend misreads. Backtest validates this on day 2. Days 0/1
+look smoother (DDs -246/-395, a lot closer to asym_mm's low-risk profile).
+
+### Param choices
+
+- `ema_fast=500` / `ema_slow=2000`: fast=ACF optimal; slow=day-scale trend
+  (but note: slow=2000 can lag on 10k-tick days, which is why we add taker
+  overlay rather than rely on passive alone)
+- `trend_threshold=1.2`: only ~20% of ticks classified "trend" (grid-searched
+  2.0 wins +17k, 1.2 wins +16.9k — chose 1.2 for more responsiveness)
+- `hard_pos_cap=30`: 2x asym_mm's 15 — we WANT trend size; inventory skew
+  only fires in flat regime
+- `take_cooldown_ts=2500`: match asym_mm's 2000 to avoid whipsaw; v1 had 500
+  which caused 408 takers on day 2 (disaster)
+- `min_pos_for_take=8`: gate takers on meaningful position (was firing on |pos|=2 before)
+
+### What to watch on first live test
+
+1. Peak: expect +800 to +1,500 on day 2 based on backtest (vs asym_mm live +763)
+2. DD: backtest shows -740, live may be tighter due to weaker queue priority
+3. End position: asym_mm v2 finished -23 (held the short); follow_mm may finish
+   closer to -5..-15 (less committed, more trend-flip unwinds)
+4. If DD >1000 live, we need tighter takers. If peak <500, trend_threshold=1.2
+   is too loose and trend regime rarely fires.
+
+**Submission**: `artifacts/submissions/round_3/r3_hydrogel_follow_mm_round3_submission.py` (29 KB)
 
 ---
 

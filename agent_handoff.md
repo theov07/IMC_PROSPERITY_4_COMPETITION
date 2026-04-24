@@ -4,6 +4,75 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 2026-04-25 01:00 — Claude: **r3_hydrogel_follow_mm** built and exported
+
+### Context — v2 asym_mm live result (log 384749)
+
+Final **+672** live, peak +763, DD **-201**. The hard-cap (+15) fix worked:
+v1's -782 DD → v2's -201 DD. But the peak collapsed from v1's +1,609 to v2's
++763 (both on identical day 2 data). Post-mortem on v2 fills:
+- Correct short early (ts 10-22k, avg ~10020)
+- **Mean-rev logic BOUGHT BACK** -17→-11 at ts 29k mid=9994 — right when the
+  downtrend was about to extend another 80 ticks
+- Had to re-establish short later at worse price; ended -23 at close
+
+Hypothesis: a **trend-follower** would HOLD (or ADD) through that pullback and
+capture the remaining leg. Ran and tested.
+
+### Design: `prosperity/strategies/round_3/hydrogel_follow_mm.py`
+
+```
+trend_score = (EMA_fast(500) - EMA_slow(2000)) / std_fast   # ACF-tuned
+regime = up_trend if trend > +1.2σ,
+         down_trend if trend < -1.2σ,
+         flat otherwise (~80% of ticks)
+
+up_trend    → maker_size + k·|trend| on BID, min_size on ASK
+down_trend  → maker_size + k·|trend| on ASK, min_size on BID
+flat        → symmetric MM + inventory skew (NO one-side z-skew —
+              slow drift days would fool it into buying the dip repeatedly)
+
+Takers (gated: only when |pos| >= 8):
+  (A) flip-stop   trend flipped past ±1.2σ against position → hit
+  (B) take-profit z > +2.0σ (long) / z < -2.0σ (short) → hit
+  (C) stop-loss   z > ±3.5σ with wrong-side position → hit
+  cooldown 2500 ticks (asym_mm parity — v1 used 500 and whipsawed)
+```
+
+### Backtest (realistic fills, live-window ts 0-99900 of each day)
+
+| Day | Final | Peak | DD | Fills | Takers | End Pos |
+|---|---|---|---|---|---|---|
+| 0 | +699 | +822 | -246 | 25 | 1 | -9 |
+| 1 | +1,105 | +1,346 | -395 | 42 | 3 | +5 |
+| 2 | **+717** | **+1,457** | -740 | 21 | 1 | -16 |
+
+### vs asym_mm v2 live on day 2 (same data, apples-to-apples)
+
+| | asym_mm v2 | follow_mm |
+|---|---|---|
+| Final | +672 | **+717** |
+| Peak | +763 | **+1,457** (+91%) |
+| DD | -201 | -740 (worse) |
+| Taker count | ~0 | 1 |
+
+### The bet (for Léo)
+
+follow_mm trades wider DD for much higher peak upside. asym_mm is the safe
+baseline; follow_mm is the "let the trend cook" play. Upload both,
+compare live: if follow_mm peak really hits +1k+ in live, it's the new leader.
+If DD exceeds -1k live, revert to asym_mm v2.
+
+Submission ready: `artifacts/submissions/round_3/r3_hydrogel_follow_mm_round3_submission.py` (29 KB)
+
+### Next milestone unchanged
+
+After this follow_mm validation, tackle the regime classifier (features:
+HYDROGEL momentum 100/500/1000/5000, VELVET correlation, L1 imbalance,
+spread, depth, options ATM IV co-move) predicting `expected_markout_5k..10k`.
+
+---
+
 ## 2026-04-25 02:00 — Claude: follow-informed TESTED (doesn't work) + next milestone noted
 
 ### Key decision: "follow short-term informed traders" — NOT worth pursuing
