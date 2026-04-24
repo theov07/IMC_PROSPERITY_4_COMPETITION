@@ -95,6 +95,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "velvet_delta_hedger": ("prosperity.strategies.round_3.velvet_delta_hedger", "VelvetDeltaHedgerStrategy"),
     "vol_harvest": ("prosperity.strategies.round_3.vol_harvest", "VolHarvestStrategy"),
     "anchor_adaptive": ("prosperity.strategies.round_3.anchor_adaptive", "AnchorAdaptiveStrategy"),
+    "gamma_scalp": ("prosperity.strategies.round_3.gamma_scalp", "GammaScalpStrategy"),
     "ms_regime_delta": ("prosperity.strategies.round_3.ms_regime_switching", "MSRegimeDeltaOneStrategy"),
     "ms_regime_option": ("prosperity.strategies.round_3.ms_regime_switching", "MSRegimeOptionMMStrategy"),
     "theo_best_clean_generalized_v7": ("prosperity.strategies.round_2.theo.theo_v7_continuous", "TheoBestCleanGeneralizedV7Strategy"),
