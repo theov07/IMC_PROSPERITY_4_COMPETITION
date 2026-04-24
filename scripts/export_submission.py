@@ -110,6 +110,9 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+    "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
+    "ms_regime_delta":    ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeDeltaOneStrategy"),
+    "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -120,13 +123,18 @@ CORE_MODULES = [
 ]
 
 # Optional per-strategy file deps (paths inlined BEFORE the strategy file).
+_R3_OPTIONS_DEPS = [
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+    "prosperity/options/coordinator.py",
+    "prosperity/options/hedging.py",
+]
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
-    "option_mm_bs": [
-        "prosperity/options/time.py",
-        "prosperity/options/black_scholes.py",
-        "prosperity/options/implied_vol.py",
-        "prosperity/options/smile.py",
-    ],
+    "option_mm_bs":       _R3_OPTIONS_DEPS,
+    "velvet_delta_hedger": _R3_OPTIONS_DEPS,
+    "ms_regime_option":   _R3_OPTIONS_DEPS,
 }
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).
@@ -145,6 +153,8 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_generalized": ["round1_regression_mm_v5"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
+    "ms_regime_delta": ["option_mm_bs"],
+    "ms_regime_option": ["option_mm_bs"],
 }
 
 # Params useful for local analysis/backtests but pointless in the live upload.
@@ -432,7 +442,9 @@ def main() -> int:
         for file_dep in STRATEGY_FILE_DEPS.get(n, []):
             if file_dep not in module_files:
                 module_files.append(file_dep)
-        module_files.append(STRATEGY_REGISTRY[n][0])
+        strategy_file = STRATEGY_REGISTRY[n][0]
+        if strategy_file not in module_files:
+            module_files.append(strategy_file)
 
     # Inline each module, collecting external imports along the way.
     all_ext_imports: list[str] = []

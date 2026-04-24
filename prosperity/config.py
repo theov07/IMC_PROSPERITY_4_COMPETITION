@@ -2058,6 +2058,84 @@ MEMBER_OVERRIDES["r3_naive_champion_v2"] = {
 }
 
 
+# R3 MS: regime-switching overlay from HYDROGEL/VELVET cross-asset states.
+# It keeps HYDROGEL close to the naive baseline, skews VELVET by regime, and
+# scales passive VEV option quotes instead of forcing a direct pair trade.
+_R3_MS_REGIME_PARAMS = dict(
+    ms_window=120,
+    ms_min_samples=60,
+    ms_node_threshold=0.10,
+    ms_pos_corr_threshold=0.55,
+    ms_neg_corr_threshold=-0.55,
+    ms_decorr_threshold=0.15,
+    ms_soft_position_ratio=0.70,
+    ms_inventory_cut_mult=0.25,
+    ms_inventory_exit_mult=1.0,
+)
+_R3_MS_OPTION_PARAMS = dict(
+    ms_option_fav_bid_mult=1.60,
+    ms_option_fav_ask_mult=0.30,
+    ms_option_bad_bid_mult=0.25,
+    ms_option_bad_ask_mult=1.25,
+    ms_option_node_mult=0.35,
+    ms_option_decoupled_mult=0.70,
+    ms_option_warmup_mult=1.0,
+    ms_option_outer_mult=0.50,
+    ms_option_focus_low=5000,
+    ms_option_focus_high=5500,
+)
+MEMBER_OVERRIDES["r3_ms"] = {
+    3: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK",
+            strategy="ms_regime_delta",
+            position_limit=200,
+            params={
+                **ROUND_3["HYDROGEL_PACK"].params,
+                **_R3_MS_REGIME_PARAMS,
+                "maker_size": 30,
+                "tighten_ticks": 1,
+                "ms_role": "hydrogel",
+                "ms_history_owner": True,
+                "ms_use_shared_only": False,
+            },
+        ),
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT",
+            strategy="ms_regime_delta",
+            position_limit=200,
+            params=dict(
+                {**ROUND_3["VELVETFRUIT_EXTRACT"].params, **_R3_MS_REGIME_PARAMS},
+                maker_size=30,
+                tighten_ticks=1,
+                ms_role="velvet",
+                ms_use_shared_only=True,
+                ms_velvet_fav_bid_mult=1.45,
+                ms_velvet_fav_ask_mult=0.35,
+                ms_velvet_bad_bid_mult=0.35,
+                ms_velvet_bad_ask_mult=1.30,
+                ms_velvet_node_mult=0.45,
+                ms_velvet_decoupled_mult=0.75,
+            ),
+        ),
+        **{
+            f"VEV_{k}": ProductConfig(
+                symbol=f"VEV_{k}",
+                strategy="ms_regime_option",
+                position_limit=300,
+                params=dict(
+                    **ROUND_3[f"VEV_{k}"].params,
+                    **_R3_MS_REGIME_PARAMS,
+                    **_R3_MS_OPTION_PARAMS,
+                    ms_use_shared_only=True,
+                ),
+            )
+            for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+        },
+    },
+}
+
+
 # Pure penny-improve baseline across all 12 Round 3 products (no signal, no takers).
 MEMBER_OVERRIDES["naive_base_round_3"] = {
     3: {
@@ -2444,6 +2522,48 @@ MEMBER_OVERRIDES["champion_osm_v4only"] = {
             unwind_take_edge=10.0,
             very_strong_trend_ticks=1.6,
         ),
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HEDGED CHAMPION — naive_tight_mm on HYDROGEL + velvet_delta_hedger on
+# VELVETFRUIT (reads option positions from coordinator to offset delta) +
+# option_mm_bs on vouchers (default ROUND_3 config).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hedged_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_delta_hedger",
+            position_limit=200,
+            underlying_symbol="VELVETFRUIT_EXTRACT",
+            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500],
+            strike_prefix="VEV_",
+            tte_days_initial=5.0,
+            timestamp_units_per_day=1000000,
+            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+            target_delta=0.0,
+            hedge_taker_edge=15.0,
+            max_hedge_size=30,
+            passive_base_size=30,
+            passive_skew_per_delta=0.3,
+            quote_inside_book=True,
+            sigma_floor=0.005,
+            sigma_cap=0.10,
+            prior_vol=0.0125,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        # Vouchers: use ROUND_3 default (option_mm_bs)
     },
 }
 
