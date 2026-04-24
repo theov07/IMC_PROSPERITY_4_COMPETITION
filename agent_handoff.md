@@ -4,6 +4,60 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 2026-04-25 02:00 — Claude: follow-informed TESTED (doesn't work) + next milestone noted
+
+### Key decision: "follow short-term informed traders" — NOT worth pursuing
+
+Tested explicitly: detect aggressive buy/sell flow in market trades, follow
+direction as taker, hold H ticks. 192 configs (W × threshold × H × day).
+
+Result:
+- Day 0: 64/64 configs LOSE (per-trade -4 to -12 ticks)
+- Day 1: 64/64 configs LOSE (per-trade -7 to -25 ticks)
+- Day 2: only 2 configs marginally positive (+3.5, +3.7 per trade, 48-53% wr)
+
+Conclusion: Informed traders ARE right short-term (+7 tick continuation), but
+crossing the spread (7.5 tick cost) eats the edge. Not a robust alpha.
+
+### What actually works: GET OUT OF THE WAY
+
+Theo's asymmetric MM encoded this: when big move happens, SKIP the passive
+side that would be adverse-selected. Stay present only where flow is uninformed.
+
+`r3_hydrogel_asym_mm` (my hybrid: Theo's asymmetric logic + our ACF window=500
+z-score) is now the recommended upload:
+- Backtest 3d: +30,465 (vs Theo-style alpha=0.008 would give ~23k passive baseline)
+- Day 2 backtest: +5,082
+- Drawdown profile matches Theo (pos ±14, DD ~0.4x)
+
+File: `artifacts/submissions/round_3/r3_hydrogel_asym_mm_round3_submission.py` (26 KB)
+
+### Next milestone (LOCKED IN after asym_mm live validation)
+
+Regime classifier predicting `expected_markout_5000..10000` pre-signal.
+Features: HYDROGEL momentum (100/500/1000/5000 lookbacks), VELVET/HYDROGEL
+correlation, L1 imbalance, spread, depth (sum top 3 levels), options co-movement
+(ATM IV change vs VELVET move).
+
+Decision rule:
+- markout > sweep_cost + buffer  → sweep L2/L3 (follow with depth)
+- markout < -buffer              → contrarian taker
+- else                           → stay passive asym_mm
+
+**Do not start this until asym_mm has a validated live run** — otherwise we
+stack complexity on unproven base.
+
+### Submission recommendation for next live test
+
+1. **r3_hydrogel_asym_mm** (our hybrid) — expected +800 to +2000 live, low DD
+2. Alternative: re-upload `r3_hydrogel_exhaustion` to validate Codex's +2,294
+   as genuine alpha (user said data is deterministic, no need, but 2nd run still useful)
+
+User noted: "pas besoin dans la data y'a pas d'aléatoire" — so skipping the
+exhaustion re-validation. Go with asym_mm.
+
+---
+
 ## 2026-04-25 01:15 — Claude: follow-vs-fade analysis + Codex exhaustion live +2.3k validated
 
 ### Live log comparison (HYDROGEL-only strategies)

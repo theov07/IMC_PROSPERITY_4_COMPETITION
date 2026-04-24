@@ -277,6 +277,63 @@ exact entry/exit timing do not capture this edge — we tested TH=30-80, LB=100-
 4. **Our best generalizable forward-only**: passive MM + z-skew size (+10.5k day 2 backtest, +385 live).
 5. **Action**: build regime-aware hybrid (detect trend day vs reversion day) before choosing follow vs fade. Without regime classifier, neither works robustly.
 
+### Explicit test: FOLLOW informed flow direction (Claude 2026-04-25)
+
+**Setup**: classify market (non-submission) trades by direction (buy if price >= mid, sell if <=), compute rolling signed flow over W ticks. When `buy_flow - sell_flow > threshold`, fire a BUY taker (follow). When `sell_flow - buy_flow > threshold`, fire SELL taker. Hold H ticks, exit at mid.
+
+Tested W ∈ {5, 10, 20, 50}, threshold ∈ {5, 10, 20, 30}, H ∈ {10, 50, 100, 500} = 64 configs × 3 days = 192 runs.
+
+**Results**:
+- Day 0: **all 64 configs LOSE** (per-trade −4 to −12 ticks, win rate 6-40%)
+- Day 1: **all 64 configs LOSE** (per-trade −7 to −25 ticks)
+- Day 2: only **2 configs marginally positive** at H=500 (+3.5 and +3.7 ticks/trade, ~48-53% win rate)
+
+**Verdict**: Following the informed flow direction is **NOT a robust alpha**. The short-term continuation (+7 ticks in their direction at 100-1000 ticks) does NOT exceed the cost of crossing the spread (7.5 ticks). Informed traders are right short-term, but crossing the spread eats the edge.
+
+### The REAL insight from Theo's design
+
+Neither follow nor fade. Instead: **get out of the informed-trader's way**.
+
+Theo's asymmetric MM does exactly this:
+- `deviation > threshold` (large recent up move, likely informed buyers active):
+  → **shrink bid to 0** (refuse to be the passive counterpart adverse-selected)
+- `deviation < -threshold` (large recent down move, likely informed sellers active):
+  → **shrink ask to 0**
+
+We remain present on the side where flow is uninformed (retail noise) and capture the spread cleanly. This explains Theo's drawdown profile (−246 vs −871 for symmetric passive).
+
+**This is codified in `r3_hydrogel_asym_mm`** (our hybrid: Theo's asymmetric quoting + our ACF window=500 z-score). Backtest +30,465 3d / +5,082 day 2.
+
+## Next milestone: Regime classifier (after r3_hydrogel_asym_mm live validation)
+
+When asym_mm is validated live (target: beat Theo's +587), the next iteration is a
+**regime classifier** predicting `expected_markout_5000..10000_ticks` pre-signal:
+
+**Features**:
+- HYDROGEL momentum (multiple lookbacks: 100, 500, 1000, 5000 ticks)
+- VELVETFRUIT / HYDROGEL correlation (rolling)
+- Imbalance at L1 (bid_vol - ask_vol) / total
+- Spread (wider = more adverse-selection risk)
+- Depth (sum of top 3 levels each side)
+- Options co-movement (ATM IV change vs VELVETFRUIT move)
+
+**Decision rule**:
+```
+if expected_markout_5k_10k > sweep_cost + buffer:
+    sweep L2/L3 aggressively (follow with deep taker)
+elif expected_markout_5k_10k < -buffer:
+    fade (contrarian taker)
+else:
+    stay in passive asym_mm
+```
+
+**Target**: 10k+ live PnL by unlocking the L2/L3 sweep selectively when the
+classifier predicts positive markout.
+
+Codex + Claude agreed direction (Léo confirmed 2026-04-25). **Do NOT start this
+until asym_mm has a validated live run**, otherwise we add complexity without
+a proven base.
+
 ## HYDROGEL Passive Regime MM
 
 Strategy: `r3_hydrogel_passive_regime`
