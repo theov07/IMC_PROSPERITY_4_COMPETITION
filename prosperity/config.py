@@ -2919,6 +2919,52 @@ MEMBER_OVERRIDES["r3_hydrogel_asym_mm"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL FOLLOW MM — trend-follow one-side + aggressive mean-revert unwind
+# Rationale: v2 asym_mm live log (384749) showed mean-rev logic fought the day's
+# downtrend. HYDRO drifted 10011 → 9960, strategy shorted early (good) but bought
+# back -17→-11 mid-trend (bad). Follow version holds + adds through pullbacks
+# and only unwinds on z-score exhaustion (take-profit) or trend flip (stop).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_follow_mm"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_follow_mm",
+            position_limit=200,
+            ema_fast=500,                       # ACF-optimal (tick horizon)
+            ema_slow=2000,                      # day-scale trend
+            trend_threshold=1.2,                # |trend| > 1.2 std → trend regime
+            flat_z_threshold=1.5,               # unused now (flat = symmetric)
+            maker_size=20,
+            min_maker_size=2,
+            follow_boost_max=10,                # size boost cap in trend
+            follow_boost_per_trend=4,           # per unit |trend|
+            flat_boost_max=0,                   # flat = symmetric MM (no asym)
+            flat_boost_per_z=0,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            unwind_boost_max=20,
+            tighten_ticks=1,
+            enable_taker=True,
+            flip_threshold=1.2,                 # was 0.8 — need STRONG flip to stop
+            tp_z=2.0,                           # was 1.2 — only extreme z=2σ for TP
+            stop_z=3.5,                         # was 2.5 — very wide stop
+            unwind_take_size=3,                 # was 4 — smaller bites
+            take_cooldown_ts=2500,              # was 500 — match asym_mm cadence
+            hard_pos_cap=30,                    # was 35 — a bit tighter
+            min_pos_for_take=8,                 # takers only fire when |pos|>=8
+            min_samples=200,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_hydrogel_oracle_inspired"] = {
     3: {
         "HYDROGEL_PACK": _override(
