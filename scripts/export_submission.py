@@ -92,6 +92,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "theo_best_clean_generalized_v2": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV2Strategy"),
     "theo_best_clean_generalized_v3": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV3Strategy"),
     "theo_best_clean_generalized_v4": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV4Strategy"),
+    "theo_best_clean_generalized_v7": ("prosperity/strategies/round_2/theo/theo_v7_continuous.py", "TheoBestCleanGeneralizedV7Strategy"),
     "mean_reversion":     ("prosperity/strategies/round_1/mean_reversion.py",          "MeanReversionStrategy"),
     "zscore":             ("prosperity/strategies/metal_winner/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/base/buy_and_hold.py",       "BuyAndHoldStrategy"),
@@ -109,6 +110,33 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+    "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
+    "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
+    "anchor_adaptive":    ("prosperity/strategies/round_3/anchor_adaptive.py", "AnchorAdaptiveStrategy"),
+    "gamma_scalp":        ("prosperity/strategies/round_3/gamma_scalp.py", "GammaScalpStrategy"),
+    "hydrogel_mm":        ("prosperity/strategies/round_3/hydrogel_mm.py", "HydrogelMMStrategy"),
+    "hydrogel_mean_rev_taker": ("prosperity/strategies/round_3/hydrogel_mean_rev_taker.py", "HydrogelMeanRevTakerStrategy"),
+    "hydrogel_oracle_inspired": ("prosperity/strategies/round_3/hydrogel_oracle_inspired.py", "HydrogelOracleInspiredStrategy"),
+    "hydrogel_asym_mm": ("prosperity/strategies/round_3/hydrogel_asym_mm.py", "HydrogelAsymMMStrategy"),
+    "hydrogel_follow_mm": ("prosperity/strategies/round_3/hydrogel_follow_mm.py", "HydrogelFollowMMStrategy"),
+    "hydrogel_exhaustion_taker": (
+        "prosperity/strategies/round_3/hydrogel_exhaustion_taker.py",
+        "HydrogelExhaustionTakerStrategy",
+    ),
+    "hydrogel_passive_regime_mm": (
+        "prosperity/strategies/round_3/hydrogel_passive_regime_mm.py",
+        "HydrogelPassiveRegimeMMStrategy",
+    ),
+    "oracle_day2_replay": (
+        "prosperity/strategies/round_3/oracle_day2_replay.py",
+        "OracleDay2ReplayStrategy",
+    ),
+    "oracle_day2_l1_replay": (
+        "prosperity/strategies/round_3/oracle_day2_l1_replay.py",
+        "OracleDay2L1ReplayStrategy",
+    ),
+    "ms_regime_delta":    ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeDeltaOneStrategy"),
+    "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
     "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
 }
 
@@ -120,19 +148,28 @@ CORE_MODULES = [
 ]
 
 # Optional per-strategy file deps (paths inlined BEFORE the strategy file).
+_R3_OPTIONS_DEPS = [
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+    "prosperity/options/coordinator.py",
+    "prosperity/options/hedging.py",
+]
+_R3_OPTIONS_DEPS_SLIM = [
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+]
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
-    "option_mm_bs": [
-        "prosperity/options/time.py",
-        "prosperity/options/black_scholes.py",
-        "prosperity/options/implied_vol.py",
-        "prosperity/options/smile.py",
-    ],
-    "theo_r3_vol_arb_v1": [
-        "prosperity/options/time.py",
-        "prosperity/options/black_scholes.py",
-        "prosperity/options/implied_vol.py",
-        "prosperity/options/smile.py",
-    ],
+    "option_mm_bs":       _R3_OPTIONS_DEPS,
+    "velvet_delta_hedger": _R3_OPTIONS_DEPS,
+    "vol_harvest":        _R3_OPTIONS_DEPS,
+    "ms_regime_option":   _R3_OPTIONS_DEPS,
+    "anchor_adaptive":    ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "gamma_scalp":        _R3_OPTIONS_DEPS,
+    "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
 }
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).
@@ -151,6 +188,8 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_generalized": ["round1_regression_mm_v5"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
+    "ms_regime_delta": ["option_mm_bs"],
+    "ms_regime_option": ["option_mm_bs"],
 }
 
 # Params useful for local analysis/backtests but pointless in the live upload.
@@ -438,7 +477,9 @@ def main() -> int:
         for file_dep in STRATEGY_FILE_DEPS.get(n, []):
             if file_dep not in module_files:
                 module_files.append(file_dep)
-        module_files.append(STRATEGY_REGISTRY[n][0])
+        strategy_file = STRATEGY_REGISTRY[n][0]
+        if strategy_file not in module_files:
+            module_files.append(strategy_file)
 
     # Inline each module, collecting external imports along the way.
     all_ext_imports: list[str] = []

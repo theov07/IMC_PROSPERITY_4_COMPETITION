@@ -45,13 +45,17 @@ from datamodel import Order, OrderDepth, TradingState
 
 from prosperity.market import BookSnapshot
 from prosperity.options.black_scholes import call_price
+from prosperity.options.coordinator import get_smile, get_spot, publish_position
 from prosperity.options.implied_vol import call_implied_vol
-from prosperity.options.smile import fit_smile_poly, smile_predict
+from prosperity.options.smile import smile_predict
 from prosperity.options.time import (
     resolve_initial_tte_days,
     time_to_expiry_days,
     timestamp_units_per_day_from_params,
 )
+
+# Default strike set for the VEV voucher series (can be overridden via params).
+_DEFAULT_VEV_STRIKES: List[int] = [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
 from prosperity.strategies.base.base import BaseStrategy
 
 
@@ -73,6 +77,9 @@ class OptionMMBSStrategy(BaseStrategy):
 
         p = self._read_params(state)
         ts = int(state.timestamp)
+
+        # Publish our current position to the coordinator so the hedger can read it.
+        publish_position(ts, self.product, position)
 
         # 1. Resolve underlying spot (shared across all VEV_xxxx this tick).
         S = self._resolve_spot(state, memory, ts)
@@ -144,27 +151,14 @@ class OptionMMBSStrategy(BaseStrategy):
             "underlying_symbol": params.get("underlying_symbol", "VELVETFRUIT_EXTRACT"),
         }
 
-    # ── Spot resolution ──────────────────────────────────────────────────────
+    # ── Spot resolution (delegates to coordinator) ───────────────────────────
 
     def _resolve_spot(
         self, state: TradingState, memory: Dict[str, Any], ts: int,
     ) -> Optional[float]:
-        """Return mid-price of the underlying, reading from per-tick shared cache."""
-        shared = self._shared(memory)
-        # Per-tick cache hit
-        if shared.get("underlying_spot_ts") == ts:
-            return shared.get("underlying_spot")
-        # Compute from order_depths
+        """Return mid-price of the underlying via the cross-product coordinator."""
         underlying = str(self.params.get("underlying_symbol", "VELVETFRUIT_EXTRACT"))
-        u_od = state.order_depths.get(underlying)
-        if not u_od or not u_od.buy_orders or not u_od.sell_orders:
-            return None
-        ub = max(u_od.buy_orders.keys())
-        ua = min(u_od.sell_orders.keys())
-        S = 0.5 * (ub + ua)
-        shared["underlying_spot"] = S
-        shared["underlying_spot_ts"] = ts
-        return S
+        return get_spot(state, underlying=underlying)
 
     # ── Sigma resolution ─────────────────────────────────────────────────────
 
@@ -228,48 +222,25 @@ class OptionMMBSStrategy(BaseStrategy):
         ts: int,
         params: Dict[str, Any],
     ) -> Optional[List[float]]:
-        """Return smile coefficients, using per-tick shared cache when possible."""
-        if shared.get("vev_smile_ts") == ts:
-            return shared.get("vev_smile_coeffs")
-        coeffs = self._fit_smile(
-            state, S, T,
-            params["sigma_floor"], params["sigma_cap"], params["prior_vol"],
-        )
-        shared["vev_smile_coeffs"] = coeffs
-        shared["vev_smile_ts"] = ts
-        return coeffs
+        """Return smile coefficients via the cross-product coordinator.
 
-    def _fit_smile(
-        self,
-        state: TradingState,
-        S: float,
-        T: float,
-        sigma_floor: float,
-        sigma_cap: float,
-        prior_vol: float,
-    ) -> Optional[List[float]]:
-        """Fit a quadratic smile from all VEV_xxxx mid-prices in state.order_depths."""
-        strikes: List[float] = []
-        vols: List[float] = []
-        for sym, od in state.order_depths.items():
-            if not sym.startswith("VEV_"):
-                continue
-            try:
-                K = float(sym.replace("VEV_", ""))
-            except ValueError:
-                continue
-            if not od.buy_orders or not od.sell_orders:
-                continue
-            bb = max(od.buy_orders.keys())
-            ba = min(od.sell_orders.keys())
-            mid = 0.5 * (bb + ba)
-            iv = call_implied_vol(mid, S, K, T, sigma_init=prior_vol)
-            if iv is not None and sigma_floor <= iv <= sigma_cap:
-                strikes.append(K)
-                vols.append(iv)
-        if len(strikes) < 3:
-            return None
-        return fit_smile_poly(strikes, vols, S, T, degree=2)
+        The coordinator caches the fit for the current tick so only one fit
+        is performed regardless of which voucher triggers it first.
+        """
+        strikes = params.get("smile_strikes") or _DEFAULT_VEV_STRIKES
+        strike_prefix = str(params.get("strike_prefix", "VEV_"))
+        return get_smile(
+            state,
+            strikes=list(strikes),
+            strike_prefix=strike_prefix,
+            S=S,
+            T=T,
+            sigma_floor=params["sigma_floor"],
+            sigma_cap=params["sigma_cap"],
+            prior_vol=params["prior_vol"],
+        )
+
+    # (smile fitting delegated to prosperity.options.coordinator.get_smile)
 
     # ── Quote pricing ────────────────────────────────────────────────────────
 

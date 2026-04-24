@@ -357,15 +357,38 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         final_remaining_bids = [p for p in remaining_bids if p not in gap_swept_bids]
         final_remaining_asks = [p for p in remaining_asks if p not in gap_swept_asks]
 
+        # Track if we full-cap'd the ask side (so _passive_quotes skips its own ask)
+        fullcap_ask_posted = False
+        fullcap_bid_posted = False
+
         if final_remaining_asks:
             ask_price = final_remaining_asks[0] - 1
         elif last_best_ask is not None:
             ask_price = last_best_ask + int(shift)   # LIVE alpha: far above
+            # FULL-CAPACITY: post full-cap sell at far-quote when ask empty
+            if self.params.get("full_capacity_on_empty", False) and sell_cap > 0:
+                orders.append(Order(self.product, ask_price, -sell_cap))
+                memory["_gap_sell_px"].append(ask_price)
+                fullcap_ask_posted = True
+                # Note: DO NOT zero sell_cap here — let opposite-side passive use
+                # its share. The _passive_quotes should check fullcap flag.
 
         if final_remaining_bids:
             bid_price = final_remaining_bids[0] + 1
         elif last_best_bid is not None:
             bid_price = last_best_bid - int(shift)   # LIVE alpha: far below
+            # FULL-CAPACITY: post full-cap buy at far-quote when bid empty
+            if self.params.get("full_capacity_on_empty", False) and buy_cap > 0:
+                orders.append(Order(self.product, bid_price, buy_cap))
+                memory["_gap_buy_px"].append(bid_price)
+                fullcap_bid_posted = True
+
+        # Clamp caps only on the sides that were fullcap'd (avoid double-posting
+        # when _passive_quotes runs next).
+        if fullcap_ask_posted:
+            sell_cap = 0
+        if fullcap_bid_posted:
+            buy_cap = 0
 
         return orders, buy_cap, sell_cap, bid_price, ask_price
 
@@ -1251,6 +1274,27 @@ class MMFirstV4ComboStrategy(BaseStrategy):
                 "flow_score": round(memory.get("_flow_score", 0.0), 3),
             },
         )
+
+        sdq = int(self.params.get("osm_standing_deep_qty", 0))
+        if sdq > 0:
+            sh = int(self.params.get("OB_cleared_shift", 10))
+            lbb = memory.get("_last_best_bid")
+            lba = memory.get("_last_best_ask")
+            ao = taker_orders + gap_orders + passive_orders
+            ebp = {o.price for o in ao if o.quantity > 0}
+            eap = {o.price for o in ao if o.quantity < 0}
+            if lbb is not None and buy_cap > 0:
+                db = int(lbb) - sh
+                if db > 0 and db not in ebp:
+                    q = min(sdq, buy_cap)
+                    if q > 0:
+                        passive_orders.append(Order(self.product, db, q))
+            if lba is not None and sell_cap > 0:
+                da = int(lba) + sh
+                if da not in eap:
+                    q = min(sdq, sell_cap)
+                    if q > 0:
+                        passive_orders.append(Order(self.product, da, -q))
 
         return taker_orders + gap_orders + passive_orders, 0
 

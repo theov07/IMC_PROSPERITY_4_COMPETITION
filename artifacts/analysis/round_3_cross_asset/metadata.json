@@ -1,0 +1,38 @@
+{
+  "data_dir": "data\\round_3",
+  "days": [
+    0,
+    1,
+    2
+  ],
+  "window": 1000,
+  "return_step": 100,
+  "sample_every": 10,
+  "node_threshold": 0.1,
+  "pos_threshold": 0.55,
+  "neg_threshold": 0.55,
+  "decorr_threshold": 0.15,
+  "horizons": [
+    1000,
+    5000,
+    10000,
+    50000
+  ],
+  "targets": [
+    "VELVETFRUIT_EXTRACT",
+    "HYDROGEL_PACK",
+    "VEV_5000",
+    "VEV_5200",
+    "VEV_5300",
+    "VEV_5400",
+    "VEV_5500"
+  ],
+  "pooled_regime_counts": {
+    "DECOUPLED": 586,
+    "MIXED": 1168,
+    "NEG_COUPLED": 177,
+    "NODE": 653,
+    "POS_COUPLED": 356,
+    "WARMUP": 60
+  }
+}
