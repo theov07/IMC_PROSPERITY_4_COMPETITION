@@ -120,6 +120,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "ms_regime_delta": ("prosperity.strategies.round_3.ms_regime_switching", "MSRegimeDeltaOneStrategy"),
     "ms_regime_option": ("prosperity.strategies.round_3.ms_regime_switching", "MSRegimeOptionMMStrategy"),
     "theo_best_clean_generalized_v7": ("prosperity.strategies.round_2.theo.theo_v7_continuous", "TheoBestCleanGeneralizedV7Strategy"),
+    "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
 }
 
 
