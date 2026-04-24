@@ -1,4 +1,4 @@
-.PHONY: help setup test backtest compare grid-search analyze dashboard benchmark export clean
+.PHONY: help setup test backtest compare grid-search analyze dashboard benchmark export r3-scorecard clean
 
 PYTHON = python
 STRATEGY ?= champion
@@ -41,6 +41,9 @@ benchmark:  ## Benchmark strategy latency (STRATEGY=champion)
 
 export:  ## Export single-file submission (MEMBER=champion)
 	$(PYTHON) scripts/export_submission.py --member $(MEMBER)
+
+r3-scorecard:  ## Build Round 3 readiness scorecard
+	$(PYTHON) -m prosperity.tooling.r3_scorecard --strategy $(STRATEGY) $(ARGS)
 
 clean:  ## Remove generated artifacts
 	rm -rf artifacts/ __pycache__/ .pytest_cache/

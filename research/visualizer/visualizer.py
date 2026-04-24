@@ -56,7 +56,7 @@ class MarketVisualizer:
             for t in trades
             if t.symbol == product
         ]
-        return pd.DataFrame(rows)
+        return pd.DataFrame(rows, columns=["timestamp", "price", "quantity"])
 
     def plot_mid_prices(self, history: Dict[int, Dict[Symbol, OrderDepth]], product: Symbol, save_path: str = None):
         """Plots mid, best bid and best ask using OrderDepth objects."""
