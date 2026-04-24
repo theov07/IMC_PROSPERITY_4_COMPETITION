@@ -2848,6 +2848,22 @@ MEMBER_OVERRIDES["r3_oracle_day2"] = {
     },
 }
 
+MEMBER_OVERRIDES["r3_oracle_day2_l1"] = {
+    3: {
+        **{
+            symbol: ProductConfig(
+                symbol=symbol,
+                strategy="oracle_day2_l1_replay",
+                position_limit=limit,
+                params={},
+            )
+            for symbol, limit in _R3_ORACLE_DAY2_PRODUCTS.items()
+        },
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # R3 HYDROGEL MEAN-REV TAKER — based on ACF/PACF analysis

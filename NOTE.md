@@ -1,4 +1,27 @@
-## Round 3 Status (current)
+## Round 3 Status — **LIVE = day 2 CONFIRMED** (2026-04-24 late)
+
+**CRITICAL** : Codex confirmed the live sim is `data/round_3/prices_round_3_day_2.csv[0..99900]`
+bit-for-bit. **Day 2 backtest = direct proxy for live PnL**. Go read `agent_handoff.md`
+and `artifacts/analysis/round_3/FINDINGS.md` before editing anything.
+
+### Leaderboard references
+- Top team: 150k+ live
+- Codex r3_oracle_day2 (pure overfit): **154,245 live** but **REJECTED by validator** (off-L1 fills)
+- Codex r3_oracle_day2_l1 (L1-safe): expected ~**139,875 live** (pending)
+- Our `r3_hydrogel_mean_rev` (z-skew generalizable, HYDROGEL-only): day 2 = +10,523 / live = +385
+
+### HYDROGEL-only strategies (new, after pivot from options)
+- `r3_hydrogel_only` : passive ladder (3 levels inside spread). Safe baseline.
+- `r3_hydrogel_mean_rev` : passive + z-score size skew (window=500, gain=3.0).
+  Based on ACF(1)=-0.199 at 500-tick horizon (see `artifacts/analysis/round_3/hydrogel_acf_pacf.png`).
+
+### Open problem
+**50x volume gap between backtest and live** (700 trades backtest vs 10-20 live). Queue
+priority is the bottleneck, not edge per trade (live fills are +6.8 ticks favorable).
+
+---
+
+## Round 3 Status (original entry)
 
 **Products**: HYDROGEL_PACK (limit 200), VELVETFRUIT_EXTRACT (limit 200, underlying), VEV_4000..VEV_6500 (10 European call vouchers, limit 300 each).
 **TTE at Round 3 final**: 5 days. Historical data TTE: day 0 = 8d, day 1 = 7d, day 2 = 6d.
