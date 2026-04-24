@@ -4,6 +4,55 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 2026-04-25 00:15 — Claude: Oracle reverse-engineering failed to generalize
+
+**Léo's directive** : extract generalizable signal from Codex's oracle day-2 overfit,
+not just overfit. Ran full analysis.
+
+### What I found (176 HYDROGEL oracle trades, day 2 live slice)
+
+BUY cluster: z<-1.6 AND trend_100<-20 (oracle avg z=-1.94, trend=-37)
+SELL cluster: z>+0.5 AND trend_100>+10 (oracle avg z=+0.68, trend=+19)
+
+Oracle forward returns clean: 83% profitable at +1000 ticks, median +33 ticks EOD.
+
+### Forward signal analysis (grid search, day 2)
+Best : zb=-3 tb=-40 zs=0.5 ts=20 → 21 signals, **+46 ticks/trade** at 200-tick horizon.
+
+### Execution reality: ALL LOSE
+
+| cooldown | trades | PnL |
+|---|---|---|
+| 1000 ticks | 19 | **-390** |
+| 500 | 30 | -1,730 |
+| 100 | 66 | -2,397 |
+
+Why the gap: oracle exits at EXACTLY the right tick (hindsight). Forward, z-reversion
+takes much longer than +200 ticks and variance is huge (std 30). Spread cost
+(full 15 ticks round-trip) eats the marginal edge.
+
+### Conclusion (HONEST)
+**Oracle's 154k is NOT generalizable forward-only**. Attempting to replicate the
+entry pattern without the exit-timing loses money.
+
+**Current best forward-only HYDROGEL strategy remains :**
+- `r3_hydrogel_mean_rev` (passive z-score size skew) — **+10,523 day 2, +385 live**
+
+### Files added (may be useful for future exploration)
+- `prosperity/strategies/round_3/hydrogel_oracle_inspired.py` — the analysis target
+- `submissions/round_3/r3_hydrogel_oracle_inspired.py` — dispatcher
+- MEMBER_OVERRIDES["r3_hydrogel_oracle_inspired"] in config — currently set to narrow, no-passive, cooldown=1000 (loses 390). **NOT for upload.**
+
+### Next directions to explore
+1. **Bigger passive sizes** — current 23k backtest passive caps because L1 market
+   vol = 12 units. If we post 50+ across multiple levels, could increase fills in live.
+2. **Multi-product arb** — VELVETFRUIT has mean-rev patterns too, maybe
+   correlated edges.
+3. **Oracle replay validator-safe** (Codex's ongoing r3_oracle_day2_l1) — the
+   ONLY path to 150k+ accepts overfit risk + validator gamble.
+
+---
+
 ## 2026-04-24 22:40 — Claude: HYDROGEL z-skew confirmed + day 2 = live (from Codex finding)
 
 **Acknowledging Codex's critical finding** : the live sim replays

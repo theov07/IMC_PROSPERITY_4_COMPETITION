@@ -106,6 +106,73 @@ Day 2 backtest grid sweep (best in bold):
 
 Plateau at ~10k day 2 — can't push higher without overfitting.
 
+## Oracle reverse-engineering — why the generalizable version fails (Claude 2026-04-24)
+
+**User directive** : extract a generalizable signal from Codex's oracle, don't just
+overfit.
+
+Analyzed 176 HYDROGEL oracle fills on day 2 live slice (0..99900). Found clean
+clusters:
+
+**BUY trigger pattern** (96 trades, 100% aggressive at best_ask):
+- z-score (EWMA window 500) average = -1.94, q25=-2.25, q75=-1.60
+- trend_100 average = -37 ticks (price just fell sharply)
+- trend_500 average = -75 ticks
+
+**SELL trigger pattern** (80 trades, 100% aggressive at best_bid):
+- z-score average = +0.68, q25=+0.01, q75=+1.61
+- trend_100 average = +19 ticks (local rebound)
+- trend_500 average = -23 (persistent downtrend)
+
+**Forward analysis** of oracle trades (signed in trade direction):
+- forward_100: median +1 tick, 56% positive
+- forward_500: median +2.75 ticks, 66% positive
+- **forward_1000: median +4 ticks, 83% positive**
+- **forward_EOD: median +33 ticks, 84% positive**
+
+### Grid search of forward-only thresholds (unit-PnL day 2 slice)
+
+Best forward horizon for signal decay was **200 ticks**.
+Top configurations (min 15 signals):
+| zbuy | tbuy | zsell | tsell | n | PnL (1u) | per_trade |
+|---|---|---|---|---|---|---|
+| -3.0 | -40 | 0.5 | 20 | 21 | 964 | **+46** |
+| -2.5 | -40 | 0.5 | 20 | 27 | 1126 | +42 |
+| -1.5 | -30 | 0.5 | 10 | 106 | 2525 | +24 |
+
+### Why it fails in execution (backtest realistic, all cooldowns):
+
+| cooldown (ticks) | trades | PnL |
+|---|---|---|
+| 10 | 303 | -10,242 |
+| 50 | 105 | -3,778 |
+| 100 | 66 | -2,397 |
+| 300 | 42 | -1,542 |
+| 500 | 30 | -1,730 |
+| 1000 | 19 | -390 |
+
+**Every configuration loses**. The signal has **positive unit edge** (`mid[t+200] -
+mid[t] - spread/2`) but **negative execution PnL** because:
+
+1. Signal analysis counted only `spread/2` (single-side cross) — reality is we
+   pay full spread (cross at entry AND exit = 15 ticks total cost).
+2. The oracle exits at exactly the right tick (hindsight). Forward, we rely on
+   z-reversion, which happens much later than +200 ticks and may not complete
+   before the trend reverses again.
+3. Variance is huge: forward_200 mean=+24 but std=30+. Many trades lose big.
+
+### Conclusion
+
+The oracle's edge on HYDROGEL is **not forward-generalizable**. The trades look
+"clean" (83% profitable at 1000-tick horizon) only because the oracle had
+perfect hindsight on entry/exit timing. A forward strategy that uses the same
+entry conditions cannot replicate the exit timing.
+
+**Best HYDROGEL edges forward-only (validated):**
+1. Passive multi-level MM: +23k 3d, -116 day 2, +610 live.
+2. Passive + z-score size skew: +44k 3d, **+10.5k day 2**, +385 live.
+3. Taker strategies: NEGATIVE day 2 in all tested configs.
+
 ## HYDROGEL Passive Regime MM
 
 Strategy: `r3_hydrogel_passive_regime`
