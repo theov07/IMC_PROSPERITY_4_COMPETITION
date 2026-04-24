@@ -109,6 +109,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+    "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -121,6 +122,12 @@ CORE_MODULES = [
 # Optional per-strategy file deps (paths inlined BEFORE the strategy file).
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "option_mm_bs": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+    "theo_r3_vol_arb_v1": [
         "prosperity/options/time.py",
         "prosperity/options/black_scholes.py",
         "prosperity/options/implied_vol.py",

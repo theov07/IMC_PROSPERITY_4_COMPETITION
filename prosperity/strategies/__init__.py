@@ -92,6 +92,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "theo_best_clean_generalized_v4": ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedV4Strategy"),
     # ── Round 3 ──
     "option_mm_bs": ("prosperity.strategies.round_3.option_mm_bs", "OptionMMBSStrategy"),
+    "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
 }
 
 
