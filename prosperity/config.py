@@ -2058,6 +2058,44 @@ MEMBER_OVERRIDES["r3_naive_champion_v2"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 v4 TRACKING CHAMPION — v4_F5 code WITHOUT fixed anchor (let mid_smooth float)
+#
+# Root cause of r3_naive_champion (v4_F5) live failure analysed in hedge_log:
+#   HYDROGEL_PACK live mid drifted 10011 → 9960 (-51 ticks) over the session.
+#   v4_F5 had anchor_price=10000 + drift_bound=2, clamping our fair value to
+#   [9998, 10002]. We kept buying at 9995 thinking below fair; market kept
+#   dropping below 9950 → position +190 long @ avg 9995, mid 9949 → -4,096.
+#
+# Fix: drop the fixed anchor. Without anchor_price, v4_F5 falls back to
+# mid_smooth as fair value → tracks the market, no directional forcing.
+# Keep the other v4_F5 features (AR drift, inventory aversion, gap exploit).
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_V4_TRACKING_PARAMS = {k: v for k, v in _V4_F5_PARAMS.items()
+                           if k not in ("anchor_price", "anchor_alpha", "anchor_drift_bound")}
+# Keep anchor_alpha small so AR(1) shift still uses mid_smooth cleanly.
+_R3_V4_TRACKING_PARAMS["anchor_alpha"] = 0.0  # no anchor EMA → fair = mid_smooth
+
+MEMBER_OVERRIDES["r3_v4_tracking_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="mm_first_v4_combo",
+            position_limit=200,
+            **_R3_V4_TRACKING_PARAMS,
+            full_capacity_on_empty=True,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="mm_first_v4_combo",
+            position_limit=200,
+            **_R3_V4_TRACKING_PARAMS,
+            full_capacity_on_empty=True,
+        ),
+        # Vouchers: default ROUND_3 option_mm_bs
+    },
+}
+
 # R3 MS: regime-switching overlay from HYDROGEL/VELVET cross-asset states.
 # It keeps HYDROGEL close to the naive baseline, skews VELVET by regime, and
 # scales passive VEV option quotes instead of forcing a direct pair trade.
@@ -2080,7 +2118,7 @@ _R3_MS_OPTION_PARAMS = dict(
     ms_option_node_mult=0.35,
     ms_option_decoupled_mult=0.70,
     ms_option_warmup_mult=1.0,
-    ms_option_outer_mult=0.50,
+    ms_option_outer_mult=1.00,
     ms_option_focus_low=5000,
     ms_option_focus_high=5500,
 )
