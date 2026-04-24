@@ -2058,6 +2058,122 @@ MEMBER_OVERRIDES["r3_naive_champion_v2"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 v4 TRACKING CHAMPION — v4_F5 code WITHOUT fixed anchor (let mid_smooth float)
+#
+# Root cause of r3_naive_champion (v4_F5) live failure analysed in hedge_log:
+#   HYDROGEL_PACK live mid drifted 10011 → 9960 (-51 ticks) over the session.
+#   v4_F5 had anchor_price=10000 + drift_bound=2, clamping our fair value to
+#   [9998, 10002]. We kept buying at 9995 thinking below fair; market kept
+#   dropping below 9950 → position +190 long @ avg 9995, mid 9949 → -4,096.
+#
+# Fix: drop the fixed anchor. Without anchor_price, v4_F5 falls back to
+# mid_smooth as fair value → tracks the market, no directional forcing.
+# Keep the other v4_F5 features (AR drift, inventory aversion, gap exploit).
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_V4_TRACKING_PARAMS = {k: v for k, v in _V4_F5_PARAMS.items()
+                           if k not in ("anchor_price", "anchor_alpha", "anchor_drift_bound")}
+# Keep anchor_alpha small so AR(1) shift still uses mid_smooth cleanly.
+_R3_V4_TRACKING_PARAMS["anchor_alpha"] = 0.0  # no anchor EMA → fair = mid_smooth
+
+MEMBER_OVERRIDES["r3_v4_tracking_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="mm_first_v4_combo",
+            position_limit=200,
+            **_R3_V4_TRACKING_PARAMS,
+            full_capacity_on_empty=True,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="mm_first_v4_combo",
+            position_limit=200,
+            **_R3_V4_TRACKING_PARAMS,
+            full_capacity_on_empty=True,
+        ),
+        # Vouchers: default ROUND_3 option_mm_bs
+    },
+}
+
+# R3 MS: regime-switching overlay from HYDROGEL/VELVET cross-asset states.
+# It keeps HYDROGEL close to the naive baseline, skews VELVET by regime, and
+# scales passive VEV option quotes instead of forcing a direct pair trade.
+_R3_MS_REGIME_PARAMS = dict(
+    ms_window=120,
+    ms_min_samples=60,
+    ms_node_threshold=0.10,
+    ms_pos_corr_threshold=0.55,
+    ms_neg_corr_threshold=-0.55,
+    ms_decorr_threshold=0.15,
+    ms_soft_position_ratio=0.70,
+    ms_inventory_cut_mult=0.25,
+    ms_inventory_exit_mult=1.0,
+)
+_R3_MS_OPTION_PARAMS = dict(
+    ms_option_fav_bid_mult=1.60,
+    ms_option_fav_ask_mult=0.30,
+    ms_option_bad_bid_mult=0.25,
+    ms_option_bad_ask_mult=1.25,
+    ms_option_node_mult=0.35,
+    ms_option_decoupled_mult=0.70,
+    ms_option_warmup_mult=1.0,
+    ms_option_outer_mult=1.00,
+    ms_option_focus_low=5000,
+    ms_option_focus_high=5500,
+)
+MEMBER_OVERRIDES["r3_ms"] = {
+    3: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK",
+            strategy="ms_regime_delta",
+            position_limit=200,
+            params={
+                **ROUND_3["HYDROGEL_PACK"].params,
+                **_R3_MS_REGIME_PARAMS,
+                "maker_size": 30,
+                "tighten_ticks": 1,
+                "ms_role": "hydrogel",
+                "ms_history_owner": True,
+                "ms_use_shared_only": False,
+            },
+        ),
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT",
+            strategy="ms_regime_delta",
+            position_limit=200,
+            params=dict(
+                {**ROUND_3["VELVETFRUIT_EXTRACT"].params, **_R3_MS_REGIME_PARAMS},
+                maker_size=30,
+                tighten_ticks=1,
+                ms_role="velvet",
+                ms_use_shared_only=True,
+                ms_velvet_fav_bid_mult=1.45,
+                ms_velvet_fav_ask_mult=0.35,
+                ms_velvet_bad_bid_mult=0.35,
+                ms_velvet_bad_ask_mult=1.30,
+                ms_velvet_node_mult=0.45,
+                ms_velvet_decoupled_mult=0.75,
+            ),
+        ),
+        **{
+            f"VEV_{k}": ProductConfig(
+                symbol=f"VEV_{k}",
+                strategy="ms_regime_option",
+                position_limit=300,
+                params=dict(
+                    **ROUND_3[f"VEV_{k}"].params,
+                    **_R3_MS_REGIME_PARAMS,
+                    **_R3_MS_OPTION_PARAMS,
+                    ms_use_shared_only=True,
+                ),
+            )
+            for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+        },
+    },
+}
+
+
 # Pure penny-improve baseline across all 12 Round 3 products (no signal, no takers).
 MEMBER_OVERRIDES["naive_base_round_3"] = {
     3: {
@@ -2092,6 +2208,367 @@ MEMBER_OVERRIDES["naive_base_round_3"] = {
 }
 
 
+
+# ── CHAMPION FINAL v7 : OSM full_capacity + IPR v7_continuous ──
+MEMBER_OVERRIDES["champion_final_v7"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            full_capacity_on_empty=True,  # post full sell_cap / buy_cap when OB empty
+        ),
+        "INTARIAN_PEPPER_ROOT": _override(
+            ROUND_2["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v7",
+            # Base Theo params (from champion_19april_am live winner)
+            aggravate_cut=0.04,
+            ask_gap_quote_size=160,
+            ask_gap_sell_enable_position=75,
+            ask_spread_bull=9.0,
+            bid_spread_bull=1.0,
+            block_size=200,
+            bootstrap_confidence=0.55,
+            bull_threshold=1.0,
+            chase_threshold=1.25,
+            cheap_buy_boost_per_z=0.18,
+            cheap_residual_z=0.9,
+            dip_threshold=1.0,
+            dump_reserve_inventory=6,
+            dump_reserve_release_min_position=74,
+            dump_reserve_release_threshold=3.0,
+            # Option B trim: reserve permanente de 5 unités maintenue post-fill
+            reserve_target_position=75,
+            reserve_trim_per_tick=3,
+            empty_side_shift=85,
+            empty_side_shift_buy=85,
+            empty_side_shift_sell=89,
+            standing_deep_qty=15,
+            startup_recent_low_crash_drop_ticks=3.0,
+            startup_recent_low_start_position=48,
+            startup_recent_low_window=12,
+            startup_recent_low_gap_threshold=2.0,
+            startup_recent_low_release_gap=0.5,
+            startup_recent_low_hot_stretch=0.4,
+            startup_recent_low_take_cap=2,
+            startup_recent_low_passive_buy_cap=3,
+            startup_recent_low_anchor_extra_spread=1.0,
+            startup_recent_low_buy_edge_floor=1.0,
+            startup_recent_low_holdback=6,
+            startup_recent_low_end_ts=3000,
+            fastfill_buy_edge_boost=0.0,
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+            fastfill_end_ts=12000,
+            fastfill_min_passive_buy=10,
+            fastfill_target=80,
+            fv_alpha=0.05,
+            gap_fill_min_premium=35,
+            gap_rebuy_buy_edge=-10.0,
+            gap_rebuy_min_discount=20.0,
+            gap_rebuy_passive_buy=6,
+            gap_rebuy_take_cap=8,
+            gap_rebuy_window=2500,
+            gap_trap_arm_streak=2,
+            gap_trap_base_size=4,
+            gap_trap_clear_after=4,
+            gap_trap_floor_position=73,
+            gap_trap_fragile_ask_window=6,
+            gap_trap_min_gap=3,
+            gap_trap_min_imbalance=-0.05,
+            gap_trap_min_trend=0.0,
+            gap_trap_premium_extra=2,
+            gap_trap_premium_size=3,
+            gap_trap_premium_streak=2,
+            gap_trap_recent_ask_window=12,
+            gap_trap_top_ask_max=12,
+            hold_sell_offset=0,
+            hold_sell_size=0,
+            log_flush_ts=1000,
+            maker_size=80,
+            max_bid_extra_ticks=2,
+            max_inventory_sell_guard_position=80,
+            max_inventory_sell_guard_threshold=0.0,
+            min_completed_blocks=5,
+            neut_spread_ask=5.0,
+            neut_spread_bid=2.0,
+            one_sided_target_gap=24,
+            rebuy_block_ticks=25,
+            reg_horizon=25,
+            reg_r2_cap=0.98,
+            reg_r2_floor=0.85,
+            reg_residual_reversion=0.25,
+            reg_rmse_floor=1.0,
+            resid_inv_per_z=14.0,
+            rich_residual_z=1.0,
+            rich_sell_boost_per_z=0.14,
+            seed_slope=0.1015,
+            short_alpha=0.22,
+            slope_window=20,
+            startup_anchor_bid_spread=1.0,
+            startup_anchor_gap_ticks=1,
+            startup_anchor_size=4,
+            startup_chase_passive_buy=1,
+            startup_chase_take_cap=1,
+            startup_chase_take_edge=4.0,
+            startup_cold_join_ticks=0,
+            startup_cold_passive_buy=3,
+            startup_cold_take_cap=4,
+            startup_cold_take_edge=3.0,
+            startup_delayed_finish_ts=3000,
+            startup_dip_take_edge_boost=1.0,
+            startup_end_ts=30000,
+            startup_fast_passive_buy=8,
+            startup_fast_take_cap=12,
+            startup_fast_target=64,
+            startup_post_pullback_target=72,
+            startup_pre_pullback_target=48,
+            startup_pullback_ticks=2.0,
+            startup_release_stretch=1.0,
+            startup_release_take_cap=8,
+            startup_target=80,
+            strong_trend_ticks=0.9,
+            take_buy_edge_bull=-8.0,
+            take_buy_edge_neut=2.0,
+            take_sell_edge_neut=2.0,
+            target_gap_scale=26.0,
+            tighten_ticks=1,
+            trend_buy_boost_per_tick=0.24,
+            trend_inv_per_tick=16.0,
+            trend_inventory_cap=80,
+            trend_sell_boost_per_tick=0.2,
+            trim_ask_local_edge=0.0,
+            trim_cooldown_ticks=20,
+            trim_extension_threshold=0.75,
+            trim_floor_position=78,
+            trim_reference_slope_weight=0.15,
+            trim_sell_size=1,
+            trim_signal_edge=1.0,
+            trim_start_position=79,
+            trim_take_edge=2.0,
+            trim_take_position=80,
+            trim_take_sell_size=1,
+            trim_take_stretch=999.0,
+            ts_increment=100,
+            last_ts_value=999900,
+            unwind_take_edge=10.0,
+            very_strong_trend_ticks=1.6,
+        ),
+    },
+}
+
+# ── CHAMPION FINAL v7 WITH OSM STANDING DEEPS ──
+# Identical to champion_final_v7 except OSM posts preemptive deep quotes
+# at last_best_bid - 89 and last_best_ask + 89 every tick (qty=15).
+import copy as _copy_cfv7
+MEMBER_OVERRIDES["champion_final_v7_osm_deeps"] = _copy_cfv7.deepcopy(
+    MEMBER_OVERRIDES["champion_final_v7"]
+)
+# OSM: preemptive standing deeps at last ± 89 every tick
+MEMBER_OVERRIDES["champion_final_v7_osm_deeps"][2]["ASH_COATED_OSMIUM"].params[
+    "osm_standing_deep_qty"
+] = 15
+# IPR: cap normal MM at 75, gap exploit baisse can push to 80, trim back to 75
+_ipr_dp = MEMBER_OVERRIDES["champion_final_v7_osm_deeps"][2]["INTARIAN_PEPPER_ROOT"].params
+_ipr_dp["fastfill_target"] = 75
+_ipr_dp["dump_reserve_inventory"] = 5  # reserve_normal_cap = 80 - 5 = 75
+# HARD CAP: normal MM buys cap position at 75. Only standing_deep (gap exploit
+# baisse at last_bid-85) can push past 75, up to 80. Option B trim then pulls
+# back to 75, recycling the reserve for future gap exploit fills.
+_ipr_dp["normal_mm_buy_cap"] = 75
+
+# ── CHAMPION FINAL v8 : v7 + 5 corrections pour matcher exactement best_root ──
+# Corrects 5 param drifts vs champion_root standalone (the real best ROOT):
+#   - buy_gap_trap_floor_position: 77 (not default 74)
+#   - buy_gap_trap_premium_size: 1 (not default 4)
+#   - startup_price_improve_start_position: 56 (not default 53)
+#   - ask_gap_sell_enable_position: 0 (always active, not 75)
+#   - gap_trap_floor_position: 75 (not 73)
+MEMBER_OVERRIDES["champion_final_v8"] = _copy_cfv7.deepcopy(
+    MEMBER_OVERRIDES["champion_final_v7"]
+)
+_ipr_v8 = MEMBER_OVERRIDES["champion_final_v8"][2]["INTARIAN_PEPPER_ROOT"].params
+_ipr_v8["buy_gap_trap_floor_position"] = 77
+_ipr_v8["buy_gap_trap_premium_size"] = 1
+_ipr_v8["startup_price_improve_start_position"] = 56
+_ipr_v8["ask_gap_sell_enable_position"] = 0
+_ipr_v8["gap_trap_floor_position"] = 75
+
+# V8 with OSM standing deeps variant
+MEMBER_OVERRIDES["champion_final_v8_osm_deeps"] = _copy_cfv7.deepcopy(
+    MEMBER_OVERRIDES["champion_final_v8"]
+)
+MEMBER_OVERRIDES["champion_final_v8_osm_deeps"][2]["ASH_COATED_OSMIUM"].params[
+    "osm_standing_deep_qty"
+] = 15
+_ipr_v8dp = MEMBER_OVERRIDES["champion_final_v8_osm_deeps"][2]["INTARIAN_PEPPER_ROOT"].params
+_ipr_v8dp["fastfill_target"] = 75
+_ipr_v8dp["dump_reserve_inventory"] = 5
+_ipr_v8dp["normal_mm_buy_cap"] = 75
+
+# TEST ISOLATION: revert dump_reserve_inventory 5→6 from V2, keep everything else
+MEMBER_OVERRIDES["_test_v2_dump6"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_v2_dump6"][2]["INTARIAN_PEPPER_ROOT"].params["dump_reserve_inventory"] = 6
+
+# TEST ISOLATION: revert hard cap (normal_mm_buy_cap 75→80)
+MEMBER_OVERRIDES["_test_v2_nocap"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_v2_nocap"][2]["INTARIAN_PEPPER_ROOT"].params["normal_mm_buy_cap"] = 80
+
+# TEST ISOLATION: revert fastfill_target 75→80
+MEMBER_OVERRIDES["_test_v2_ff80"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_v2_ff80"][2]["INTARIAN_PEPPER_ROOT"].params["fastfill_target"] = 80
+
+# TEST ISOLATION: remove Option B trim (keep everything else in V2)
+MEMBER_OVERRIDES["_test_v2_notrim"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+del MEMBER_OVERRIDES["_test_v2_notrim"][2]["INTARIAN_PEPPER_ROOT"].params["reserve_target_position"]
+del MEMBER_OVERRIDES["_test_v2_notrim"][2]["INTARIAN_PEPPER_ROOT"].params["reserve_trim_per_tick"]
+
+# TEST variant A: disable standing_deep, keep trend_inventory_cap=80
+MEMBER_OVERRIDES["_test_nodeep"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_nodeep"][2]["INTARIAN_PEPPER_ROOT"].params["standing_deep_qty"] = 0
+
+# TEST variant B: keep standing_deep=15, cap trend at 74
+MEMBER_OVERRIDES["_test_capcut"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_capcut"][2]["INTARIAN_PEPPER_ROOT"].params["trend_inventory_cap"] = 74
+MEMBER_OVERRIDES["_test_capcut"][2]["INTARIAN_PEPPER_ROOT"].params["maker_size"] = 75
+
+# TEST variant C: both (full cap 75)
+MEMBER_OVERRIDES["_test_both"] = _copy_cfv7.deepcopy(MEMBER_OVERRIDES["champion_final_v7_osm_deeps"])
+MEMBER_OVERRIDES["_test_both"][2]["INTARIAN_PEPPER_ROOT"].params["standing_deep_qty"] = 0
+MEMBER_OVERRIDES["_test_both"][2]["INTARIAN_PEPPER_ROOT"].params["trend_inventory_cap"] = 74
+MEMBER_OVERRIDES["_test_both"][2]["INTARIAN_PEPPER_ROOT"].params["maker_size"] = 75
+
+MEMBER_OVERRIDES["champion_osm_v4only"] = {
+    2: {
+        "ASH_COATED_OSMIUM": _osm_v4(
+            **_V4_F5_PARAMS,
+            full_capacity_on_empty=False,  # BASELINE  # post full sell_cap / buy_cap when OB empty
+        ),
+        "INTARIAN_PEPPER_ROOT": _override(
+            ROUND_2["INTARIAN_PEPPER_ROOT"],
+            strategy="theo_best_clean_generalized_v4",
+            # Base Theo params (from champion_19april_am live winner)
+            aggravate_cut=0.04,
+            ask_gap_quote_size=8,
+            ask_gap_sell_enable_position=75,
+            ask_spread_bull=9.0,
+            bid_spread_bull=1.0,
+            block_size=200,
+            bootstrap_confidence=0.55,
+            bull_threshold=1.0,
+            chase_threshold=1.25,
+            cheap_buy_boost_per_z=0.18,
+            cheap_residual_z=0.9,
+            dip_threshold=1.0,
+            dump_reserve_inventory=1,
+            dump_reserve_release_min_position=75,
+            dump_reserve_release_threshold=3.0,
+            empty_side_shift=85,
+            fastfill_buy_edge_boost=0.0,
+            fastfill_deep_take_guard_end_ts=1000,
+            fastfill_deep_take_max_gap_ticks=1,
+            fastfill_end_ts=12000,
+            fastfill_min_passive_buy=10,
+            fastfill_target=80,
+            fv_alpha=0.05,
+            gap_fill_min_premium=35,
+            gap_rebuy_buy_edge=-10.0,
+            gap_rebuy_min_discount=20.0,
+            gap_rebuy_passive_buy=6,
+            gap_rebuy_take_cap=8,
+            gap_rebuy_window=2500,
+            gap_trap_arm_streak=2,
+            gap_trap_base_size=4,
+            gap_trap_clear_after=4,
+            gap_trap_floor_position=73,
+            gap_trap_fragile_ask_window=6,
+            gap_trap_min_gap=3,
+            gap_trap_min_imbalance=-0.05,
+            gap_trap_min_trend=0.0,
+            gap_trap_premium_extra=2,
+            gap_trap_premium_size=3,
+            gap_trap_premium_streak=2,
+            gap_trap_recent_ask_window=12,
+            gap_trap_top_ask_max=12,
+            hold_sell_offset=0,
+            hold_sell_size=0,
+            log_flush_ts=1000,
+            maker_size=80,
+            max_bid_extra_ticks=2,
+            max_inventory_sell_guard_position=80,
+            max_inventory_sell_guard_threshold=0.0,
+            min_completed_blocks=5,
+            neut_spread_ask=5.0,
+            neut_spread_bid=2.0,
+            one_sided_target_gap=24,
+            rebuy_block_ticks=25,
+            reg_horizon=25,
+            reg_r2_cap=0.98,
+            reg_r2_floor=0.85,
+            reg_residual_reversion=0.25,
+            reg_rmse_floor=1.0,
+            resid_inv_per_z=14.0,
+            rich_residual_z=1.0,
+            rich_sell_boost_per_z=0.14,
+            seed_slope=0.1015,
+            short_alpha=0.22,
+            slope_window=20,
+            startup_anchor_bid_spread=1.0,
+            startup_anchor_gap_ticks=1,
+            startup_anchor_size=4,
+            startup_chase_passive_buy=1,
+            startup_chase_take_cap=1,
+            startup_chase_take_edge=4.0,
+            startup_cold_join_ticks=0,
+            startup_cold_passive_buy=3,
+            startup_cold_take_cap=4,
+            startup_cold_take_edge=3.0,
+            startup_delayed_finish_ts=3000,
+            startup_dip_take_edge_boost=1.0,
+            startup_end_ts=30000,
+            startup_fast_passive_buy=8,
+            startup_fast_take_cap=12,
+            startup_fast_target=64,
+            startup_post_pullback_target=72,
+            startup_pre_pullback_target=48,
+            startup_pullback_ticks=2.0,
+            startup_release_stretch=1.0,
+            startup_release_take_cap=8,
+            startup_target=80,
+            strong_trend_ticks=0.9,
+            take_buy_edge_bull=-8.0,
+            take_buy_edge_neut=2.0,
+            take_sell_edge_neut=2.0,
+            target_gap_scale=26.0,
+            tighten_ticks=1,
+            trend_buy_boost_per_tick=0.24,
+            trend_inv_per_tick=16.0,
+            trend_inventory_cap=80,
+            trend_sell_boost_per_tick=0.2,
+            trim_ask_local_edge=0.0,
+            trim_cooldown_ticks=20,
+            trim_extension_threshold=0.75,
+            trim_floor_position=78,
+            trim_reference_slope_weight=0.15,
+            trim_sell_size=1,
+            trim_signal_edge=1.0,
+            trim_start_position=79,
+            trim_take_edge=2.0,
+            trim_take_position=80,
+            trim_take_sell_size=1,
+            trim_take_stretch=999.0,
+            ts_increment=100,
+            last_ts_value=999900,
+            unwind_take_edge=10.0,
+            very_strong_trend_ticks=1.6,
+        ),
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HEDGED CHAMPION — naive_tight_mm on HYDROGEL + velvet_delta_hedger on
+# VELVETFRUIT (reads option positions from coordinator to offset delta) +
+# option_mm_bs on vouchers (default ROUND_3 config).
+# ──────────────────────────────────────────────────────────────────────────────
 _THEO_R3_ACTIVE_OPTION_STRIKES = (5400, 5500)
 
 _THEO_R3_UNDERLYING = _override(
@@ -2157,6 +2634,7 @@ def _theo_r3_option_override(strike: int) -> ProductConfig:
 
 
 MEMBER_OVERRIDES["theo_r3_vol_arb_v1"] = {
+
     3: {
         "HYDROGEL_PACK": _override(
             ROUND_3["HYDROGEL_PACK"],
@@ -2167,6 +2645,550 @@ MEMBER_OVERRIDES["theo_r3_vol_arb_v1"] = {
         ),
         "VELVETFRUIT_EXTRACT": _THEO_R3_UNDERLYING,
         **{f"VEV_{strike}": _theo_r3_option_override(strike) for strike in _THEO_R3_ACTIVE_OPTION_STRIKES},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hedged_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_delta_hedger",
+            position_limit=200,
+            underlying_symbol="VELVETFRUIT_EXTRACT",
+            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500],
+            strike_prefix="VEV_",
+            tte_days_initial=5.0,
+            timestamp_units_per_day=1000000,
+            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+            target_delta=0.0,
+            hedge_taker_edge=15.0,
+            max_hedge_size=30,
+            passive_base_size=30,
+            passive_skew_per_delta=0.3,
+            quote_inside_book=True,
+            sigma_floor=0.005,
+            sigma_cap=0.10,
+            prior_vol=0.0125,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        # Vouchers: use ROUND_3 default (option_mm_bs)
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 VOL HARVEST CHAMPION — long-vol pivot based on realized 2.15% vs implied 1.25%.
+# HYDROGEL = naive_tight_mm. VELVET = velvet_delta_hedger with higher threshold.
+# ATM vouchers (VEV_5000..5500) = vol_harvest (buy when market < BS@realized_vol).
+# ITM (4000/4500) and deep OTM (6000/6500) keep option_mm_bs default.
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_VOL_HARVEST_STRIKES = [5000, 5100, 5200, 5300, 5400, 5500]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 ANCHOR ADAPTIVE CHAMPION (Codex design)
+# r3_naive_champion (v4_F5 anchor=fixed) makes +124k backtest but loses -3k live.
+# Fix: fair = w * anchor_fixed + (1-w) * mid_smooth, where w = confidence in anchor
+# based on rolling drift EWMA.
+#   - |drift_ewma| < 0.5 → w=1 (anchor regime → full v4_F5 alpha)
+#   - |drift_ewma| > 5.0 → w=0 (trend regime → falls back to mid_smooth tracking)
+#   - linearly interpolated in between.
+# Keeps the +124k backtest alpha on mean-revert days, shields from trend drift.
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_ANCHOR_ADAPTIVE_BASE = {
+    **_V4_F5_PARAMS,
+    "confidence_drift_alpha": 0.01,       # slow EWMA so noise doesn't flip regime
+    "confidence_drift_mean_rev": 0.5,     # |drift| below → full confidence
+    "confidence_drift_trend": 5.0,        # |drift| above → zero confidence
+    "confidence_min": 0.0,
+    "confidence_max": 1.0,
+    "full_capacity_on_empty": True,
+}
+_R3_ANCHOR_ADAPTIVE_HYDROGEL = {**_R3_ANCHOR_ADAPTIVE_BASE, "anchor_price": 10000.0}
+_R3_ANCHOR_ADAPTIVE_VELVET = {**_R3_ANCHOR_ADAPTIVE_BASE, "anchor_price": 5250.0}
+
+MEMBER_OVERRIDES["r3_anchor_adaptive_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="anchor_adaptive",
+            position_limit=200,
+            **_R3_ANCHOR_ADAPTIVE_HYDROGEL,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="anchor_adaptive",
+            position_limit=200,
+            **_R3_ANCHOR_ADAPTIVE_VELVET,
+        ),
+        # Vouchers: default ROUND_3 option_mm_bs
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 GAMMA SCALP CHAMPION — long gamma via ATM options + velvet_delta_hedger
+#
+# Thesis: realized vol ~1.8%/day vs implied ~1.22%/day → 45% gap.
+# Captured by holding long gamma (ATM calls) and hedging delta continuously
+# via VELVETFRUIT. When market moves, we rebalance delta; 0.5 gamma ΔS^2 per
+# move accumulates > theta decay IF realized > implied.
+#
+# Delta-1 products use naive_tight_mm + delta_hedger. Options ATM strikes
+# (5000..5300) use gamma_scalp. Others (ITM 4000/4500, deep OTM 6000/6500)
+# stay on passive option_mm_bs default.
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_GAMMA_SCALP_STRIKES = [5000, 5100, 5200, 5300]  # ATM-ish, highest gamma
+
+MEMBER_OVERRIDES["r3_gamma_scalp_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_delta_hedger",
+            position_limit=200,
+            underlying_symbol="VELVETFRUIT_EXTRACT",
+            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500],
+            strike_prefix="VEV_",
+            tte_days_initial=5.0,
+            timestamp_units_per_day=1000000,
+            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+            target_delta=0.0,
+            hedge_taker_edge=5.0,     # tight — re-hedge often for gamma P&L capture
+            max_hedge_size=50,
+            passive_base_size=30,
+            passive_skew_per_delta=0.5,
+            quote_inside_book=True,
+            sigma_floor=0.005,
+            sigma_cap=0.10,
+            prior_vol=0.018,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{
+            f"VEV_{k}": ProductConfig(
+                symbol=f"VEV_{k}",
+                strategy="gamma_scalp",
+                position_limit=300,
+                params=dict(
+                    strike=k,
+                    tte_days_initial=5.0,
+                    ticks_per_day=10000,
+                    timestamp_units_per_day=1000000,
+                    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+                    implied_vol_prior=0.0125,   # conservative: priced at market IV
+                    edge_ticks=0.0,              # buy when market = fair
+                    target_qty=100,
+                    entry_size=10,
+                    passive_bid_size=10,
+                    unwind_tte_threshold=1.5,
+                    min_quote_price=2.0,
+                    underlying_symbol="VELVETFRUIT_EXTRACT",
+                    log_flush_ts=1000,
+                    ts_increment=100,
+                    last_ts_value=999900,
+                ),
+            )
+            for k in _R3_GAMMA_SCALP_STRIKES
+        },
+        # Other vouchers (4000/4500/5400/5500/6000/6500) keep option_mm_bs default.
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL-ONLY CHAMPION — dédié single-asset, pas de options ni VELVETFRUIT
+#
+# Discovery: HYDROGEL spread = ~15 ticks (énorme), L1 vol = 12 units, mean-rev
+# mild (autocorr -0.12). Notre meilleur live = naive_tight_mm = +610 avec seulement
+# 20 fills. Le bottleneck c'est le VOLUME, pas l'edge par trade (~6.5 ticks).
+#
+# Strategy: ladder 3 quotes inside the spread (l1 penny, l2 inside, l3 near-mid)
+# to accumulate more fills. Inventory-aversion pour pas saturer. Pas de takers.
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_only"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_mm",
+            position_limit=200,
+            l1_size=150,                # scaled up from naive's 30
+            level2_inside=3,
+            l2_size=0,                 # DISABLE level 2 (hurts in backtest)
+            level3_inside=6,
+            l3_size=0,                 # DISABLE level 3 (hurts in backtest)
+            inventory_aversion=0.5,
+            min_spread_for_l2=999,     # effectively off
+            min_spread_for_l3=999,     # effectively off
+            max_position=200,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        # Disable all other products — this bot ONLY trades HYDROGEL.
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydrogel_passive_regime"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_passive_regime_mm",
+            position_limit=200,
+            maker_size=60,
+            improve_ticks=1,
+            min_spread=3,
+            max_position=200,
+            regime_window=120,
+            regime_min_samples=60,
+            node_threshold=0.10,
+            pos_corr_threshold=0.55,
+            neg_corr_threshold=-0.55,
+            decorr_threshold=0.15,
+            cap_warmup=0.35,
+            cap_node=0.30,
+            cap_neg=0.25,
+            cap_pos=0.40,
+            cap_decoupled=0.55,
+            cap_mixed=0.45,
+            size_warmup=0.75,
+            size_node=0.55,
+            size_neg=0.35,
+            size_pos=0.70,
+            size_decoupled=1.15,
+            size_mixed=0.85,
+            inventory_power=2.0,
+            inventory_exit_boost=1.4,
+            soft_inventory_ratio=0.55,
+            soft_worsen_mult=0.15,
+            min_worsen_mult=0.0,
+            fast_alpha=0.25,
+            slow_alpha=0.03,
+            momentum_lookback=40,
+            kill_position=120,
+            kill_dist_ticks=8.0,
+            kill_momentum_ticks=12.0,
+            kill_exit_mult=2.0,
+            kill_exit_improve_ticks=3,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+_R3_ORACLE_DAY2_PRODUCTS = {
+    "HYDROGEL_PACK": 200,
+    "VELVETFRUIT_EXTRACT": 200,
+    "VEV_4000": 300,
+    "VEV_4500": 300,
+    "VEV_5000": 300,
+    "VEV_5100": 300,
+    "VEV_5200": 300,
+    "VEV_5300": 300,
+    "VEV_5400": 300,
+    "VEV_5500": 300,
+}
+
+MEMBER_OVERRIDES["r3_oracle_day2"] = {
+    3: {
+        **{
+            symbol: ProductConfig(
+                symbol=symbol,
+                strategy="oracle_day2_replay",
+                position_limit=limit,
+                params={},
+            )
+            for symbol, limit in _R3_ORACLE_DAY2_PRODUCTS.items()
+        },
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+MEMBER_OVERRIDES["r3_oracle_day2_l1"] = {
+    3: {
+        **{
+            symbol: ProductConfig(
+                symbol=symbol,
+                strategy="oracle_day2_l1_replay",
+                position_limit=limit,
+                params={},
+            )
+            for symbol, limit in _R3_ORACLE_DAY2_PRODUCTS.items()
+        },
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL MEAN-REV TAKER — based on ACF/PACF analysis
+# Tick returns: AR(1) φ=-0.13 (bid-ask noise, no edge).
+# 500-tick agg: ACF(1)=-0.20 (strong mean-rev), std=28 ticks.
+# At |z|>=2 → sell/buy taker, edge = 2σ × 0.4 = 11 ticks minus 7 spread = 4 net.
+# Passive MM overlay stays on always (+23k baseline).
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL ORACLE-INSPIRED — rules distilled from Codex day-2 oracle
+# Reverse-engineered pattern:
+#   BUY  when z<-1.6 AND trend_100<-20 (oracle q75/avg)
+#   SELL when z>+0.5 AND trend_100>+10
+# Forward move median +33 ticks EOD, spread 15 ticks -> ~18 ticks net per trade.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL ASYM MM — Theo's one-sided quoting + our ACF z-score window=500
+# Combines the safest live strategy (Theo +587, drawdown -246, 0.42x ratio)
+# with our ACF-tuned signal (window=500, the true mean-rev horizon).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_asym_mm"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_asym_mm",
+            position_limit=200,
+            window=500,
+            quote_threshold_z=0.8,
+            maker_size=24,
+            min_maker_size=3,
+            signal_boost_max=8,                 # was 12, reduce aggressive scaling
+            signal_boost_per_z=4,               # was 6, smoother boost
+            inventory_reduce_per_unit=0.60,     # was 0.40, faster reduce wrong side
+            inventory_unwind_per_unit=0.50,     # was 0.30, faster unwind
+            unwind_boost_max=30,                # was 20, bigger push to unwind
+            tighten_ticks=1,
+            enable_taker=True,
+            take_z=2.5,
+            take_size=1,
+            take_cooldown_ts=2000,
+            soft_position_limit=15,             # was 60, tight taker cap
+            hard_pos_cap=15,                    # NEW: hard block passive @ ±15
+            min_samples=100,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL FOLLOW MM — trend-follow one-side + aggressive mean-revert unwind
+# Rationale: v2 asym_mm live log (384749) showed mean-rev logic fought the day's
+# downtrend. HYDRO drifted 10011 → 9960, strategy shorted early (good) but bought
+# back -17→-11 mid-trend (bad). Follow version holds + adds through pullbacks
+# and only unwinds on z-score exhaustion (take-profit) or trend flip (stop).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_follow_mm"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_follow_mm",
+            position_limit=200,
+            ema_fast=500,                       # ACF-optimal (tick horizon)
+            ema_slow=2000,                      # day-scale trend
+            trend_threshold=1.2,                # |trend| > 1.2 std → trend regime
+            flat_z_threshold=1.5,               # unused now (flat = symmetric)
+            maker_size=20,
+            min_maker_size=2,
+            follow_boost_max=10,                # size boost cap in trend
+            follow_boost_per_trend=4,           # per unit |trend|
+            flat_boost_max=0,                   # flat = symmetric MM (no asym)
+            flat_boost_per_z=0,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            unwind_boost_max=20,
+            tighten_ticks=1,
+            enable_taker=True,
+            flip_threshold=1.2,                 # was 0.8 — need STRONG flip to stop
+            tp_z=2.0,                           # was 1.2 — only extreme z=2σ for TP
+            stop_z=3.5,                         # was 2.5 — very wide stop
+            unwind_take_size=3,                 # was 4 — smaller bites
+            take_cooldown_ts=2500,              # was 500 — match asym_mm cadence
+            hard_pos_cap=30,                    # was 35 — a bit tighter
+            min_pos_for_take=8,                 # takers only fire when |pos|>=8
+            min_samples=200,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydrogel_oracle_inspired"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_oracle_inspired",
+            position_limit=200,
+            window=500,
+            trend_lookback=100,
+            buy_z_threshold=-2.5,
+            buy_trend_threshold=-40.0,
+            sell_z_threshold=0.5,
+            sell_trend_threshold=20.0,
+            taker_size=10,
+            max_position=100,
+            unwind_z_threshold=0.3,
+            unwind_chunk_size=10,
+            passive_l1_size=0,
+            enable_passive_mm=False,
+            min_samples=200,
+            cooldown_ticks=1000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydrogel_exhaustion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_exhaustion_taker",
+            position_limit=200,
+            fast_lookback_ts=10000,
+            slow_lookback_ts=20000,
+            entry_fast_ticks=999.0,
+            entry_slow_ticks=60.0,
+            max_position=60,
+            taker_size=15,
+            exit_size=15,
+            cooldown_ts=1000,
+            hold_ts=30000,
+            allow_l2=False,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydrogel_mean_rev"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_mean_rev_taker",
+            position_limit=200,
+            window=500,
+            entry_z=99.0,      # effectively disable taker entry
+            exit_z=0.5,
+            taker_size_base=0,
+            taker_size_per_z=0,
+            max_taker_position=0,
+            z_passive_skew_gain=3.0,   # z-skew on passive sizes
+            exit_chunk_size=30,
+            passive_l1_size=30,
+            inventory_aversion=0.5,
+            enable_passive_mm=True,
+            min_samples=100,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_delta_hedger",
+            position_limit=200,
+            underlying_symbol="VELVETFRUIT_EXTRACT",
+            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500],
+            strike_prefix="VEV_",
+            tte_days_initial=5.0,
+            timestamp_units_per_day=1000000,
+            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+            target_delta=0.0,
+            hedge_taker_edge=30.0,
+            max_hedge_size=50,
+            passive_base_size=30,
+            passive_skew_per_delta=0.5,
+            quote_inside_book=True,
+            sigma_floor=0.005,
+            sigma_cap=0.10,
+            prior_vol=0.0215,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{
+            f"VEV_{k}": ProductConfig(
+                symbol=f"VEV_{k}",
+                strategy="vol_harvest",
+                position_limit=300,
+                params=dict(
+                    strike=k,
+                    tte_days_initial=5.0,
+                    ticks_per_day=10000,
+                    timestamp_units_per_day=1000000,
+                    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+                    realized_vol_prior=0.0215,
+                    entry_edge=1.0,
+                    exit_edge=2.0,
+                    target_position=60,
+                    entry_size=10,
+                    exit_size=20,
+                    passive_bid_size=5,
+                    post_passive=True,
+                    min_quote_price=2.0,
+                    underlying_symbol="VELVETFRUIT_EXTRACT",
+                    log_flush_ts=1000,
+                    ts_increment=100,
+                    last_ts_value=999900,
+                ),
+            )
+            for k in _R3_VOL_HARVEST_STRIKES
+        },
     },
 }
 
