@@ -2614,6 +2614,47 @@ MEMBER_OVERRIDES["r3_hedged_champion"] = {
 # ──────────────────────────────────────────────────────────────────────────────
 _R3_VOL_HARVEST_STRIKES = [5000, 5100, 5200, 5300, 5400, 5500]
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 ANCHOR ADAPTIVE CHAMPION (Codex design)
+# r3_naive_champion (v4_F5 anchor=fixed) makes +124k backtest but loses -3k live.
+# Fix: fair = w * anchor_fixed + (1-w) * mid_smooth, where w = confidence in anchor
+# based on rolling drift EWMA.
+#   - |drift_ewma| < 0.5 → w=1 (anchor regime → full v4_F5 alpha)
+#   - |drift_ewma| > 5.0 → w=0 (trend regime → falls back to mid_smooth tracking)
+#   - linearly interpolated in between.
+# Keeps the +124k backtest alpha on mean-revert days, shields from trend drift.
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_ANCHOR_ADAPTIVE_BASE = {
+    **_V4_F5_PARAMS,
+    "confidence_drift_alpha": 0.01,       # slow EWMA so noise doesn't flip regime
+    "confidence_drift_mean_rev": 0.5,     # |drift| below → full confidence
+    "confidence_drift_trend": 5.0,        # |drift| above → zero confidence
+    "confidence_min": 0.0,
+    "confidence_max": 1.0,
+    "full_capacity_on_empty": True,
+}
+_R3_ANCHOR_ADAPTIVE_HYDROGEL = {**_R3_ANCHOR_ADAPTIVE_BASE, "anchor_price": 10000.0}
+_R3_ANCHOR_ADAPTIVE_VELVET = {**_R3_ANCHOR_ADAPTIVE_BASE, "anchor_price": 5250.0}
+
+MEMBER_OVERRIDES["r3_anchor_adaptive_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="anchor_adaptive",
+            position_limit=200,
+            **_R3_ANCHOR_ADAPTIVE_HYDROGEL,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="anchor_adaptive",
+            position_limit=200,
+            **_R3_ANCHOR_ADAPTIVE_VELVET,
+        ),
+        # Vouchers: default ROUND_3 option_mm_bs
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
     3: {
         "HYDROGEL_PACK": _override(

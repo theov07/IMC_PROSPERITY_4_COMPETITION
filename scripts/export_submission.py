@@ -112,6 +112,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
     "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
     "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
+    "anchor_adaptive":    ("prosperity/strategies/round_3/anchor_adaptive.py", "AnchorAdaptiveStrategy"),
     "ms_regime_delta":    ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeDeltaOneStrategy"),
     "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
 }
@@ -137,6 +138,7 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "velvet_delta_hedger": _R3_OPTIONS_DEPS,
     "vol_harvest":        _R3_OPTIONS_DEPS,
     "ms_regime_option":   _R3_OPTIONS_DEPS,
+    "anchor_adaptive":    ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
 }
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).
