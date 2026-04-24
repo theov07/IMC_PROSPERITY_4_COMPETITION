@@ -492,7 +492,7 @@ MEMBER_OVERRIDES: Dict[str, Dict[int, Dict[str, ProductConfig | None]]] = {
                 trim_ask_improve_ticks=1,
                 trim_floor_position=75,
                 trim_signal_edge=1.0,
-                trim_cooldown_ticks=1000,
+                trim_cooldown_ticks=8,
                 accum_band_trend_threshold=4.0,
                 accum_mid_start_position=60,
                 accum_top_start_position=75,
@@ -2569,6 +2569,86 @@ MEMBER_OVERRIDES["champion_osm_v4only"] = {
 # VELVETFRUIT (reads option positions from coordinator to offset delta) +
 # option_mm_bs on vouchers (default ROUND_3 config).
 # ──────────────────────────────────────────────────────────────────────────────
+_THEO_R3_ACTIVE_OPTION_STRIKES = (5400, 5500)
+
+_THEO_R3_UNDERLYING = _override(
+    ROUND_3["VELVETFRUIT_EXTRACT"],
+    strategy="theo_r3_vol_arb_v1",
+    position_limit=200,
+    role="underlying",
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    tte_days_initial=5.0,
+    ticks_per_day=10000,
+    timestamp_units_per_day=1000000,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    prior_vol=0.0125,
+    sigma_floor=0.005,
+    sigma_cap=0.10,
+    realized_vol_default=0.0215,
+    realized_var_alpha=0.06,
+    realized_vol_floor=0.0100,
+    realized_vol_cap=0.0500,
+    realized_anchor_weight=0.18,
+    hedge_ratio=1.0,
+    hedge_abs_position_limit=140,
+    hedge_aggressive_band=18,
+    hedge_passive_band=6,
+    hedge_clip_size=24,
+    neutral_mm_size=12,
+    neutral_mm_position_cap=20,
+)
+
+
+def _theo_r3_option_override(strike: int) -> ProductConfig:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        strategy="theo_r3_vol_arb_v1",
+        position_limit=300,
+        role="option",
+        strike=strike,
+        trade_enabled=True,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        tte_days_initial=5.0,
+        ticks_per_day=10000,
+        timestamp_units_per_day=1000000,
+        historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+        prior_vol=0.0125,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        realized_vol_default=0.0215,
+        realized_var_alpha=0.06,
+        realized_vol_floor=0.0100,
+        realized_vol_cap=0.0500,
+        realized_anchor_weight=0.18,
+        take_edge=12.0,
+        reduce_edge=1.5,
+        take_size=3,
+        maker_size=3,
+        maker_edge=2.0,
+        enable_takers=False,
+        soft_position_limit=16,
+        hedge_abs_position_limit=140,
+        inventory_skew=6.0,
+        min_quote_price=5.0,
+    )
+
+
+MEMBER_OVERRIDES["theo_r3_vol_arb_v1"] = {
+
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _THEO_R3_UNDERLYING,
+        **{f"VEV_{strike}": _theo_r3_option_override(strike) for strike in _THEO_R3_ACTIVE_OPTION_STRIKES},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_hedged_champion"] = {
     3: {
         "HYDROGEL_PACK": _override(
