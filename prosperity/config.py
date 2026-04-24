@@ -2655,6 +2655,83 @@ MEMBER_OVERRIDES["r3_anchor_adaptive_champion"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 GAMMA SCALP CHAMPION — long gamma via ATM options + velvet_delta_hedger
+#
+# Thesis: realized vol ~1.8%/day vs implied ~1.22%/day → 45% gap.
+# Captured by holding long gamma (ATM calls) and hedging delta continuously
+# via VELVETFRUIT. When market moves, we rebalance delta; 0.5 gamma ΔS^2 per
+# move accumulates > theta decay IF realized > implied.
+#
+# Delta-1 products use naive_tight_mm + delta_hedger. Options ATM strikes
+# (5000..5300) use gamma_scalp. Others (ITM 4000/4500, deep OTM 6000/6500)
+# stay on passive option_mm_bs default.
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_GAMMA_SCALP_STRIKES = [5000, 5100, 5200, 5300]  # ATM-ish, highest gamma
+
+MEMBER_OVERRIDES["r3_gamma_scalp_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_delta_hedger",
+            position_limit=200,
+            underlying_symbol="VELVETFRUIT_EXTRACT",
+            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500],
+            strike_prefix="VEV_",
+            tte_days_initial=5.0,
+            timestamp_units_per_day=1000000,
+            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+            target_delta=0.0,
+            hedge_taker_edge=5.0,     # tight — re-hedge often for gamma P&L capture
+            max_hedge_size=50,
+            passive_base_size=30,
+            passive_skew_per_delta=0.5,
+            quote_inside_book=True,
+            sigma_floor=0.005,
+            sigma_cap=0.10,
+            prior_vol=0.018,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{
+            f"VEV_{k}": ProductConfig(
+                symbol=f"VEV_{k}",
+                strategy="gamma_scalp",
+                position_limit=300,
+                params=dict(
+                    strike=k,
+                    tte_days_initial=5.0,
+                    ticks_per_day=10000,
+                    timestamp_units_per_day=1000000,
+                    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+                    implied_vol_prior=0.0125,   # conservative: priced at market IV
+                    edge_ticks=0.0,              # buy when market = fair
+                    target_qty=100,
+                    entry_size=10,
+                    passive_bid_size=10,
+                    unwind_tte_threshold=1.5,
+                    min_quote_price=2.0,
+                    underlying_symbol="VELVETFRUIT_EXTRACT",
+                    log_flush_ts=1000,
+                    ts_increment=100,
+                    last_ts_value=999900,
+                ),
+            )
+            for k in _R3_GAMMA_SCALP_STRIKES
+        },
+        # Other vouchers (4000/4500/5400/5500/6000/6500) keep option_mm_bs default.
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
     3: {
         "HYDROGEL_PACK": _override(
