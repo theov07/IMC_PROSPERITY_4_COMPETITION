@@ -116,7 +116,63 @@ ROUND_2: Dict[str, ProductConfig] = {
         ),
     ),
 }
-ROUND_3: Dict[str, ProductConfig] = {}
+ROUND_3: Dict[str, ProductConfig] = {
+    "HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK",
+        strategy="naive_tight_mm",
+        position_limit=200,
+        params=dict(
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    ),
+    "VELVETFRUIT_EXTRACT": ProductConfig(
+        symbol="VELVETFRUIT_EXTRACT",
+        strategy="naive_tight_mm",
+        position_limit=200,
+        params=dict(
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    ),
+    # 10 VELVETFRUIT_EXTRACT_VOUCHER options
+    **{
+        f"VEV_{k}": ProductConfig(
+            symbol=f"VEV_{k}",
+            strategy="option_mm_bs",
+            position_limit=300,
+            params=dict(
+                strike=k,
+                tte_days_initial=5.0,
+                ticks_per_day=10000,
+                prior_vol=0.0125,   # ATM IV observed ~1.25% daily
+                maker_edge=2,
+                maker_size=20,
+                take_edge=3.0,
+                take_size=40,
+                use_smile=True,
+                iv_ewma_alpha=0.3,
+                sigma_floor=0.005,
+                sigma_cap=0.10,
+                min_quote_price=2.0,    # skip quoting when BS fair < 2 (deep OTM)
+                inv_bias_per_unit=0.02,
+                enable_takers=False,    # naive: no aggressive takes (too risky on options)
+                penny_improve_around_mkt=True,  # naive: penny-improve around book (stable MM)
+                underlying_symbol="VELVETFRUIT_EXTRACT",
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        )
+        for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+    },
+}
 ROUND_4: Dict[str, ProductConfig] = {}
 ROUND_5: Dict[str, ProductConfig] = {}
 
@@ -1923,6 +1979,79 @@ MEMBER_OVERRIDES["v4_G_all"] = {
             jump_size_frac=0.5,
         ),
         "INTARIAN_PEPPER_ROOT": None,
+    },
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROUND 3 — Naive champion : MM on HYDROGEL/VELVETFRUIT + BS option MM on VEV
+# ══════════════════════════════════════════════════════════════════════════════
+
+# HYDROGEL_PACK : reuse v4_F5 params (anchor=10000, mid range 9928-10071)
+_R3_HYDROGEL_PARAMS = {
+    **_V4_F5_PARAMS,
+    "anchor_price": 10000.0,
+    "full_capacity_on_empty": True,
+}
+_R3_HYDROGEL_V4_F5 = _override(
+    ROUND_3["HYDROGEL_PACK"],
+    strategy="mm_first_v4_combo",
+    position_limit=200,
+    **_R3_HYDROGEL_PARAMS,
+)
+
+# VELVETFRUIT_EXTRACT : same v4_F5 template but anchor at 5250
+_R3_VELVETFRUIT_PARAMS = {
+    **_V4_F5_PARAMS,
+    "anchor_price": 5250.0,
+    "full_capacity_on_empty": True,
+}
+_R3_VELVETFRUIT_V4_F5 = _override(
+    ROUND_3["VELVETFRUIT_EXTRACT"],
+    strategy="mm_first_v4_combo",
+    position_limit=200,
+    **_R3_VELVETFRUIT_PARAMS,
+)
+
+MEMBER_OVERRIDES["r3_naive_champion"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDROGEL_V4_F5,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        # Vouchers: use default ROUND_3[f"VEV_{k}"] config (option_mm_bs)
+    },
+}
+
+
+# Pure penny-improve baseline across all 12 Round 3 products (no signal, no takers).
+MEMBER_OVERRIDES["naive_base_round_3"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        **{
+            f"VEV_{k}": ProductConfig(
+                symbol=f"VEV_{k}",
+                strategy="naive_tight_mm",
+                position_limit=300,
+                params=dict(
+                    maker_size=30,
+                    tighten_ticks=1,
+                    log_flush_ts=1000,
+                    ts_increment=100,
+                    last_ts_value=999900,
+                ),
+            )
+            for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+        },
     },
 }
 

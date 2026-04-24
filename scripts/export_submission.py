@@ -36,7 +36,7 @@ from prosperity.config import MEMBER_OVERRIDES, get_round_config
 # Keep this in sync with prosperity/strategies/__init__.py.
 STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "market_maker":       ("prosperity/strategies/market_maker.py",       "MarketMakerStrategy"),
-    "naive_tight_mm":     ("prosperity/strategies/naive_tight_mm.py",     "NaiveTightMarketMakerStrategy"),
+    "naive_tight_mm":     ("prosperity/strategies/round_1/naive_tight_mm.py",     "NaiveTightMarketMakerStrategy"),
     "naive_tight_mm_v2":  ("prosperity/strategies/naive_tight_mm_v2.py",  "NaiveTightMarketMakerV2Strategy"),
     "naive_tight_mm_v3":  ("prosperity/strategies/naive_tight_mm_v3.py",  "NaiveTightMarketMakerV3Strategy"),
     "naive_tight_mm_v4":  ("prosperity/strategies/naive_tight_mm_v4.py",  "NaiveTightMarketMakerV4Strategy"),
@@ -107,6 +107,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "pepper_modulaire":   ("prosperity/strategies/round_2/leo/pepper_modulaire.py", "PepperModulaireStrategy"),
     "ask_exploit_modulaire": ("prosperity/strategies/round_2/theo/ask_exploit_modulaire.py", "AskExploitModulaireStrategy"),
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
+    # ── Round 3 ──
+    "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -115,6 +117,15 @@ CORE_MODULES = [
     "prosperity/persistence.py",
     "prosperity/strategies/base/base.py",
 ]
+
+# Optional per-strategy file deps (paths inlined BEFORE the strategy file).
+STRATEGY_FILE_DEPS: dict[str, list[str]] = {
+    "option_mm_bs": [
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+}
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).
 STRATEGY_DEPS: dict[str, list[str]] = {
@@ -403,8 +414,13 @@ def main() -> int:
         print(f"ERROR: STRATEGY_DEPS references unknown: {sorted(unknown_dep)}", file=sys.stderr)
         return 1
 
-    # Ordered list: core first, then one file per needed strategy (deps before dependents).
-    module_files = list(CORE_MODULES) + [STRATEGY_REGISTRY[n][0] for n in resolved]
+    # Ordered list: core first, then per-strategy file deps, then the strategy file itself.
+    module_files = list(CORE_MODULES)
+    for n in resolved:
+        for file_dep in STRATEGY_FILE_DEPS.get(n, []):
+            if file_dep not in module_files:
+                module_files.append(file_dep)
+        module_files.append(STRATEGY_REGISTRY[n][0])
 
     # Inline each module, collecting external imports along the way.
     all_ext_imports: list[str] = []
