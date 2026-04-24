@@ -12,7 +12,50 @@ Read it fully before touching any code. It supersedes the README for agent-speci
 The competition rewards **PnL** (realized + marked-to-market). Each product has a position limit (usually 80 units). The key tension is: capture spread as a market maker vs. take directional risk on price signals.
 
 **Our team**: Tibo, Leo, Theo — each member has their own strategy branch and config entry.  
-**Current round**: Round 1. Products: `ASH_COATED_OSMIUM` (mean-reverting) and `INTARIAN_PEPPER_ROOT` (trending). Round 0 products (EMERALDS, TOMATOES) are no longer active.
+**Current round**: **Round 3 — "Gloves Off" / GOAT**. Leaderboard reset (everyone starts from 0 PnL). Products:
+- `HYDROGEL_PACK` (delta-1, limit **200**, mid ≈ 10,000)
+- `VELVETFRUIT_EXTRACT` (delta-1 underlying, limit **200**, mid ≈ 5,250)
+- `VEV_4000`..`VEV_6500` — 10 **European call vouchers** on VELVETFRUIT_EXTRACT, limit **300** each.
+  Strikes: 4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500.
+  TTE = **5 days** at start of Round 3 final simulation (historical day 0 = TTE=8d, day 1 = TTE=7d, day 2 = TTE=6d).
+- Manual trading challenge: **Ornamental Bio-Pods** — 2 bids uniform [670..920] step 5, resell next round at 920.
+
+**Previous rounds** (products archived; configs/strategies still in repo):
+- Round 0 (tutorial): EMERALDS, TOMATOES — no longer active
+- Round 1–2: `ASH_COATED_OSMIUM` (mean-rev, limit 80), `INTARIAN_PEPPER_ROOT` (trending, limit 80)
+  - Round 2 final PnL: **82,352** (V8 osm_deeps champion)
+
+**Riddle for Round 3**: `La_trahison_des_images.png` = Magritte's "Ceci n'est pas une pipe" — hint that
+market prices ≠ fair prices on options → **Black-Scholes + smile fitting edge**.
+
+---
+
+## Round 3 quick reference
+
+**Vol observed (historical)**:
+- VELVETFRUIT realized daily vol = **~2.15%/day** (very stable across 3 days)
+- HYDROGEL realized daily vol = **~2.17%/day**
+- Implied vol (ATM options) ≈ **1.25%/day** → realized > implied by ~70% = potential LONG VOL edge
+
+**Option price sanity (day 0, S=5250, TTE=8d)**:
+- K=4000: mid 1246 = intrinsic 1246 (delta=1, no time value)
+- K=5000 (ATM-ish): mid 253, delta 0.92, vega ~2240
+- K=5300 (OTM): mid 49, delta 0.40, vega ~5750 (peak)
+- K=6000, K=6500: mid 0.5 (floor, essentially worthless)
+
+**Framework added for Round 3**:
+- `prosperity/options/black_scholes.py` — pure-Python BS call/put + greeks (delta/gamma/vega/theta)
+- `prosperity/options/implied_vol.py` — Newton-Raphson IV solver with bisection fallback
+- `prosperity/options/smile.py` — polynomial smile fit in log-moneyness, `smile_predict(K, ...)`
+- `prosperity/strategies/round_3/option_mm_bs.py` — `OptionMMBSStrategy` (naive BS-aware MM)
+- `prosperity/config.py` — `ROUND_3` dict + `r3_naive_champion` member (HYDROGEL+VELVETFRUIT v4_F5 MM + options BS-MM)
+
+**Current baseline**: `r3_naive_champion` — **+123,526 PnL on 3-day backtest realistic**.
+- HYDROGEL MM: ~18k/day
+- VELVETFRUIT MM: ~15k/day
+- Vouchers: near-neutral (penny-improve MM around market, no aggressive takers)
+
+**Units convention for options**: time T in DAYS, sigma in daily vol, r=0. `call_price(S, K, T, sigma)`.
 
 ---
 
