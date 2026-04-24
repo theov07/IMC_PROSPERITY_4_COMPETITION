@@ -2,6 +2,58 @@
 
 Shared coordination file for Léo, Claude, and Codex.
 
+---
+
+## Current Context (2026-04-24 — Round 3 started, naive baseline built)
+
+### Team ranking
+- **R1 final** : 1st France, 77th Global on algo trading
+- **R1 champion** : `champion_generalized` (107k finale PnL)
+- **R2 final** : `champion_final_v8_osm_deeps` — **82,352 PnL** on live 1-day session
+- **R3 started** : GOAT phase, leaderboard reset, options trading introduced
+
+### Round 3 — Products & framework
+- `HYDROGEL_PACK` (delta-1, limit 200, mid ~10,000, vol ~2.17%/day)
+- `VELVETFRUIT_EXTRACT` (delta-1 underlying, limit 200, mid ~5,250, vol ~2.15%/day)
+- `VEV_4000`..`VEV_6500` (10 European call vouchers, limit 300 each, TTE=5d at live start)
+- Manual: Ornamental Bio-Pods (2 bids uniform [670..920] step 5, sell next round at 920)
+
+**New framework** in `prosperity/options/`:
+- `black_scholes.py` — pure-Python BS call/put + greeks (delta/gamma/vega/theta)
+- `implied_vol.py` — Newton-Raphson IV solver with bisection fallback
+- `smile.py` — polynomial smile fit in log-moneyness, `smile_predict(K, coeffs, S, T)`
+
+**Naive strategy**: `prosperity/strategies/round_3/option_mm_bs.py` — `OptionMMBSStrategy`.
+- Penny-improve around market (best_bid+1, best_ask-1) with BS fair as inventory-skew reference
+- Skip quoting when `BS_fair < min_quote_price` (default 2) — protects against deep OTM rounding chaos
+- `enable_takers=False` by default (naive = passive only)
+- Self-contained smile fit from state.order_depths each tick (10 strikes)
+
+**Naive champion**: `r3_naive_champion` → **+123,526 PnL** 3-day backtest realistic.
+- HYDROGEL v4_F5 anchor=10000 → ~18k/day
+- VELVETFRUIT v4_F5 anchor=5250 → ~15k/day
+- VEV options penny-improve MM → near 0 (neutral)
+
+### Observed edges (Round 3)
+- **Realized vol 2.15%/day vs implied 1.25%/day** = 70% gap → LONG VOL overlay potentially profitable
+- **Magritte "Ceci n'est pas une pipe"** → IMC hint: market price ≠ fair value on options → fade mispricings
+
+### Decisions (Round 3)
+- European call model (no American exercise)
+- Time in DAYS, sigma = daily vol, r=0 (prosperity convention)
+- Smile: quadratic polynomial in log-moneyness (3+ strikes needed for fit)
+- Deep OTM (K=6000, 6500, mid=0.5 floor) skipped via `min_quote_price=2.0`
+- HYDROGEL + VELVETFRUIT reuse `_V4_F5_PARAMS` from Round 2 with anchor overrides
+
+### Next steps (Round 3)
+- Delta-hedge via VELVETFRUIT (long options → short S to be delta-neutral)
+- Smile-aware quoting (bid/ask tighter than penny-improve using BS ± calibrated edge)
+- Option coordinator to share smile fit across 10 VEV instances (avoid duplicate work)
+- Research Ornamental Bio-Pods optimal bid (similar to R2 MAF analysis)
+- Add vol_arb strategy: buy vega when implied < realized, delta-hedge
+
+---
+
 Use this file to:
 - share current context
 - ask targeted questions
