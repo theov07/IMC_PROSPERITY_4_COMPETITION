@@ -505,6 +505,16 @@ class HydrogelAsymMMStrategy(BaseStrategy):
             ask_size = 0
             bid_size = maker + min(boost_max, int(abs_z * p["signal_boost_per_z"]))
 
+        # HARD cap on directional position build-up.
+        # If already at hard_pos_cap on one side, block the side that grows it.
+        # This prevents inventory runaway when signal persists against the market
+        # (e.g. short in a downtrend that turns around).
+        hard_cap = p["hard_pos_cap"]
+        if position >= hard_cap:
+            bid_size = 0  # block further buying
+        if position <= -hard_cap:
+            ask_size = 0  # block further selling
+
         # Inventory skew (always applied)
         reduce = p["inventory_reduce_per_unit"]
         unwind = p["inventory_unwind_per_unit"]
@@ -576,6 +586,7 @@ class HydrogelAsymMMStrategy(BaseStrategy):
             "take_cooldown_ts": int(params.get("take_cooldown_ts", 2000)),
             "soft_position_limit": int(params.get("soft_position_limit", 60)),
             "min_samples": int(params.get("min_samples", 100)),
+            "hard_pos_cap": int(params.get("hard_pos_cap", 15)),
         }
 
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
@@ -590,25 +601,26 @@ class HydrogelAsymMMStrategy(BaseStrategy):
 # ── Config ────────────────────────────────────────────────────────────────────
 
 PRODUCTS = {'HYDROGEL_PACK': {'enable_taker': True,
-                   'inventory_reduce_per_unit': 0.4,
-                   'inventory_unwind_per_unit': 0.3,
+                   'hard_pos_cap': 15,
+                   'inventory_reduce_per_unit': 0.6,
+                   'inventory_unwind_per_unit': 0.5,
                    'last_ts_value': 999900,
                    'log_flush_ts': 1000,
                    'maker_size': 24,
                    'min_maker_size': 3,
                    'min_samples': 100,
                    'position_limit': 200,
-                   'quote_threshold_z': 2.0,
-                   'signal_boost_max': 12,
-                   'signal_boost_per_z': 6,
-                   'soft_position_limit': 60,
+                   'quote_threshold_z': 0.8,
+                   'signal_boost_max': 8,
+                   'signal_boost_per_z': 4,
+                   'soft_position_limit': 15,
                    'strategy': 'hydrogel_asym_mm',
                    'take_cooldown_ts': 2000,
                    'take_size': 1,
                    'take_z': 2.5,
                    'tighten_ticks': 1,
                    'ts_increment': 100,
-                   'unwind_boost_max': 20,
+                   'unwind_boost_max': 30,
                    'window': 500}}
 
 STRATEGY_CLASSES = {"hydrogel_asym_mm": HydrogelAsymMMStrategy}

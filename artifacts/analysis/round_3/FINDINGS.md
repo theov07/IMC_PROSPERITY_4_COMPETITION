@@ -39,11 +39,37 @@ Grid search:
 **Locked at tz=0.8, ms=24**. Backtest +30,465 over 3 days (+32% vs passive
 naive baseline +23k). Maintains Theo's low-DD profile via inventory skew.
 
+### Live v1 (384330): +827 final but -782 DD from peak +1609
+
+**Problem observed**: strategy short-ed HYDROGEL at ts=91100 mid=9915 (near
+day's low), z-score said "mid > EMA mean" (the EMA tracked the decline down
+to ~9900). From ts=91100 to ts=99900 (end), mid rose 9915→9960 while we held
+position -17 short → mtm loss 17×45 = 765 ≈ observed DD.
+
+**Root cause**: no absolute bound on position + signal based only on rolling
+mean (which trailed the decline). Signal said "rich" at the absolute low of
+the day because EMA had followed the decline down.
+
+### v2 fix (locked this session)
+
+Added `hard_pos_cap=15` + tighter `inventory_reduce_per_unit=0.60`,
+`inventory_unwind_per_unit=0.50`, `unwind_boost_max=30`,
+`soft_position_limit=15` (was 60).
+
+Backtest effect: day 2 +4,999 (vs v1 +5,082 — nearly identical), 3-day
++26,192 (vs v1 +30,465, -14% but still beats naive). Max position during
+backtest: 19-20 units (close to hard cap; the hard cap only blocks NEW
+position growth, not forced unwind, so partial overshoot possible).
+
+Next live test: this v2 should show reduced drawdown vs v1 while keeping
+most of the PnL.
+
 | Strategy (HYDROGEL-only) | Day2 backtest | Live | 3d backtest | Verdict |
 |---|---|---|---|---|
 | `r3_hydrogel_only` passive ladder | **−116** | +610 | +23,282 | Safe baseline, edge per fill OK (+6.8 ticks) |
 | `r3_hydrogel_mean_rev` z-skew (gain=3, win=500) | **+10,523** | +385 | +44,306 | Best passive, generalizable |
-| **`r3_hydrogel_asym_mm`** (Theo + ACF z, tz=0.8, ms=24) | **+5,082** | — | **+30,465** | **Hybrid: robust + low DD** |
+| **`r3_hydrogel_asym_mm v1`** (no hard cap) | +5,082 | **+827** (DD -782) | +30,465 | Positive but bled from peak +1609 |
+| **`r3_hydrogel_asym_mm v2`** (hard_cap=15, faster unwind) | +4,999 | TBD | +26,192 | Fixed: prevents runaway short/long |
 | **`codex_exhaustion`** (taker fade LB=200 TH=60 H=300) | — | **+2,294** | +480 (3d) | **Best live** but day-2-leaning |
 | `theo_one_side_mm` (asym MM + taker) | — | +587 HYDROGEL, +1088 total | — | Asymmetric passive, VELVET inclus |
 | `r3_oracle_day2_l1` (Codex overfit) | — | ~140k expected | — | Overfit oracle, L1-only, validator-safe |

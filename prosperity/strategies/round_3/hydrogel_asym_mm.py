@@ -159,6 +159,16 @@ class HydrogelAsymMMStrategy(BaseStrategy):
             ask_size = 0
             bid_size = maker + min(boost_max, int(abs_z * p["signal_boost_per_z"]))
 
+        # HARD cap on directional position build-up.
+        # If already at hard_pos_cap on one side, block the side that grows it.
+        # This prevents inventory runaway when signal persists against the market
+        # (e.g. short in a downtrend that turns around).
+        hard_cap = p["hard_pos_cap"]
+        if position >= hard_cap:
+            bid_size = 0  # block further buying
+        if position <= -hard_cap:
+            ask_size = 0  # block further selling
+
         # Inventory skew (always applied)
         reduce = p["inventory_reduce_per_unit"]
         unwind = p["inventory_unwind_per_unit"]
@@ -230,6 +240,7 @@ class HydrogelAsymMMStrategy(BaseStrategy):
             "take_cooldown_ts": int(params.get("take_cooldown_ts", 2000)),
             "soft_position_limit": int(params.get("soft_position_limit", 60)),
             "min_samples": int(params.get("min_samples", 100)),
+            "hard_pos_cap": int(params.get("hard_pos_cap", 15)),
         }
 
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
