@@ -221,15 +221,20 @@ _TRADER_CLASS = dedent("""\
         def run(self, state: TradingState):
             saved = load_state(state.traderData)
             product_memories = saved.setdefault("products", {})
+            shared = {"timestamp": state.timestamp}
             result = {}
             total_conversions = 0
             for product, strategy in self.strategies.items():
                 if product not in state.order_depths:
                     continue
                 memory = product_memories.setdefault(product, {})
+                memory["_shared"] = shared
                 orders, conversions = strategy.on_tick(state, memory)
                 result[product] = orders
                 total_conversions += conversions
+            for memory in product_memories.values():
+                if isinstance(memory, dict):
+                    memory.pop("_shared", None)
             saved["last_timestamp"] = state.timestamp
             return result, total_conversions, dump_state(saved)
 """)

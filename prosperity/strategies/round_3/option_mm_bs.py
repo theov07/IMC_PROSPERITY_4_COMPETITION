@@ -93,8 +93,9 @@ class OptionMMBSStrategy(BaseStrategy):
 
         # Underlying spot — read from shared memory set by coordinator, or fall
         # back to listing_info lookup
-        shared = memory.get("_shared") or {}
-        S = shared.get("underlying_spot")
+        shared_raw = memory.get("_shared")
+        shared = shared_raw if isinstance(shared_raw, dict) else {}
+        S = shared.get("underlying_spot") if shared.get("underlying_spot_ts") == ts else None
         if S is None:
             # Fallback: look for underlying in state.order_depths
             underlying = self.params.get("underlying_symbol", "VELVETFRUIT_EXTRACT")
@@ -103,6 +104,8 @@ class OptionMMBSStrategy(BaseStrategy):
                 ub = max(u_od.buy_orders.keys())
                 ua = min(u_od.sell_orders.keys())
                 S = 0.5 * (ub + ua)
+                shared["underlying_spot"] = S
+                shared["underlying_spot_ts"] = ts
         if S is None:
             return [], 0
 
@@ -129,10 +132,13 @@ class OptionMMBSStrategy(BaseStrategy):
 
         # Choose sigma for pricing
         if use_smile:
-            smile_coeffs = shared.get("vev_smile_coeffs")
-            if smile_coeffs is None:
-                # Fallback: self-compute smile from state.order_depths
+            if shared.get("vev_smile_ts") == ts:
+                smile_coeffs = shared.get("vev_smile_coeffs")
+            else:
+                # Compute at most once per timestamp when a shared dict is provided.
                 smile_coeffs = self._fit_smile_selfcontained(state, S, T, sigma_floor, sigma_cap, prior_vol)
+                shared["vev_smile_coeffs"] = smile_coeffs
+                shared["vev_smile_ts"] = ts
             if smile_coeffs:
                 sigma_use = smile_predict(K, smile_coeffs, S, T)
                 sigma_use = max(sigma_floor, min(sigma_cap, sigma_use))
