@@ -111,6 +111,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
     "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
+    "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
     "ms_regime_delta":    ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeDeltaOneStrategy"),
     "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
 }
@@ -134,6 +135,7 @@ _R3_OPTIONS_DEPS = [
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "option_mm_bs":       _R3_OPTIONS_DEPS,
     "velvet_delta_hedger": _R3_OPTIONS_DEPS,
+    "vol_harvest":        _R3_OPTIONS_DEPS,
     "ms_regime_option":   _R3_OPTIONS_DEPS,
 }
 
