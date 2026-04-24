@@ -139,6 +139,12 @@ def _parse_cli_args() -> argparse.Namespace:
         default=None,
         help="Round number to load from data/round_<n>. Defaults to the latest available nested round, else flat data-dir.",
     )
+    parser.add_argument(
+        "--products",
+        nargs="+",
+        default=None,
+        help="Only load these product symbols (space-separated). Default: all products in the round.",
+    )
     args, _ = parser.parse_known_args()
     return args
 
@@ -810,7 +816,7 @@ def _cleanup_dashboard_port(port: int, label: str) -> None:
         print(f"Warning: port {port} still has listeners after cleanup: {', '.join(map(str, remaining))}")
 
 
-def load_data(data_dir: str) -> Dict[str, Dict[str, object]]:
+def load_data(data_dir: str, products_filter: list[str] | None = None) -> Dict[str, Dict[str, object]]:
     """Load and precompute all day/product research data once at startup.
 
     This function is the heart of the dashboard architecture. It scans the
@@ -850,6 +856,8 @@ def load_data(data_dir: str) -> Dict[str, Dict[str, object]]:
         history = loader.get_order_depths(df_prices)
         timestamps = sorted(history.keys())
         products = sorted(df_prices["product"].unique())
+        if products_filter:
+            products = [p for p in products if p in products_filter]
         trades = loader.load_trade_objects(trade_file)
 
         product_data: Dict[str, Dict[str, object]] = {}
@@ -887,7 +895,7 @@ _DATA_DIR: str | None = None
 DATA_STORE: Dict[str, Dict[str, object]] = {}
 CLI_ARGS = _parse_cli_args()
 RESEARCH_DATA_DIR, RESEARCH_DATA_LABEL = _resolve_research_data_dir(CLI_ARGS.data_dir, CLI_ARGS.round)
-DATA_STORE = load_data(RESEARCH_DATA_DIR)
+DATA_STORE = load_data(RESEARCH_DATA_DIR, products_filter=CLI_ARGS.products)
 
 app = dash.Dash(__name__, title=f"Prosperity Data Explorer - {RESEARCH_DATA_LABEL}")
 app.layout = html.Div(
@@ -1754,7 +1762,4 @@ def run_research_dashboard_server(data_dir: str | None = None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Prosperity research dashboard for raw round data exploration")
-    parser.add_argument("--data-dir", default=None, help="Path to data directory (default: data/)")
-    args = parser.parse_args()
-    run_research_dashboard_server(args.data_dir)
+    run_research_dashboard_server(RESEARCH_DATA_DIR)

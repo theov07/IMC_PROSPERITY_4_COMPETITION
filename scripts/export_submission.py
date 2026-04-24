@@ -121,6 +121,7 @@ CORE_MODULES = [
 # Optional per-strategy file deps (paths inlined BEFORE the strategy file).
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "option_mm_bs": [
+        "prosperity/options/time.py",
         "prosperity/options/black_scholes.py",
         "prosperity/options/implied_vol.py",
         "prosperity/options/smile.py",

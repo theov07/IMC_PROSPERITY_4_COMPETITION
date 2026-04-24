@@ -1056,7 +1056,14 @@ class BacktestEngine:
         all_observation_ticks: List[ObservationTick] = []
         all_conversion_ticks: List[ConversionTick] = []
         equity_curve: List[Tuple[int, float]] = []
-        trader_data = ""
+        try:
+            day_value: int | str = int(day)
+        except ValueError:
+            day_value = day
+        trader_data = json.dumps(
+            {"_backtest": {"round": self.round_num, "day": day_value}},
+            separators=(",", ":"),
+        )
         total_conversions_requested = 0
 
         timestamps = sorted(order_history.keys())

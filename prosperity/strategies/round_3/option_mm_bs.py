@@ -16,7 +16,9 @@ Design:
 Params:
   strike                : option strike price K (required)
   tte_days_initial      : TTE at the first tick of the session (required)
-  ticks_per_day         : how many ticks = 1 day for TTE decay (default 10000)
+  timestamp_units_per_day: raw timestamp units per day (default inferred from
+                           ticks_per_day * ts_increment)
+  historical_tte_by_day : optional backtest map, e.g. {0: 8, 1: 7, 2: 6}
   prior_vol             : initial sigma guess before enough data (default 0.02)
   maker_edge            : ticks to post around BS fair (default 2)
   maker_size            : target size per quote (default 20)
@@ -43,6 +45,11 @@ from prosperity.market import BookSnapshot
 from prosperity.options.black_scholes import call_price, call_delta
 from prosperity.options.implied_vol import call_implied_vol
 from prosperity.options.smile import fit_smile_poly, smile_predict
+from prosperity.options.time import (
+    resolve_initial_tte_days,
+    time_to_expiry_days,
+    timestamp_units_per_day_from_params,
+)
 from prosperity.strategies.base.base import BaseStrategy
 
 
@@ -61,8 +68,12 @@ class OptionMMBSStrategy(BaseStrategy):
             return [], 0
 
         K = float(self.params["strike"])
-        tte0 = float(self.params.get("tte_days_initial", 5.0))
-        ticks_per_day = float(self.params.get("ticks_per_day", 10000.0))
+        tte0 = resolve_initial_tte_days(
+            state.traderData,
+            float(self.params.get("tte_days_initial", 5.0)),
+            self.params.get("historical_tte_by_day"),
+        )
+        timestamp_units_per_day = timestamp_units_per_day_from_params(self.params)
         prior_vol = float(self.params.get("prior_vol", 0.02))
         maker_edge = int(self.params.get("maker_edge", 2))
         maker_size = int(self.params.get("maker_size", 20))
@@ -78,7 +89,7 @@ class OptionMMBSStrategy(BaseStrategy):
 
         # TTE decay: at ts=0 → tte0, linearly decreases at 1/ticks_per_day per tick
         ts = int(state.timestamp)
-        T = max(0.01, tte0 - ts / ticks_per_day)
+        T = time_to_expiry_days(ts, tte0, timestamp_units_per_day=timestamp_units_per_day)
 
         # Underlying spot — read from shared memory set by coordinator, or fall
         # back to listing_info lookup
@@ -140,6 +151,7 @@ class OptionMMBSStrategy(BaseStrategy):
             memory["_bs_fair"] = fair
             memory["_sigma_use"] = sigma_use
             memory["_tte_days"] = T
+            memory["_tte_initial_days"] = tte0
             memory["_spot"] = S
             memory["_skipped"] = 1
             return [], 0
@@ -152,6 +164,7 @@ class OptionMMBSStrategy(BaseStrategy):
         memory["_bs_fair"] = fair
         memory["_sigma_use"] = sigma_use
         memory["_tte_days"] = T
+        memory["_tte_initial_days"] = tte0
         memory["_spot"] = S
 
         # Quoting — two modes:
