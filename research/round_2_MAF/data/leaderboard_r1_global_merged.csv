@@ -1,0 +1,601 @@
+rank,team_name,country,pnl_finale
+1,yuh,AU,125850
+2,Negative Eevee,NL,123244
+3,Vibing,AU,121846
+4,Seven Deuce Capital,US,120286
+5,DU Trading,GB,120211
+6,DU Market Makers,GB,119541
+7,The Big Posteriors,US,119381
+8,DU Quant,GB,119315
+9,Une Baguette Fromage,NL,119313
+10,DU Trading Desk,GB,119291
+11,optieverhandelaaren,US,118587
+12,Flowstate,US,118196
+13,Prosperity Crushers,AU,117797
+14,broke like joc,AU,117733
+15,Hexatech,GB,117624
+16,prosperity 3 man,AU,117591
+17,DU Market Making,GB,117539
+18,glou,GB,117372
+19,ShrimpTrading,PL,117352
+20,72 Sigma,US,117289
+21,63-bit integers,AU,116927
+22,Exodia,CA,116856
+23,DannyNegru,IN,116684
+24,nema problema ovde,RS,116401
+25,porridge,US,116131
+26,Arcadia 2,IT,116000
+27,Open for Quant Jobs,CH,115865
+28,BASTION,AU,115423
+29,John Slope,US,115248
+30,gacrux,AU,115104
+31,final position 10 at 15,AU,115078
+32,Junk Trading,CN,114823
+33,Algoholicz,IN,114526
+34,BlackSouls,IN,114244
+35,fenn,US,114040
+36,CCC_v2,US,113840
+37,Jaded,US,113743
+38,CarbonBlack,IN,112985
+39,Infinity Stones,IN,112945
+40,HireMePLSSSSSSSSSSSSSSS,SG,112615
+41,cRashCrafters,DE,112393
+42,Gorlock,IN,112164
+43,Myname,IN,112141
+44,second_best,US,112043
+45,Space Monkeys,IN,111710
+46,Cosmic Latte,IN,111709
+47,Alien,DE,111540
+48,Euporia,US,111434
+49,Proton,AU,111411
+50,drunken noodles,US,111280
+51,abacus,US,111218
+52,TUMorrow Traders,DE,110945
+53,Beauty Hunters,CH,110849
+54,DCJ9,US,110677
+55,Poverty,IN,110675
+56,TatooineTraders,CH,110517
+57,Yin,HK,110468
+58,Meiji Restoration,AU,110381
+59,ICT Mogged,AU,110377
+60,WanderingTraders,AT,110180
+61,HATSK,US,110040
+62,BelmonteHunters,CH,109917
+63,Caustic Orbifold,PH,109904
+64,kumon,ID,109772
+65,CUATS 2,GB,109705
+66,1112233,TW,109531
+67,test1,GB,109403
+68,Solarflare,DE,109114
+69,Vega,ES,108696
+70,Uvic lions,CA,108404
+71,Waterloo Courtsiders,CA,108279
+72,Alphito,ES,108270
+73,unknownpophaha,AU,108205
+74,AgentLab,CN,108140
+75,Keble Kwants,GB,108090
+76,The Silence of Lambdas,IT,108025
+77,Relativistic Quants,FR,107674
+78,Twisted Minds,IN,107580
+79,Jane Avenue,US,107476
+80,Margin Call Mafia,IN,107431
+81,PMQuants,PT,107281
+82,Secret Sauce,US,107191
+83,dih,GB,106951
+84,QRG,US,106836
+85,RealCityScape,DK,106774
+86,BrainTeam,AU,106769
+87,bear,US,106529
+88,XIREC Collectors,CO,106460
+89,Centrale Alpha Fund,FR,106359
+90,Roots Ocean Prime,CN,106243
+91,OntarioStreet700,HK,106058
+92,Gautam,US,106039
+93,Dream Team,US,106013
+94,psrbot,AU,105939
+95,Alpha Search Team,GB,105897
+96,Rocky Mountain Goats,IN,105692
+97,Qu4nt D3stroy3rs,US,105611
+98,derMiro,HR,105590
+99,team team team,GB,105586
+100,The Arbitrage Goats,US,105551
+101,Tayaya Trading,BR,105484
+102,PowderDays,AT,105458
+103,Oracles of Delphi,US,105442
+104,Meiji,GB,105440
+105,Stop the Birds,AT,105347
+106,Zextros,IN,105340
+107,The Vega Games,AU,105305
+108,GUDG,SE,105137
+109,TTG,US,105111
+110,A manger,GB,105105
+111,JackOfHearts,AT,105083
+112,Penn NewCLEAR,US,105077
+113,The Mountain Goats,GB,105076
+114,Geezers of the Galaxy,IE,104966
+115,Berkeley x Stanford,US,104959
+116,Mamba In,US,104945
+117,Frankfurt_Hedgehawk,DE,104945
+118,no,AU,104821
+119,Kunts,IN,104765
+120,Hyenas,IN,104698
+121,Who is weady to wumble,AU,104695
+122,X Liquidity Providers,IT,104654
+123,Hermelijn,NL,104616
+124,Whim,IN,104533
+125,Pluto,DE,104448
+126,yurtles,US,104317
+127,les bassemitos,FR,104267
+128,Starkl7,US,104260
+129,The barn,FR,104250
+130,Silence of the Lambdas,IT,104244
+131,Peaky Minors,HK,104218
+132,Tundra-wawa,AU,104207
+133,ras,US,104186
+134,Any Golfers,US,104181
+135,kai,AU,104127
+136,thehailmary,IN,104120
+137,BUENO TRADERS,AE,104118
+137,GOLowVol,GB,104118
+138,USYD_No_1,AU,104095
+139,Jinya,FR,103992
+140,tudx,DE,103992
+141,AvocadoToast,AU,103959
+142,Kebab house,HK,103951
+143,Team Jimmy,US,103926
+144,MikeyTeam,CN,103903
+145,Parallax 01,US,103889
+146,ABC - Brown,PS,103880
+147,Little Apple Legends,US,103878
+148,pink fluffy dumplings,AU,103867
+148,bonk,AU,103867
+149,Pabs,DE,103825
+150,Lagrange Multiplier,GB,103823
+151,RT Gamma,GB,103804
+152,Degen Traders,SG,103799
+153,Im living my life,GB,103791
+154,bugless,US,103731
+155,Draguax,AU,103702
+156,Serenissima Syndicate,IT,103699
+157,crackedexplosion,AU,103691
+157,Market Manipulators,AU,103691
+158,Farming in Space,HK,103659
+159,Praxis Prodigies,CA,103656
+160,Too_Sigma,IN,103626
+161,ChipiChipi ChapaChapa,IN,103621
+162,Vegasteroids,FR,103617
+163,Starmie,US,103606
+164,ahhhhhhhhhhhhh,AU,103602
+165,roorkeepelago,IN,103591
+166,DECIDED,IN,103540
+167,chatswood rsl enjoyers,AU,103529
+168,Paris,FR,103508
+169,Red Devils,US,103466
+170,Dark Forest Hunter,US,103466
+171,Helicopter Holding,NL,103446
+172,Alpha Adventurers,GB,103443
+173,Market Predators,SG,103414
+174,J4offsuit,AT,103368
+175,Patrick David,NZ,103343
+176,Joomo,KR,103327
+177,SNUCLS,KR,103317
+178,Zolu,US,103291
+179,Yale Penguin,US,103275
+180,Crusoim,US,103264
+181,Yellow Alpha,ES,103255
+182,Cyg X-1,CH,103241
+183,Almaty Lake Capital,HK,103169
+184,Bottled Air,AU,103134
+184,totally normal teamname,AU,103134
+184,TouchingGrass,AU,103134
+184,HappyFishies,AU,103134
+184,HappyFishies2,AU,103134
+184,HappyFishies3,AU,103134
+185,Satisfactory,IN,103115
+186,Gurren Lagann,NL,103111
+187,the_alphamakers,CN,103080
+188,Crispy Carp Capital,VN,103050
+189,Blindsight,GB,103027
+190,Outsiderss,GB,103008
+191,SatoruGojo,CA,103003
+192,Yumpy,US,102959
+193,OuterTrojan,GB,102927
+194,Escape Velocity,IN,102926
+195,Sophisticated Sigmas,US,102907
+196,Arthur y el resto,CL,102896
+197,IceCreamnPie,AU,102885
+198,GoBears,US,102866
+199,Athena123,AU,102842
+200,Interplanetary Invasion,AU,102799
+201,Prosperous Team,IN,102788
+202,AlphaStockGrookers,CH,102775
+203,PLVS VLTRA,ES,102763
+204,Zaremar,SE,102752
+205,SufferingFromProsperity,IN,102724
+206,Kerbonauts,CH,102722
+207,404 Team Not Found,IN,102705
+208,Jared,US,102699
+209,Birans disciples,SK,102655
+210,State Space Time,US,102601
+211,Vienndiagram,AT,102586
+212,TheDunningKrugerEffect,GB,102585
+213,Plain N Spicy,NL,102577
+214,StimulatedPlatypuses,US,102573
+215,trader6767,IN,102556
+216,MFAMSMC River Trading 2,US,102539
+217,DU Team128319283,GB,102496
+218,Curly Hair Gang,GB,102473
+219,Dynamic survival,AU,102441
+219,TimTamStudySlam,AU,102441
+219,_idk,AU,102441
+219,My_Planet1,AU,102441
+219,My_Planet2,CN,102441
+219,My_Planet3,HK,102441
+219,Neptunium9301,AU,102441
+219,Panda Two,AU,102441
+219,Athena12345,AU,102441
+219,LYC,AU,102441
+219,Np93,AU,102441
+220,W_W,AT,102429
+221,Siuuuuu,IN,102396
+222,I love Claude,US,102390
+223,low cortisol traders,GB,102350
+224,Unhedged but Optimistic,NL,102348
+225,Paddi,DE,102346
+226,SydneyTrainsIsGoodTrust,AU,102307
+227,Seattle Spread Hawks,AU,102290
+228,Licata Arbitrage,FR,102253
+229,Eulers_Tour,IN,102249
+230,all_in_on_black_n_gold,US,102231
+231,BigMoneyStonks,AT,102231
+232,073,NL,102205
+233,The Duck Trader,US,102197
+234,DataBreakers,FR,102196
+235,ColumbiaU Traders,US,102179
+236,Baptlarafale,FR,102154
+237,garchlovers,GB,102143
+238,Naser Alsayegh,BH,102138
+239,polite_monkey,IN,102130
+240,Buy_low_sell_high,IN,102123
+241,HKUSTSomethingSomething,HK,102101
+242,ITERATIVE BYTES,IN,102098
+243,IndependentQuant,NL,102097
+244,Solo Yolo Bolo Trolo,DE,102097
+245,Sheep of Wall Street,US,102086
+246,pecel lele,AU,102077
+247,DeepSpaceDelta,DE,102067
+248,Sigmoid,AU,102060
+249,John Prosperity,US,102053
+250,Vayam Sarve Vijayinah,GB,102038
+251,Unexpected Value,GB,102037
+252,psk,US,102031
+253,Boiler_Quant,US,101988
+254,Robert Defares,CN,101962
+255,Athena1234,AU,101925
+256,Arbland,NL,101914
+257,russianjew,GB,101912
+258,Vanguard,US,101900
+259,Mach7,US,101819
+260,PlutusAd,US,101801
+261,GremlinInc,IN,101784
+262,IOI,US,101773
+263,animalfarm,US,101747
+264,Adwait,US,101744
+265,SBF,GB,101740
+266,PuliyadiBetko,IN,101739
+267,Goaterhouse,GB,101728
+268,TinkleTown,AU,101721
+269,Gradient Descent,US,101717
+270,FAHHH,IN,101714
+271,Newbie_,IN,101709
+272,My_Planet5,US,101705
+273,Bermuda Traders,IN,101702
+274,WeAreTheAlphas,HK,101701
+275,DARTY,US,101678
+276,Bridge789,RO,101669
+277,ObjectNotFound,US,101663
+278,ARC,US,101657
+279,Bermuda Traders ReForge,IN,101646
+280,Darth Trader,CH,101643
+281,Alistair,GB,101624
+282,Chambers St Research,US,101621
+283,BlackSwans,AU,101620
+284,UW quants,PL,101606
+285,FMI_brat,BG,101597
+286,AXin,CN,101585
+287,Neil Trading,US,101580
+288,Fergus,CA,101570
+289,ELMAMUTDEU,BD,101557
+290,Pretentious,IN,101524
+291,foodio,US,101522
+292,Three Sigma Skibidi,KZ,101521
+293,Jjjjj,AF,101520
+293,tt3,IE,101520
+294,boysplayedwell,IN,101499
+295,PepperPaprika,AU,101482
+296,The Combine,US,101481
+297,MSCF,US,101474
+297,mscf-team-w,US,101474
+298,Tomato Cartel,ES,101449
+299,placeholder name,GB,101445
+300,delta_one,IN,101436
+301,hanan,KR,101385
+302,Lizard,TW,101349
+303,Drawdown traders,IN,101341
+304,Intara-Day Trading,AU,101340
+305,Antigravity,IN,101339
+306,EFN,AU,101315
+307,Suetta Technologies,ES,101311
+308,Backstube,DE,101300
+309,Grossman Zhou,US,101284
+310,Emergence,AE,101272
+311,Orbital Edge,AU,101216
+312,Lazy_coders,IN,101216
+313,Prop,GB,101205
+314,collegetowncapital,US,101200
+315,Doublecarr,US,101179
+316,Trenkovo Trading,HR,101161
+317,TheLast1Q,IN,101153
+318,hissss,IN,101089
+319,Evil Corp,NL,101088
+320,sauce du chef,FR,101084
+321,the-flash-boys,GB,101082
+322,St Gallen River Trading,CH,101081
+323,Real_Loafers,IN,101053
+324,Live Long and Prosper,US,101006
+325,GSTD,FR,100994
+326,TORRE,ES,100990
+327,NoFrequency,CA,100981
+328,all in high card,AU,100973
+329,Berk8,US,100951
+330,Running Out of Theta,GB,100949
+331,Martingale,IN,100947
+332,BitBites,CH,100943
+333,SydneyTrainsIsBadTrust,AU,100922
+334,MercurysLittleBrother,CH,100913
+335,BaggerLab,KR,100903
+336,Hakuna Matata,IN,100901
+337,SuperVerse,GB,100897
+338,Precision Traders,IN,100897
+339,AAAAaaAAAA,US,100896
+340,High Friction Toes,PL,100894
+341,ExitLiquidity,NL,100886
+342,Prosperity0,AU,100885
+343,Boba man,US,100873
+344,Yuzzination,US,100868
+345,Common Investments,GB,100848
+346,4sigma,DE,100840
+347,Wo_de_dao_dun,US,100839
+348,OnlyMe,US,100820
+349,LLBEAN,US,100790
+350,OG-Traders,DE,100788
+351,Ascend Alpha,IN,100786
+352,GeniusY,CN,100782
+353,InQuantsWeTrust,US,100774
+354,Camelot_007,GB,100762
+355,Wave,US,100761
+356,beachedas,AU,100758
+357,prosperity hope,IN,100749
+358,My_Planet4,GB,100732
+359,Arywqn,US,100726
+360,Jobless101,IN,100724
+361,Margin of Terror,US,100720
+362,Inverse CDF,US,100716
+363,SPL,US,100713
+364,Cox-Zucker machine,NL,100707
+365,teamuw,CA,100706
+366,Patu Securities,IT,100703
+367,Lollipop Trading,ES,100699
+368,Dumbledore Army,IN,100695
+369,SlimeBallerz,CA,100689
+370,RHS,GB,100688
+371,Quant Ninja,US,100686
+372,caringbah quant traders,AU,100664
+373,Good study - Day up,DE,100641
+374,Lions,US,100639
+375,Capybara LLC,SG,100633
+376,ringsofsaturn,US,100633
+377,CU soon,KR,100627
+378,Pommesdeterre,US,100625
+379,issues xor skill,GB,100623
+380,Fattails,US,100622
+381,Orange Juice Enjoyers,US,100619
+382,No Money No Problems,IN,100616
+383,MarginCallers,AU,100610
+384,piggassyinshamrock,US,100606
+385,qUanTeDs,US,100598
+386,IndefinitePossibilities,HK,100591
+387,SeashellsInSpace,AU,100588
+388,AkshatLightning,CA,100587
+389,Unhinged Owl,IN,100585
+390,Local MT Permutation,IN,100584
+391,Cucumber,GB,100583
+392,pa,US,100581
+393,NYU Alpha Wolvez,US,100578
+394,Pondu Warriors,IN,100576
+395,kaching,CA,100572
+396,Spaceonometrics,NL,100569
+397,THE CHINDIAN,GB,100556
+398,HighNumbers,IN,100550
+399,daemons,IN,100542
+400,Bluechip Billikens,US,100535
+401,Y-FoRM,KR,100524
+402,nahhh,GB,100523
+403,Piggypiginablanket,US,100521
+404,SALAMANCAS,IN,100518
+405,MaxingTheCharacterLimit,CH,100513
+406,Five Guys,US,100500
+407,Trad3,GB,100495
+408,machau facche,IN,100493
+409,Homiefans,US,100490
+410,Kleptocrat,NL,100483
+411,rice munchers,US,100482
+412,Supermartingales,FI,100482
+413,aimpartnersuiuc,US,100480
+414,GMI,US,100464
+415,Solo Star,IN,100444
+416,im not,NZ,100441
+417,Greek Gods,IN,100437
+418,8 Brazillian Bytes,US,100424
+419,We need to pick one tho,GB,100417
+420,Gargantua,IN,100412
+421,Pine Street,US,100412
+422,tax fraud,IN,100370
+423,john_z11,US,100365
+424,Lakergang FC,US,100356
+425,BangarangaQuants,NL,100354
+425,BogleSupremacist,US,100354
+426,PrOZperity,AU,100349
+427,Under Construction,IN,100348
+428,Let Me Solo IMC,IN,100348
+429,--,GB,100332
+430,Cedi Arbitrage,US,100309
+431,Last Dance,US,100274
+432,Nash Equilibrium,IN,100273
+433,Michigan Edge,US,100258
+434,NMSL,NL,100246
+435,Bojja-B,US,100240
+436,GettingSwoleAtDaCrib,US,100239
+437,AlphaFunders,GB,100238
+438,Hugo Hanson,GB,100234
+439,inception,US,100222
+440,monkeys,US,100210
+441,hope45,IN,100200
+442,ALDC,AU,100198
+443,eastern european quants,RU,100188
+444,Qubital Trading,GB,100185
+445,Cosmic minds,US,100181
+446,CMU MSCF Team 1,US,100181
+447,Sellestial Bodies,IN,100172
+448,Black Bucks,IN,100164
+449,PYRATES,ES,100163
+450,the bum squad,AU,100161
+451,prosperous,IN,100159
+452,wowzers,AU,100141
+453,BigRedRegression,US,100139
+454,Arbitragers,IN,100136
+455,CrimsonHz,IN,100134
+456,Skill_issue,IN,100130
+457,Farrers,ES,100115
+458,bacca burrito,US,100105
+459,Jacks HIGH,IN,100101
+460,Kmalek,IR,100100
+461,Arcadia,IT,100098
+462,Luna,AU,100095
+463,Teamx_7,IN,100089
+464,VHP Capital,DE,100088
+465,Claremont Quant Fund,US,100086
+466,Goose Capital,US,100074
+467,Arsenal,GB,100063
+468,godspeed17776,IN,100053
+469,Quan t Hold Us,IT,100042
+470,cade and em,US,100033
+471,larp larp sahuuur,US,100027
+472,rare,US,100021
+473,The Casuals,GB,100020
+474,Archipelago Ventures,ID,100017
+475,QQQ,HK,100015
+476,Prosperous Ppls,IN,100010
+476,Larptronauts,US,100010
+477,tapisar,US,100006
+478,Double-MasterTraders,IN,100002
+479,Pocket Queens,US,100001
+480,t for trading,IN,99999
+481,volmaxxing,US,99998
+482,three ngmis,US,99996
+483,ALPHA3,CA,99996
+484,Perihelion,NL,99995
+485,0dte-theta-decay,US,99974
+486,Pilani Research Capital,IN,99953
+487,BLSY,AU,99951
+488,QuantBro,ES,99939
+489,Prime Signals,GB,99936
+490,Experienced traders,US,99935
+491,Shai hulud,US,99935
+492,Gambling Addicts,IN,99930
+493,leeoseerraW,ES,99922
+493,GPB_Provisional,ES,99922
+494,Solo Bolo,US,99921
+495,Cali Cat,US,99919
+496,Cornball Capital,SO,99912
+497,sojao bachhon,IN,99901
+498,Hapjeshoek,NL,99896
+499,Alpha Singularity,GB,99894
+500,yc_thirteen,US,99876
+501,iluvcookie,AU,99874
+502,Vamos a la playa,NL,99871
+502,Cosmic Corey Cult,NL,99871
+502,camel_case - ineligible,NL,99871
+502,Galaxy traders,NL,99871
+503,Beta Have Fun,IN,99867
+504,sm1le,IN,99851
+505,2000ge3000,CN,99848
+506,Cool Cucumbers,AU,99846
+507,Team Plankton,US,99842
+508,Zero EV,GB,99829
+509,Westbrick,US,99806
+510,XCP,DE,99806
+511,Curatorium of Secrets,IN,99803
+512,Mystery Shack LLC,US,99800
+513,galactic_random_walk,US,99788
+514,Sopex,IN,99775
+515,CHOAM,CN,99763
+516,MP123,CN,99762
+517,Markov Gold Chains,DE,99751
+518,Curd Rice,IN,99751
+519,Peter Hall Warriors,AU,99735
+520,ExBks,CH,99735
+521,Illyrian budalla,DE,99708
+522,lesBass,FR,99705
+523,Panini Maker,FR,99704
+524,EgglesCake,IN,99699
+525,Alpha__,IN,99697
+526,VASS,US,99697
+527,Australis,AU,99696
+528,Alexass,IN,99695
+529,Prosperity4,US,99690
+530,Planck Horizon,NL,99689
+531,Taiwan Number 1,US,99681
+532,VolaLens,DE,99680
+533,jaytau,IN,99673
+534,Market_makers,US,99673
+535,Cybernetic,NL,99671
+536,RQR,AU,99653
+537,Xogenous,FR,99650
+538,Chewbacca,GB,99639
+539,ProsperyTea,CH,99636
+540,Pompom,NL,99628
+541,Martingale Magic,US,99620
+542,ONE CARD FACE DOWN PLZ,US,99618
+543,SSCZ alpha,US,99617
+544,Motor City Money,US,99604
+545,ErfaErfa,US,99602
+546,Navet,US,99598
+547,Harry,GB,99598
+548,mop,GB,99581
+549,Discovery 91,IT,99572
+550,Asymmetry Engine,DE,99565
+551,OrbiTrade,US,99565
+552,buy_higher_sell_high,IN,99548
+553,I am Maximus,FR,99546
+554,ORA,GB,99545
+555,Four West,GB,99540
+556,Apex1,US,99537
+557,osf_dores,US,99537
+558,CosmicBull,IN,99534
+559,UC Davis Ice Hockey,US,99530
+560,Margin Call Alpha,AU,99530
+561,Gangnam Style,US,99529
+562,Hestons Hitmen,IN,99520
+563,Claudius,US,99519
+564,Apex Traders,IN,99517
+565,Pina Koala,HK,99513
+566,Golden Model,CH,99507
+567,Market Miners,US,99503
+568,teamNameNotFound,IN,99492
+569,Utopia,FR,99489
+570,G00n Securities,US,99486
+571,Geekhaven,IN,99481
+572,Deep Dutch,NL,99473
+573,Cosmic Arbitragers,NL,99466
+573,Chrome,US,99466

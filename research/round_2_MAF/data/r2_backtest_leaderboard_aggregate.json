@@ -1,0 +1,33 @@
+{
+  "source": "IMC Round 2 Backtest Leaderboard (open-source aggregator, participant-uploaded)",
+  "scope": "Round 2 backtest submissions, de-duplicated by trader.py hash",
+  "unit": "simu-test XIRECs (per-run PnL, NOT finale)",
+  "n_entries_total": 3065,
+  "n_verified_submissions": 3065,
+  "pct_profitable": 96.0,
+  "median_pnl": 8546,
+  "mean_pnl": 6991,
+  "top_10_cutoff_pnl": 11183,
+  "p25_pnl": 7285,
+  "p75_pnl": 9023,
+  "pnl_std_dev": 4803,
+  "median_max_drawdown": 507,
+  "middle_50_spread": 1738,
+  "outliers_high": 3,
+  "outliers_high_max": 11900,
+  "outliers_low": 552,
+  "outliers_low_worst": -90100,
+  "field_floor": 4700,
+  "field_ceiling": 11600,
+  "our_team": {
+    "best_pnl": 10300,
+    "rank": 34,
+    "percentile": 98.9
+  },
+  "notes": [
+    "This is the best available proxy for the MAF denominator: 3,065 de-duplicated trader.py submissions",
+    "PnL in simu-TEST units. Multiply by ~8.9 for simu-FINALE equivalence.",
+    "96% profitable → most teams at least match buy-and-hold / simple MM",
+    "552 'low outliers' below view likely include non-functional or actively bad strategies"
+  ]
+}

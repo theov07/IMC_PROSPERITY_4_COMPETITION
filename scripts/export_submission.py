@@ -36,7 +36,7 @@ from prosperity.config import MEMBER_OVERRIDES, get_round_config
 # Keep this in sync with prosperity/strategies/__init__.py.
 STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "market_maker":       ("prosperity/strategies/market_maker.py",       "MarketMakerStrategy"),
-    "naive_tight_mm":     ("prosperity/strategies/naive_tight_mm.py",     "NaiveTightMarketMakerStrategy"),
+    "naive_tight_mm":     ("prosperity/strategies/round_1/naive_tight_mm.py",     "NaiveTightMarketMakerStrategy"),
     "naive_tight_mm_v2":  ("prosperity/strategies/naive_tight_mm_v2.py",  "NaiveTightMarketMakerV2Strategy"),
     "naive_tight_mm_v3":  ("prosperity/strategies/naive_tight_mm_v3.py",  "NaiveTightMarketMakerV3Strategy"),
     "naive_tight_mm_v4":  ("prosperity/strategies/naive_tight_mm_v4.py",  "NaiveTightMarketMakerV4Strategy"),
@@ -88,6 +88,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "mm_first_v2":        ("prosperity/strategies/metal_winner/mm_first_v2.py",        "MMFirstStrategy"),
     "mm_first_v3":        ("prosperity/strategies/round_2/tibo/mm_first_v3.py",        "MMFirstStrategy"),
     "mm_first_v4_combo":  ("prosperity/strategies/round_2/leo/mm_first_v4_combo.py",   "MMFirstV4ComboStrategy"),
+    "theo_best_clean_generalized":    ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedStrategy"),
+    "theo_best_clean_generalized_v2": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV2Strategy"),
+    "theo_best_clean_generalized_v3": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV3Strategy"),
+    "theo_best_clean_generalized_v4": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV4Strategy"),
     "mean_reversion":     ("prosperity/strategies/round_1/mean_reversion.py",          "MeanReversionStrategy"),
     "zscore":             ("prosperity/strategies/metal_winner/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/base/buy_and_hold.py",       "BuyAndHoldStrategy"),
@@ -103,6 +107,9 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "pepper_modulaire":   ("prosperity/strategies/round_2/leo/pepper_modulaire.py", "PepperModulaireStrategy"),
     "ask_exploit_modulaire": ("prosperity/strategies/round_2/theo/ask_exploit_modulaire.py", "AskExploitModulaireStrategy"),
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
+    # ── Round 3 ──
+    "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+    "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -111,6 +118,22 @@ CORE_MODULES = [
     "prosperity/persistence.py",
     "prosperity/strategies/base/base.py",
 ]
+
+# Optional per-strategy file deps (paths inlined BEFORE the strategy file).
+STRATEGY_FILE_DEPS: dict[str, list[str]] = {
+    "option_mm_bs": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+    "theo_r3_vol_arb_v1": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+}
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).
 STRATEGY_DEPS: dict[str, list[str]] = {
@@ -128,6 +151,11 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_generalized": ["round1_regression_mm_v5"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
+}
+
+# Params useful for local analysis/backtests but pointless in the live upload.
+EXPORT_PARAM_DROP = {
+    "historical_tte_by_day",
 }
 
 
@@ -205,15 +233,20 @@ _TRADER_CLASS = dedent("""\
         def run(self, state: TradingState):
             saved = load_state(state.traderData)
             product_memories = saved.setdefault("products", {})
+            shared = {"timestamp": state.timestamp}
             result = {}
             total_conversions = 0
             for product, strategy in self.strategies.items():
                 if product not in state.order_depths:
                     continue
                 memory = product_memories.setdefault(product, {})
+                memory["_shared"] = shared
                 orders, conversions = strategy.on_tick(state, memory)
                 result[product] = orders
                 total_conversions += conversions
+            for memory in product_memories.values():
+                if isinstance(memory, dict):
+                    memory.pop("_shared", None)
             saved["last_timestamp"] = state.timestamp
             return result, total_conversions, dump_state(saved)
 """)
@@ -399,8 +432,13 @@ def main() -> int:
         print(f"ERROR: STRATEGY_DEPS references unknown: {sorted(unknown_dep)}", file=sys.stderr)
         return 1
 
-    # Ordered list: core first, then one file per needed strategy (deps before dependents).
-    module_files = list(CORE_MODULES) + [STRATEGY_REGISTRY[n][0] for n in resolved]
+    # Ordered list: core first, then per-strategy file deps, then the strategy file itself.
+    module_files = list(CORE_MODULES)
+    for n in resolved:
+        for file_dep in STRATEGY_FILE_DEPS.get(n, []):
+            if file_dep not in module_files:
+                module_files.append(file_dep)
+        module_files.append(STRATEGY_REGISTRY[n][0])
 
     # Inline each module, collecting external imports along the way.
     all_ext_imports: list[str] = []
@@ -426,7 +464,10 @@ def main() -> int:
     # Embed config as a plain dict.
     products: dict = {}
     for symbol, pc in config.items():
-        products[symbol] = {"strategy": pc.strategy, "position_limit": pc.position_limit, **pc.params}
+        params = {k: v for k, v in pc.params.items() if k not in EXPORT_PARAM_DROP}
+        if "timestamp_units_per_day" in params:
+            params.pop("ticks_per_day", None)
+        products[symbol] = {"strategy": pc.strategy, "position_limit": pc.position_limit, **params}
 
     # Strategy class dispatch (only needed strategies).
     strat_entries = ", ".join(

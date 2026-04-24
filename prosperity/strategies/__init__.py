@@ -86,6 +86,13 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "ask_exploit_modulaire": ("prosperity.strategies.round_2.theo.ask_exploit_modulaire", "AskExploitModulaireStrategy"),
     "aco_mm_modulaire": ("prosperity.strategies.round_2.leo.aco_mm_modulaire", "AcoMMModulaireStrategy"),
     "mm_first_v4_combo": ("prosperity.strategies.round_2.leo.mm_first_v4_combo", "MMFirstV4ComboStrategy"),
+    "theo_best_clean_generalized":    ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedStrategy"),
+    "theo_best_clean_generalized_v2": ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedV2Strategy"),
+    "theo_best_clean_generalized_v3": ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedV3Strategy"),
+    "theo_best_clean_generalized_v4": ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedV4Strategy"),
+    # ── Round 3 ──
+    "option_mm_bs": ("prosperity.strategies.round_3.option_mm_bs", "OptionMMBSStrategy"),
+    "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
 }
 
 

@@ -2,6 +2,31 @@
 
 Priority list for turning this repository from a solid framework into a competition-winning platform.
 
+## Round 3 (current) — Options trading on Velvetfruit
+
+Products: HYDROGEL_PACK (delta-1, limit 200), VELVETFRUIT_EXTRACT (delta-1 underlying, limit 200),
+VEV_4000..VEV_6500 (10 European call vouchers, limit 300 each, TTE=5d at round start).
+
+### Done
+- ~~Create `prosperity/options/` module: black_scholes, implied_vol, smile fitting (quadratic polynomial)~~
+- ~~Create naive `option_mm_bs` strategy (penny-improve around market with BS fair as reference)~~
+- ~~Configure ROUND_3 + `r3_naive_champion` member with v4_F5 for HYDROGEL/VELVETFRUIT + BS-MM for vouchers~~
+- ~~Register in strategies registry + export_submission registry + STRATEGY_FILE_DEPS for options module inlining~~
+- ~~Backtest baseline: **+123,526 PnL over 3 days** (day 0: +35,842)~~
+
+### Next
+- Build smile-aware option MM that actually quotes tighter than `best ± 1` based on BS fair
+- Delta-hedge via VELVETFRUIT_EXTRACT (buy options → sell S to stay delta-neutral, capture convexity)
+- Vol-arbitrage: realized daily vol ≈ 2.15% but implied ≈ 1.25% — consider LONG vol overlay
+- Deep OTM (K=6000, 6500) need special handling: currently skipped via `min_quote_price=2.0`
+- Ornamental Bio-Pods manual challenge: 2 bids uniform [670..920] step 5, resell at 920 — reuse Round 2 MAF analysis
+- Add `prosperity/options/coordinator.py` for shared smile fit (avoid 10x duplicate work per tick)
+
+### Framework improvements
+- `prosperity/options/hedging.py`: compute hedge ratios for a basket of options
+- Add `VolSurface` caching that shares across options within a tick
+- Parameterize `option_mm_bs` for per-strike overrides (deep OTM vs ATM vs deep ITM)
+
 ## Critical
 
 - ~~Make the submission exporter derive from a stricter canonical source to reduce drift between modular code and exported code.~~ (done: exporter now inlines actual strategy source files)
