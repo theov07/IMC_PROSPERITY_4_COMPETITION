@@ -1,5 +1,71 @@
 # Agent Handoff — Leo2 branch
 
+## 2026-04-25 17:30 — Claude: 5 strategies ready + anchor TUNED + VELVET+options alpha
+
+Léo confirme: 4 HYDRO strats prêtes, on passe aux options. Hypothèse: live IMC alpha = options.
+
+### Anchor grid TUNING done (12 configs over drift_bound × ar_gain)
+
+Best params: **anchor_drift_bound=1.5, ar_gain=0.2** (vs default 2.0/0.3)
+
+| Strategy | Old (3d) | TUNED (3d) | Δ |
+|---|---|---|---|
+| r3_hydro_anchor_max3d | +84,005 | **+86,838** | +2,833 |
+| r3_hydro_anchor_oracle_hybrid | +104,477 | **+106,800** | +2,323 |
+
+Locked in `_R3_HYDROGEL_PARAMS` so all anchor strategies inherit.
+
+### NEW: r3_velvet_options_alpha (VELVET + options only, no HYDRO)
+
+Built focused alpha strategy on options. Backtest day 2 per-product analysis:
+
+| Product | PnL | end_pos | mark@1 | adverse |
+|---|---|---|---|---|
+| VELVETFRUIT | -141 | -65 | +0.97 | 22% |
+| **VEV_4000** | **+2,437** | +8 | **+9.26** | **0%** ← gold mine |
+| VEV_5200 | +918 | +26 | +0.25 | 27% |
+| VEV_5300 | +1,928 | +150 | -0.23 | 40% ← adverse, lucky direction |
+| VEV_5400 | +453 | +77 | -0.06 | 13% ← adverse |
+| VEV_5500 | +23 | +30 | -0.22 | 43% ← adverse |
+
+VEV_4000 has +9.26 ticks markout per fill with 0% adverse — REAL edge.
+VEV_5300+ are adverse-selected; gains are inventory drift (lucky direction).
+
+Final config: VELVET (cap 40) + VEV_4000 (boosted size 40) + VEV_4500-5200 standard.
+VEV_5300-6500 disabled.
+
+3-day backtest: **+13,380** (D0 +6,635 / D1 +2,060 / D2 +4,684).
+LW 3-day sum: +1,738. Predicts ~+800 LIVE day-2-like session.
+
+vs Theo's actual live (day 2): VELVET +677 + VEV +275 = +952. Our backtest predicts
+~+800-900 live, comparable.
+
+### Initial taker experiment FAILED — keeping passive
+
+Tried `enable_takers=True` with `take_edge=2.0`: lost **-$662k** in backtest.
+The BS fair vs market mispricing fires takers in the wrong direction (sigma
+calibration not robust enough). Reverted to passive only.
+
+### Final 5 strategies on the bench
+
+| # | Strategy | Full 3d | LW 3d | Profile |
+|---|---|---|---|---|
+| 1 | r3_hydro_anchor_max3d (TUNED) | +86,838 | -15k | HYDRO max simple |
+| 2 | r3_hydro_day2_oracle_regime | +73,243 | +41k | HYDRO oracle D2 + guarded |
+| 3 | r3_hydro_anchor_oracle_hybrid (TUNED) | +106,800 | +28k | HYDRO max + oracle D2 |
+| 4 | r3_hydrogel_smart (research) | +28,856 | +3k | HYDRO live-robust |
+| 5 | **r3_velvet_options_alpha** | **+13,380** | **+1.7k** | **VELVET+options only** |
+
+### Combination ideas (future)
+
+- HYDRO best (#3 hybrid +106k) + VELVET+options (#5 +13k) = ~+120k 3-day combined
+- Need to merge configs: HYDRO from #3 + VELVET from #5 + options from #5
+- Total submission size estimate: ~250 KB (close to limit)
+
+User's plan: lock HYDRO via one of #1-4, then validate options strategy live.
+
+---
+
 ## 2026-04-25 16:10 — Claude: 4-strategy lockdown + LIVE-WINDOW reality check
 
 Léo asked for 4 final HYDRO strategies before moving to VELVET/options.

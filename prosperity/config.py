@@ -1993,6 +1993,8 @@ MEMBER_OVERRIDES["v4_G_all"] = {
 _R3_HYDROGEL_PARAMS = {
     **_V4_F5_PARAMS,
     "anchor_price": 10000.0,
+    "anchor_drift_bound": 1.5,    # GRID-TUNED 2026-04-25: +2,833 vs default 2.0
+    "ar_gain": 0.2,                # GRID-TUNED 2026-04-25: +2,833 vs default 0.3
     "full_capacity_on_empty": True,
 }
 _R3_HYDROGEL_V4_F5 = _override(
@@ -3754,6 +3756,75 @@ MEMBER_OVERRIDES["r3_hydro_anchor_oracle_hybrid"] = {
             selector_mode="hybrid_anchor_oracle",
         ),
         **_R3_HYDRO_DISABLE_REST,
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 VELVET + OPTIONS ONLY — alpha bet on options (HYDRO disabled)
+# Léo's hypothesis: live IMC alpha is on options, not HYDRO.
+# Strategy:
+#   - HYDROGEL_PACK: disabled (None — no HYDRO trading)
+#   - VELVETFRUIT_EXTRACT: small naive_tight_mm (passive ladder, capped pos)
+#   - VEV options: option_mm_bs with smile + takers (more aggressive than theo)
+# Theo baseline (day 2 live): VELVET +677, VEV +275 = +952 total
+# Goal: capture more option mispricing via smile + tighter takers
+# ──────────────────────────────────────────────────────────────────────────────
+_R3_VELVET_OPT_OPTION_PARAMS = dict(
+    strategy="option_mm_bs",
+    enable_takers=False,                 # OFF — enabling takers led to -$662k loss
+    inv_bias_per_unit=0.02,
+    iv_ewma_alpha=0.3,
+    log_flush_ts=1000,
+    maker_edge=2,
+    maker_size=24,
+    min_quote_price=2.0,
+    penny_improve_around_mkt=True,
+    prior_vol=0.0125,
+    sigma_cap=0.1,
+    sigma_floor=0.005,
+    take_edge=3.0,
+    take_size=40,
+    timestamp_units_per_day=1000000,
+    ts_increment=100,
+    last_ts_value=999900,
+    tte_days_initial=5.0,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    use_smile=True,
+)
+
+MEMBER_OVERRIDES["r3_velvet_options_alpha"] = {
+    3: {
+        "HYDROGEL_PACK": None,           # NO HYDRO — focus on options alpha
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,           # CAP tight (was 80) — markout small, no adverse blow-up
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        # VEV_4000: deep ITM gold mine — markout +9.26/fill, 0% adverse, BOOST size
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},  # 1.7x size
+        ),
+        # VEV_4500, 5000, 5100, 5200: standard size (some fill, some don't, low risk)
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **_R3_VELVET_OPT_OPTION_PARAMS,
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        # VEV_5300+: DISABLE — adverse selected (40-43% adverse, negative markout)
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
     },
 }
 
