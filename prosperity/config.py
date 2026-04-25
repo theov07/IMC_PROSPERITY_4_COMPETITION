@@ -2092,6 +2092,219 @@ MEMBER_OVERRIDES["naive_base_round_3"] = {
 }
 
 
+_R3_VELVET_IVSCALP_UNDERLYING = _override(
+    ROUND_3["VELVETFRUIT_EXTRACT"],
+    strategy="mm_first_v4_combo",
+    position_limit=200,
+    anchor_price=5250.0,
+    anchor_alpha=0.02,
+    anchor_drift_bound=2.0,
+    ar_gain=0.3,
+    ar_shift_source="mid_smooth",
+    full_capacity_on_empty=True,
+    inventory_aversion_gamma=0.0015,
+    maker_size=30,
+    pct_kept_for_takers=0.05,
+    take_edge_lo=0.3,
+    take_edge_hi=0.8,
+    unwind_take_edge=3.0,
+    tighten_ticks=1,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+
+def _r3_v24_gamma_option(strike: int) -> ProductConfig:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        strategy="r3_gamma_scalp_zgated",
+        position_limit=300,
+        strike=strike,
+        tte_days_initial=5.0,
+        historical_tte_by_day=None,
+        timestamp_units_per_day=1000000,
+        implied_vol_prior=0.0125,
+        prior_vol=0.0125,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        min_quote_price=2.0,
+        edge_ticks=0.0,
+        target_qty=300,
+        entry_size=30,
+        passive_bid_size=24,
+        unwind_tte_threshold=1.5,
+        zscore_window=500,
+        zscore_skip_threshold=0.5,
+        zscore_boost_threshold=1.0,
+        skip_when_expensive=True,
+        boost_when_cheap=False,
+        entry_size_boost=1.5,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+def _r3_v24_gamma_option_zskip(strike: int, zscore_skip_threshold: float) -> ProductConfig:
+    return _override(
+        _r3_v24_gamma_option(strike),
+        zscore_skip_threshold=zscore_skip_threshold,
+    )
+
+
+def _r3_v24_passive_option(strike: int, *, maker_size: int, maker_edge: int, min_quote_price: float, use_smile: bool) -> ProductConfig:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        strategy="option_mm_bs",
+        position_limit=300,
+        strike=strike,
+        tte_days_initial=5.0,
+        historical_tte_by_day=None,
+        timestamp_units_per_day=1000000,
+        prior_vol=0.0125,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        maker_edge=maker_edge,
+        maker_size=maker_size,
+        take_edge=3.0,
+        take_size=40,
+        enable_takers=False,
+        penny_improve_around_mkt=True,
+        min_quote_price=min_quote_price,
+        inv_bias_per_unit=0.02,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        use_smile=use_smile,
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+def _r3_smile_iv_scalper_option(strike: int) -> ProductConfig:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        strategy="r3_smile_iv_scalper",
+        position_limit=300,
+        strike=strike,
+        tte_days_initial=5.0,
+        historical_tte_by_day=None,
+        timestamp_units_per_day=1000000,
+        prior_vol=0.0125,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        smile_degree=2,
+        smile_min_points=4,
+        active_reference_spot=5250.0,
+        active_base_count=5,
+        active_expand_every=120.0,
+        active_max_extra_count=2,
+        resid_ewma_alpha=0.03,
+        resid_std_init=0.0015,
+        resid_std_floor=0.0005,
+        resid_warmup_ticks=60,
+        take_price_edge=3.0,
+        reduce_price_edge=1.0,
+        take_zscore=1.4,
+        reduce_zscore=0.4,
+        cheap_reset_z=0.25,
+        take_size=4,
+        maker_size=0,
+        maker_edge=1.5,
+        maker_join_best=True,
+        soft_position_limit=24,
+        entry_position_cap=0,
+        take_cooldown_ts=3000,
+        inventory_skew=4.0,
+        inactive_unwind_bias=1,
+        min_quote_price=1.0,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+MEMBER_OVERRIDES["r3_velvet_options_ivscalp_v1"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVET_IVSCALP_UNDERLYING,
+        "VEV_4000": _r3_v24_passive_option(4000, maker_size=40, maker_edge=2, min_quote_price=2.0, use_smile=True),
+        "VEV_4500": _r3_v24_gamma_option(4500),
+        "VEV_5000": _r3_v24_gamma_option(5000),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option(5200),
+        "VEV_5300": _r3_v24_gamma_option(5300),
+        "VEV_5400": _r3_v24_passive_option(5400, maker_size=10, maker_edge=1, min_quote_price=1.0, use_smile=False),
+        "VEV_5500": _r3_smile_iv_scalper_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+_R3_HYDRO_ALPHA_V4 = _override(
+    ROUND_3["HYDROGEL_PACK"],
+    strategy="r3_hydro_reversion_mm",
+    position_limit=200,
+    ema_alpha=0.008,
+    fast_ema_alpha=0.03,
+    trend_guard=8.0,
+    signal_pos_gate=12,
+    tighten_ticks=1,
+    maker_size=24,
+    min_maker_size=3,
+    quote_threshold=6.0,
+    max_signal_size_boost=12,
+    inventory_reduce_per_unit=0.40,
+    inventory_unwind_per_unit=0.30,
+    max_unwind_boost=20,
+    take_threshold=12.0,
+    take_cooldown_ts=2000,
+    take_size=1,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v2_hydro_v4"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _R3_VELVET_IVSCALP_UNDERLYING,
+        "VEV_4000": _r3_v24_passive_option(4000, maker_size=40, maker_edge=2, min_quote_price=2.0, use_smile=True),
+        "VEV_4500": _r3_v24_gamma_option(4500),
+        "VEV_5000": _r3_v24_gamma_option(5000),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option(5200),
+        "VEV_5300": _r3_v24_gamma_option(5300),
+        "VEV_5400": _r3_v24_passive_option(5400, maker_size=10, maker_edge=1, min_quote_price=1.0, use_smile=False),
+        "VEV_5500": None,
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v3_hydro_optionblend"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _R3_VELVET_IVSCALP_UNDERLYING,
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": None,
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
 _THEO_R3_ACTIVE_OPTION_STRIKES = (5400, 5500)
 
 _THEO_R3_UNDERLYING = _override(
@@ -2257,6 +2470,15 @@ _R3_GUARDED_VELVET_PARAMS = {
 }
 
 
+def _r3_guarded_velvet_underlying(**extra) -> ProductConfig:
+    return _override(
+        ROUND_3["VELVETFRUIT_EXTRACT"],
+        strategy="r3_guarded_anchor_mm",
+        position_limit=200,
+        **{**_R3_GUARDED_VELVET_PARAMS, **extra},
+    )
+
+
 MEMBER_OVERRIDES["r3_guarded_hybrid_v1"] = {
     3: {
         "HYDROGEL_PACK": _override(
@@ -2266,13 +2488,77 @@ MEMBER_OVERRIDES["r3_guarded_hybrid_v1"] = {
             maker_size=30,
             tighten_ticks=1,
         ),
-        "VELVETFRUIT_EXTRACT": _override(
-            ROUND_3["VELVETFRUIT_EXTRACT"],
-            strategy="r3_guarded_anchor_mm",
-            position_limit=200,
-            **_R3_GUARDED_VELVET_PARAMS,
-        ),
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(),
         # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v4_guardedblend"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": None,
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v5_guardedtuned"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.6,
+            take_edge_hi=1.2,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v6_velvettuned"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.6,
+            take_edge_hi=1.2,
+            maker_size_base_pct=0.4,
+            pct_kept_for_takers=0.005,
+            toxic_threshold=0.6,
+            toxic_window=8,
+            toxic_size_frac=0.68,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
     },
 }
 
