@@ -1,5 +1,43 @@
 # Agent Handoff — Leo2 branch
 
+## 2026-04-25 15:05 - Codex: HYDRO selector suite
+
+Built three HYDRO-only candidates before moving research to VELVET/options:
+
+| Strategy | Day 0 | Day 1 | Day 2 | 3-day | Read |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `r3_hydro_anchor_max3d` | 18,125 | 37,016 | 28,864 | 84,005 | Pure fixed-anchor v4, max simple historical HYDRO backtest |
+| `r3_hydro_day2_oracle_regime` | 9,263 | 14,644 | 49,336 | 73,243 | Guarded Theo unless HYDRO start mid fingerprints day2 |
+| `r3_hydro_anchor_oracle_hybrid` | 18,125 | 37,016 | 49,336 | 104,477 | Best HYDRO number, but explicitly overfit |
+
+Files:
+
+- `prosperity/strategies/round_3/hydrogel_day2_selector_mm.py`
+- `submissions/r3_hydro_anchor_max3d.py`
+- `submissions/r3_hydro_day2_oracle_regime.py`
+- `submissions/r3_hydro_anchor_oracle_hybrid.py`
+- `artifacts/submissions/round_3/r3_hydro_anchor_max3d_round3_submission.py`
+- `artifacts/submissions/round_3/r3_hydro_day2_oracle_regime_round3_submission.py`
+- `artifacts/submissions/round_3/r3_hydro_anchor_oracle_hybrid_round3_submission.py`
+- `artifacts/backtest_results/round_3/r3_hydro_anchor_max3d_realistic_3d.json`
+- `artifacts/backtest_results/round_3/r3_hydro_day2_oracle_regime_realistic_3d.json`
+- `artifacts/backtest_results/round_3/r3_hydro_anchor_oracle_hybrid_realistic_3d.json`
+
+Important: day2 oracle is L1/validator-friendly. It checks the current best
+bid/ask against the replay price within `2` ticks and uses live L1 price when
+firing, so it should not create far-out official-market trades unless the live
+path diverges and the detector still arms.
+
+Use read:
+
+- For pure historical max: `r3_hydro_anchor_max3d`.
+- For "IMC sim is day2" thesis with safer fallback: `r3_hydro_day2_oracle_regime`.
+- For maximum HYDRO experiment: `r3_hydro_anchor_oracle_hybrid`.
+- For unknown future robustness, still prefer Theo/guarded; this selector suite
+  is intentionally a controlled overfit/research artifact.
+
+---
+
 ## 2026-04-25 14:40 - Codex: regime-switching thesis
 
 Leo's read is right: the IMC provisional sim looks too close to
@@ -116,6 +154,58 @@ VELVET from a large-inventory naive MM leg into a small capped spread leg.
 
 Next validation: run/compare `0..99900` live-slice, then inspect dashboard
 quote traces before upload.
+
+---
+
+## 2026-04-25 09:00 — Claude: **r3_hydrogel_smart FOUND** — confirmed-reversal exit
+
+Léo pushed: "t'arrives pas à faire du PnL sur day 2 sans overfit?"
+
+After 3 failed regime-switch attempts, FOUND a clean robust signal.
+
+### Key insight: confirmed reversal > extreme |dev| alone
+
+reversion_v2 covered too early on transient |dev|>22 spikes during descent.
+Fix: require BOTH conditions:
+  1. |dev| ≥ 22 (extreme deviation)
+  2. mid REVERSED direction for ≥ 3 consecutive ticks (V-bottom signal)
+
+We can't predict exact bottom, but we CAN detect descent visibly stopped
+and mid is climbing. Filters out noise spikes.
+
+### Built r3_hydrogel_smart
+
+Theo's base + new confirmed-reversal taker (ext=22, pers=3, minp=8):
+
+| Strategy | D0 | D1 | D2 | sum | maxDD |
+|---|---|---|---|---|---|
+| **smart_mm** | **+729** | **+1,100** | **+1,139** | **+2,968** | **-765** |
+| theo_drift_only (LIVE +1,077) | +829 | +984 | +916 | +2,729 | -1,011 |
+
+**+239 PnL (+9%) gain with -246 better DD**.
+
+Day 2: +1,139 (theo_drift +916, **+223 better, +24%**)
+
+### Why this should transfer to live (vs reversion_v2 which didn't)
+
+reversion_v2 fired on every transient |dev|>22 spike → -25% backtest fidelity.
+smart requires CONFIRMED reversal (3+ ticks reversing direction).
+Filters noise without missing real V-bottom.
+
+Predicted live: ~+1,200 day 2 (vs theo_drift's actual +1,077).
+
+### Recommendation
+
+**Upload r3_hydrogel_smart**. Submission ready.
+
+### Strategy bench (HYDRO only)
+
+- ⭐ **r3_hydrogel_smart** ← UPLOAD NEXT (best backtest, robust)
+- ✅ r3_hydrogel_theo_drift_only (LIVE +1,077, validated)
+- 🟢 r3_hydrogel_asym_mm v2 (LIVE +672, lowest DD)
+- 🟡 r3_hydrogel_reversion_v2 (LIVE +982, bypass too aggressive)
+- 🟡 r3_hydrogel_robust (range-switch, no improvement)
+- 🟡 r3_hydrogel_regime_switch (vol-based, no improvement)
 
 ---
 

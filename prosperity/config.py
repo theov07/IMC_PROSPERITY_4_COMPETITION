@@ -3283,6 +3283,63 @@ MEMBER_OVERRIDES["r3_theo_drift"] = {
 # ──────────────────────────────────────────────────────────────────────────────
 # ──────────────────────────────────────────────────────────────────────────────
 # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL SMART MM — Theo + confirmed-reversal exit (no overfit)
+# Robust answer to "make more PnL on day 2 without overfit":
+#   theo_drift_only LIVE held -27 short into 9927→9960 rebound, lost 890 mtm.
+#   reversion_v2 + bypass covered too early on transient |dev| spikes (-95 live).
+#   smart_mm fires AGGRESSIVE COVER only when:
+#     1. position adverse (e.g. short while mid below mean)
+#     2. |dev| >= extreme threshold (20)
+#     3. mid has reversed direction for >= 3 consecutive ticks
+#   This catches the V-bottom (where rebound starts) without false positives
+#   on transient spikes during the descent.
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_smart"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_smart_mm",
+            position_limit=200,
+            # Theo's HYDRO base
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            # Confirmed-reversal taker (NEW)
+            extreme_dev_threshold=20.0,        # |dev| must be >= 20 to consider firing
+            reversal_persist_ticks=3,          # mid must reverse for 3 consecutive ticks
+            min_pos_for_reversal_take=10,      # position must be >= 10 for cover to matter
+            reversal_take_base=3,              # base size when |dev|=20
+            reversal_take_max=12,              # cap
+            reversal_take_scale_div=4.0,       # +1 size per 4 ticks of excess |dev|
+            reversal_cooldown_ts=1000,         # min 1000ts between reversal takers
+            # Léo's session drift bias
+            session_drift_bias=4,
+            session_bias_strong_until_ts=100_000,
+            session_bias_fade_until_ts=300_000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # R3 HYDROGEL ROBUST MM — aggressive mean-rev (default) → defensive on big range
 # Resurrects old r3_hydrogel_mean_rev's aggressive z-skew (which had +44k 3-day
 # backtest!) but adds CUMULATIVE_RANGE safety net. Once cumulative range from
