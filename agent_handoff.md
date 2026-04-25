@@ -4,6 +4,50 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 2026-04-25 02:00 — Claude: **hydrogel_ladder_mm** + **ladder_v2** built (volume play)
+
+### Idea (Léo): level quoting to amplify volume
+
+HYDROGEL spread ~15 ticks → 7 levels of improvement available per side.
+Single-level captures 1 price; ladder N levels captures N. Built two:
+
+**v1 — `hydrogel_ladder_mm`**: pure passive ladder, 4 levels each side,
+pyramid sizing. 3-day backtest **+15,210**, 1,360 fills (4-5x asym_mm).
+**BUT day 2 = -486** — pure ladder fights trends.
+
+**v2 — `hydrogel_ladder_v2`**: trend-aware (dual EMA like follow_mm).
+Flat → full ladder (3 each side). Trend → ladder follow side, single counter.
+3-day **+15,262** with day 2 **+1,227** (fixed). But day 0 only +4,472 (vs
+v1's +6,355) — trend regime activates on mean-rev day too, throttling volume.
+
+### KEY FINDING: volume amplification ≠ live PnL boost
+
+In the 1,000-tick live window, all strategies get ~25 fills regardless of
+ladder geometry. The bottleneck is counterparty activity, not our quote
+levels. Per-fill edge dominates in short windows:
+
+| Strategy | day 2 live-window fills | per-fill edge |
+|---|---|---|
+| ladder v1/v2 | 25-26 | +15-18 |
+| follow_mm | 21 | **+34** |
+| asym_mm v2 (live) | 24 | **+28** |
+
+Ladder shines in full-session backtests (10k ticks, 1,360 fills) but doesn't
+help in 1k-tick live test slots. **For Round 3 final** (longer live session)
+ladder may matter more.
+
+### Submissions ready
+
+- `r3_hydrogel_ladder_mm` v1 (volume max, day 2 risk)
+- `r3_hydrogel_ladder_v2` (trend-aware, day 2 safer)
+- `r3_hydrogel_follow_mm` v2 (best per-fill edge in live-window)
+- `r3_hydrogel_asym_mm` v2 (validated live +672/-201 DD)
+
+Recommend: stay with **follow_mm** or **asym_mm v2** for next live test.
+Hold ladder versions for if Round 3 final has longer live sessions.
+
+---
+
 ## 2026-04-25 01:00 — Claude: **r3_hydrogel_follow_mm** built and exported
 
 ### Context — v2 asym_mm live result (log 384749)

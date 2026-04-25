@@ -4,7 +4,103 @@ Updated: 2026-04-25
 
 ---
 
-## 🚨 LATEST — hydrogel_follow_mm (trend-follow + aggressive unwind)
+## 🚨 LATEST — follow_mm LIVE confirmed (log 386829)
+
+**Live result (ts 0-99900 of day 2, exact replay)**:
+- Final **+610**
+- Peak **+1,239** (at ts 90,000)
+- Max DD **-871** (at ts 99,900 = end)
+- End position: HYDROGEL -19 (short)
+
+**Backtest had predicted**: peak +1,457 / DD -740 → live came in close
+(peak slightly lower, DD slightly worse, final ≈ predicted +717).
+
+**vs asym_mm v2 live (log 384749)** on identical data:
+
+| Metric | asym_mm v2 | follow_mm | Δ |
+|---|---|---|---|
+| Final | **+672** | +610 | -62 (asym wins) |
+| Peak | +763 | **+1,481** | +718 (follow wins) |
+| DD | -201 | -871 | -670 (asym wins) |
+| End pos | -23 | -19 | similar |
+
+**Verdict**: follow_mm captured the up-leg (peak +1,239 at ts 90k vs asym_mm's
+peak ~700) but the trend REVERSED at close (mid 9927 → 9960 in last 10k ticks)
+and the held short bled mtm. Net, asym_mm wins by ~60 PnL with much lower DD.
+
+**Lesson**: trend-follow only beats mean-rev WHEN the trend continues to close.
+When trend reverses at end, the follow strategy's larger position bleeds. The
+"let trend cook" thesis works on average across multiple trending days, but
+single-day day 2 ended with a reversal that punished follow.
+
+**Decision**: asym_mm v2 remains the validated leader. follow_mm stays in
+arsenal as alternate for when trend continuation is more confident (e.g., if
+we add a "close trend strength" feature to gate it).
+
+---
+
+## 🚨 PREVIOUS — hydrogel_ladder_mm + ladder_v2 (multi-level passive)
+
+**Idea (Léo)**: quote MULTIPLE price levels improving inside the spread to boost
+fill volume → boost PnL. HYDROGEL spread ~15 ticks = up to 7 improvement levels
+per side available.
+
+### Two implementations
+
+**v1 (`hydrogel_ladder_mm`)**: Pure passive ladder
+- `num_levels=4` per side, `level_step=1`, pyramid sizes (more at innermost)
+- `total_size_per_side=40`, hard cap ±60
+- Inventory skew: shrink wrong side, grow unwind side
+
+**v2 (`hydrogel_ladder_v2`)**: Trend-aware ladder
+- Same dual EMA trend detection as `follow_mm`
+- Flat regime: ladder both sides (3 levels each, total=30)
+- Trend regime: ladder follow side (3 levels), single counter-trend (size=5)
+
+### 3-day backtest (full day = 10000 ticks)
+
+| Strategy | day 0 | day 1 | day 2 | 3-day | Fills | PnL/fill |
+|---|---|---|---|---|---|---|
+| ladder v1 | +6,355 | +9,341 | **-486** | +15,210 | 1,360 | +11.2 |
+| ladder v2 | +4,472 | +9,563 | +1,227 | +15,262 | 1,209 | +12.6 |
+| follow_mm | +5,945 | +11,815 | +2,322 | +20,082 | 290 | +69 |
+| asym_mm v2 | ~6.6k | ~9.5k | +4,999 | **+26,192** | ~70 | **+374** |
+
+v1 day 2 negative: pure ladder fights the trend, accumulating wrong-side fills
+as mid drifts. v2 trend-switching fixes day 2 (+1,227) but loses some on
+mean-reverting day 0 (-1,883 vs v1).
+
+### Critical insight: live-window (1000 ticks) per-fill edge
+
+| Strategy | day 2 fills | day 2 PnL | per-fill edge |
+|---|---|---|---|
+| ladder v1 | 26 | +396 | +15.2 |
+| ladder v2 | 25 | +467 | +18.7 |
+| **follow_mm** | 21 | **+717** | **+34.1** |
+| **asym_mm v2 (LIVE)** | 24 | **+672** | **+28.0** |
+
+**The volume amplification doesn't show up in the live window** because all
+strategies get ~25 fills in 1000 ticks regardless of geometry — the market
+just doesn't trade through enough levels in that short slice.
+
+### Ladder lesson
+
+Volume amplification only matters in **full-session backtests** (10,000 ticks)
+where ladder gets 4-5x more fills. In the **live test window** (1,000 ticks),
+per-fill edge dominates because volume is fill-count limited by counterparty
+activity, not by our quote geometry.
+
+For Round 3 final live (likely longer session), ladder may help more. For the
+abbreviated test slots, **follow_mm** (best peak +1,457 backtest, +34/fill)
+or **asym_mm v2** (validated live +672, lowest DD -201) remain top picks.
+
+Submissions exported:
+- `artifacts/submissions/round_3/r3_hydrogel_ladder_mm_round3_submission.py`
+- `artifacts/submissions/round_3/r3_hydrogel_ladder_v2_round3_submission.py`
+
+---
+
+## 🚨 PREVIOUS — hydrogel_follow_mm (trend-follow + aggressive unwind)
 
 **Motivation** (from v2 asym_mm live log `384749`):
 v2 asym_mm landed +672 live (peak +763, DD -201) — DD fix successful vs v1's

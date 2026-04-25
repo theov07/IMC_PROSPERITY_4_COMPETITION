@@ -3045,6 +3045,82 @@ MEMBER_OVERRIDES["r3_hydrogel_follow_mm"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL LADDER MM — multi-level passive ladder inside spread
+# Goal: maximize fill volume by quoting at MULTIPLE price levels improving on
+# best. Single-level captures 1 price point; 4 levels capture 4 price points.
+# Spread ~15 ticks → up to 7 levels per side available.
+# Backtest target: more fills than asym_mm (24 live), edge per fill stays positive.
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_ladder_mm"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_ladder_mm",
+            position_limit=200,
+            num_levels=4,                       # 4 price levels per side
+            level_step=1,                       # adjacent ticks: best+1, +2, +3, +4
+            total_size_per_side=40,             # 40 / 4 = 10 per level (pyramid)
+            size_mode="pyramid",                # bigger size at innermost level
+            min_spread_for_ladder=4,            # need at least 4-tick spread to ladder
+            fallback_size=8,                    # single-level fallback when narrow
+            inventory_reduce_per_unit=0.50,     # 0.5 ticks shrunk per unit pos
+            inventory_unwind_per_unit=0.30,
+            unwind_boost_max=30,
+            hard_pos_cap=60,                    # wider cap (more total exposure)
+            window=500,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL LADDER V2 — ladder + trend-aware regime switching
+# v1 lost on day 2 (-486) because pure ladder fights the trend.
+# v2: in trending regime, ladder ONE-SIDE (follow), single level on counter-trend.
+# In flat regime, full ladder for max volume capture.
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_ladder_v2"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_ladder_v2",
+            position_limit=200,
+            ema_fast=500,                       # ACF-tuned tick horizon
+            ema_slow=2000,                      # day-scale trend
+            trend_threshold=1.0,                # |trend| > 1σ → trend regime
+            min_samples=200,
+            # Ladder geometry per regime
+            num_levels_flat=3,                  # flat: 3 levels each side
+            num_levels_trend_follow=3,          # trend-follow side: 3 levels
+            num_levels_trend_against=1,         # counter-trend side: 1 level
+            level_step=1,
+            min_spread_for_ladder=4,
+            # Sizes
+            total_size_flat=30,                 # 30 / 3 = 10 per level (flat)
+            total_size_trend_follow=30,         # same total when trending follow
+            total_size_trend_against=5,         # tiny single counter-trend quote
+            fallback_size=8,
+            # Inventory + cap
+            inventory_reduce_per_unit=0.50,
+            inventory_unwind_per_unit=0.30,
+            unwind_boost_max=30,
+            hard_pos_cap=30,                    # tighter than v1 (was 60)
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_hydrogel_oracle_inspired"] = {
     3: {
         "HYDROGEL_PACK": _override(
