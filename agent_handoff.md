@@ -4,6 +4,73 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 2026-04-25 04:00 — Claude: HYDRO-only deep dive (Léo's 3 ideas tested)
+
+User asked to combine 3 ideas on HYDROGEL only (no multi-product):
+1. EWM cross frequency (count of bid>EWM vs ask<EWM in last N ticks)
+2. Daily-trend phase (early bearish, mid neutral, late bullish)
+3. Level quoting (multi-level ladder for volume)
+
+### Built `r3_hydrogel_combo_mm`: all 3 ideas combined (HYDRO only)
+
+Aggregate-score regime: 0.5*trend_norm + 0.3*cross_score + 0.2*daily_phase.
+Score > 0.30 → trend regime → ladder follow side (4 levels).
+
+**Day 2 live-window result: +388** vs theo_only (single-level) **+916**.
+**LADDER COSTS US -528 PnL** in 1000-tick live tests.
+
+### Why level quoting fails in live
+
+- Single-level @ maker_size=24 has CONCENTRATED queue priority at best+1
+- Ladder splits 24 into 6 each → competes for same priority with smaller size
+- Outer levels (best+2, +3, +4) rarely traded through in 1000 ticks
+- Activity bottleneck (counterparty trades) > geometry bottleneck (our levels)
+
+Volume amplification works in 10000-tick full sessions (factor ~5x).
+In 1000-tick live test windows, per-fill edge dominates (~25 fills regardless).
+
+### Daily-phase bias DID help (+10% PnL)
+
+Built `r3_hydrogel_theo_drift_only` = Theo's HYDRO clone + session_drift_bias=4
+in first 100k ts.
+
+3-day live-window total:
+- theo_only (no bias): 624 + 940 + 916 = **2,480**
+- theo_drift_only (+bias): 829 + 984 + 916 = **2,729** (+249, +10%)
+
+Day 2 unchanged (mean-rev signal already maxxed short). Day 0 gains +205,
+day 1 gains +44.
+
+### EWM cross signal: descriptive but redundant with trend_guard
+
+Markout test: not predictive (markout 5000ts unstable across days). But IS
+descriptive of regime — equivalent to Theo's trend_guard (|fast_ema - slow_ema|).
+Including it explicitly added noise to combo_mm aggregate score.
+
+### FINAL RECOMMENDATION (HYDRO only)
+
+**`r3_hydrogel_theo_drift_only`** — Upload this for next live test.
+
+Predicts:
+- Day 0-like session: ~+829
+- Day 1-like session: ~+984
+- Day 2-like session: ~+916 (matches Theo's actual live HYDRO +920 = 91% match)
+
+3-day total live-window: +2,729 vs our previous best (asym_mm v2 live +672).
+
+Submission: `artifacts/submissions/round_3/r3_hydrogel_theo_drift_only_round3_submission.py`
+
+### Strategies on the bench (HYDRO only)
+
+- **r3_hydrogel_theo_drift_only** ← RECOMMENDED (Theo HYDRO + drift bias)
+- r3_hydrogel_theo_only (Theo HYDRO clean baseline)
+- r3_hydrogel_combo_mm (kept as documented experiment, ladder hurt)
+- r3_hydrogel_asym_mm (validated live +672, -201 DD — safest)
+- r3_hydrogel_follow_mm (validated live +610, +1481 peak)
+- r3_hydrogel_ladder_mm/v2 (good on full-day, worse on live)
+
+---
+
 ## 2026-04-25 03:00 — Claude: **THEO'S STRAT DISSECTED** + multi-product clone built
 
 ### Léo brought 2 logs to compare

@@ -4,7 +4,90 @@ Updated: 2026-04-25
 
 ---
 
-## 🚨 BREAKTHROUGH — Theo's strat dissected + multi-product clone (log 386998)
+## 🚨 LATEST — HYDRO-only deep dive (Léo's 3 ideas tested rigorously)
+
+User wants to stay HYDRO-only. Tested all 3 of his ideas combined and individually.
+
+### Idea 1: Level quoting (multi-level passive ladder) → **HURT in live**
+
+Built `hydrogel_combo_mm`: 4 levels per side ladder + EWM cross-frequency
+signal + daily-phase bias. Aggregate-score regime detector.
+
+Day 2 live-window comparison:
+
+| Strategy | Final | Peak | DD | Fills | Per-fill edge |
+|---|---|---|---|---|---|
+| theo_only (single level @ 24) | **+916** | +1926 | -1012 | 26 | **+35** |
+| combo_mm (4-level ladder) | +388 | +1134 | -746 | 24 | +16 |
+| Δ | **-528 PnL** | -792 | +266 (better DD) | -2 | **-19/fill** |
+
+**Conclusion**: in 1000-tick live, ladder is COUNTER-PRODUCTIVE.
+- Single-level @ 24 captures more volume at best+1 (concentrated queue priority)
+- Ladder splits 24 into 6 each, smaller orders compete for same priority
+- Outer levels (best+2, +3, +4) rarely hit in 1000 ticks
+- Activity is the bottleneck, not geometry
+
+Volume amplification only matters in 10000-tick full sessions. For 1000-tick
+live tests, **per-fill edge dominates**.
+
+### Idea 2: EWM cross frequency signal → **descriptive only, redundant**
+
+Tested as predictive: bear (`ask < ewm`) and bull (`bid > ewm`) signals,
+markout 5000ts ahead.
+
+| Day | BULL n / markout / wr | BEAR n / markout / wr |
+|---|---|---|
+| 0 | 96 / -6.4 / 10% | 337 / -1.8 / 51% |
+| 1 | 217 / -4.8 / 42% | 184 / +10.8 / 7% |
+| 2 | 127 / -6.0 / 30% | 512 / -2.2 / 53% |
+
+Markout is UNSTABLE across days (sometimes mean-rev, sometimes trend).
+However the signal IS descriptive of current regime — equivalent to Theo's
+`trend_guard` which already encodes "bid/ask diverged from EMA → trend mode".
+
+Including cross-frequency in `combo_mm` aggregate score didn't help —
+it introduced regime noise that delayed unwinds at end of session.
+
+### Idea 3: Daily-trend hypothesis → **CONFIRMED, +10% PnL boost**
+
+Average HYDROGEL drift over first N ticks across day 0/1/2:
+
+| First N ticks | Day 0 | Day 1 | Day 2 | Avg |
+|---|---|---|---|---|
+| **1000 (live window)** | -46 | -15 | -51 | **-37.3** |
+| 5000 | -15 | +40 | -31 | -2.0 |
+| 10000 | -42 | +57 | -1 | +4.7 |
+
+Implemented as `session_drift_bias=4` param: bid_size -=4, ask_size +=4
+in first 100k ts (1000 ticks), fade to 0 by 300k ts.
+
+| Day | theo_only (no bias) | theo_drift_only (+bias) | Δ |
+|---|---|---|---|
+| 0 | +624 | **+829** | **+205** |
+| 1 | +940 | +984 | +44 |
+| 2 | +916 | +916 | 0 |
+| **3-day sum** | +2,480 | **+2,729** | **+249 (+10%)** |
+
+Day 2 unchanged (mean-rev signal already pushes maxx short via signal_pos_gate).
+Day 0/1 get a free +200/+44 from the early-session bias. Net +10% PnL.
+
+### FINAL RECOMMENDATION (HYDRO only)
+
+**`r3_hydrogel_theo_drift_only`** = Theo's R3HydroReversionMM clone (with
+trend_guard=6) + Léo's session_drift_bias=4 in first 1000 ticks.
+
+| | Day 0 | Day 1 | Day 2 |
+|---|---|---|---|
+| Backtest live-window | +829 | +984 | +916 |
+| Theo's actual live (HYDRO) | — | — | +920 (91% match!) |
+
+Submission: `artifacts/submissions/round_3/r3_hydrogel_theo_drift_only_round3_submission.py`
+
+Expected live PnL ~+900-1000 on a day-2-like session.
+
+---
+
+## 🚨 PREVIOUS — Theo's strat dissected + multi-product clone (log 386998)
 
 ### Theo's live result: total **+1,867** vs our +610 (3x better)
 

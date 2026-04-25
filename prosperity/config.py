@@ -3267,6 +3267,134 @@ MEMBER_OVERRIDES["r3_theo_drift"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL COMBO MM — HYDRO-only with 3 signals + level quoting
+# Combines Léo's three insights:
+#   1. Level quoting (multi-level passive ladder for volume amplification)
+#   2. EWM cross frequency (last N ticks count of bid>EWM vs ask<EWM)
+#   3. Daily-trend phase (early bearish, mid neutral, late slightly bullish)
+# Aggregate score → regime → ladder geometry per side.
+# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL THEO ONLY — Theo's HYDRO strategy isolated (no VELVET/VEV)
+# Useful baseline to measure: how much of Theo's edge comes from HYDRO alone?
+# ──────────────────────────────────────────────────────────────────────────────
+# With Léo's daily-phase bias (lean short in first 100k ts)
+MEMBER_OVERRIDES["r3_hydrogel_theo_drift_only"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            session_drift_bias=4,                     # +4 to ask, -4 to bid early session
+            session_bias_strong_until_ts=100_000,
+            session_bias_fade_until_ts=300_000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydrogel_theo_only"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            session_drift_bias=0,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydrogel_combo_mm"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_combo_mm",
+            position_limit=200,
+            # Signal 1: dual EMA (Theo's params)
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,                # scale factor for trend normalization
+            # Signal 2: cross-frequency window (last 200 ticks ~ 20s)
+            cross_window=200,
+            min_samples=100,                # warmup
+            # Signal 3: daily-phase knots (based on -37 ticks avg drift in first 1000 ticks)
+            daily_phase_decay_ts=300_000,   # bias decays from -1 to -0.5 by ts 300k
+            daily_phase_neutral_ts=500_000, # neutral at ts 500k
+            daily_phase_bullish_ts=700_000, # peak bullish bias at ts 700k
+            daily_phase_bullish_val=0.5,    # max late-session bullish strength
+            # Aggregate weights (sum to 1.0)
+            w_trend=0.5,
+            w_cross=0.3,
+            w_daily=0.2,
+            regime_threshold=0.30,          # |score| > 0.30 → trend regime
+            # Ladder geometry
+            num_levels_flat=3,              # 3 levels each side when flat
+            num_levels_follow=4,            # 4 levels on trend side (more volume)
+            num_levels_against=1,           # 1 level counter-trend (tiny)
+            level_step=1,
+            min_spread_for_ladder=4,
+            # Sizes per side (split across levels by pyramid)
+            total_size_flat=30,
+            total_size_follow=40,
+            total_size_against=5,
+            fallback_size=8,
+            # Inventory + cap
+            inventory_reduce_per_unit=0.50,
+            inventory_unwind_per_unit=0.30,
+            unwind_boost_max=30,
+            hard_pos_cap=30,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_hydrogel_oracle_inspired"] = {
     3: {
         "HYDROGEL_PACK": _override(
