@@ -5483,6 +5483,56 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v35_per_strike_z_rev"] = {
 }
 
 
+# v42: OPTIMAL = v38 (drop drag) + IV gate ALL gamma cluster
+# Best of both: drop drag strikes (5300/5400) AND apply IV gate selective to all
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v42_optimal"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # gamma cluster 4500-5200 with IV gate (drop 5300 + 5400)
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v43: SELECTIVE = v38 + IV gate ONLY on VEV_5000 (where it proved best per per-asset)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v43_selective_iv_gate"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # 4500/5100/5200: standard z-skip, NO IV gate
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [4500, 5100, 5200]
+        },
+        # 5000: IV gate ON (per-asset analysis: best risk-adj swap here)
+        "VEV_5000": _override(
+            ROUND_3["VEV_5000"], position_limit=300, strike=5000,
+            **_gamma_zgated_with_iv_gate(z_skip=0.5),
+        ),
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 # v40: v24 base + VEV_4000 BIG size boost (best risk-adj 4.69, underweighted)
 # Try maker_size 40 → 80 to see if more flow available
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v40_4000_boost"] = {
