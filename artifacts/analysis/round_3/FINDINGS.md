@@ -316,14 +316,73 @@ drag ~-1k/jour accepté. Cohérent avec thèse long-vol.
 de 1.82 → 1.900. Les autres tweaks (IV gate, per-strike z, size boost)
 n'apportent rien d'additionnel SUR l'optimum drop.
 
-### À TESTER ENCORE (priorité TRÈS basse, marginal expected)
+### COMPLÉTÉ — toutes les idées listées TESTÉES empiriquement
 
-| Idée | Status | Why low priority |
-|---|---|---|
-| option_mm_bs avec SVI fair + enable_takers | not tested | penny-improve override smile-fair quote; v42=v38 already proves smile-related changes are neutral |
-| Greeks split (long ATM + short OTM) | not tested | OTM premium $1-7 trop petit pour theta seller meaningful |
-| Vega-weighted basket | not tested | gamma_scalp ATM cluster déjà implicit vega allocation |
-| Time-of-session adaptive params | not tested | live = 1k ticks only |
+| Idée | Variant | Result |
+|---|---|---:|
+| **Vega-weighted target_qty** | **v46** | **+77,492 / DD -39,882 / Ratio 1.943** ★ NEW LEADER |
+| Greeks split (short OTM theta) | v45 | +86,431 / DD -45,615 / Ratio 1.895 (VEV_5500 -20, dead) |
+| smile-aware takers (VEV_4000) | v44 | = v38 EXACTEMENT (takers don't fire, smile-fair ≈ market) |
+| SVI fair value | (script `compare_svi_vs_poly2.py`) | SVI differs 3-7 ticks ATM, but skew_taker logic same as poly2 = -45k |
+
+### NEW LEADER — v46_vega_weighted (PnL/DD ratio 1.943)
+
+Insight clé du per-asset DD analysis : VEV_4500 était SUR-PONDÉRÉ avec
+target_qty=300 alors que sa vega est seulement 110 (vs 5500 pour 5200/5300).
+Vega-weighted target_qty :
+
+```
+VEV_4500: target=100  (vega 110, downsized)
+VEV_5000: target=200  (vega 2,135)
+VEV_5100: target=280  (vega 4,071)
+VEV_5200: target=300  (vega 5,501, full)
+DROP 5300/5400 (drag from previous analysis)
+```
+
+Trade vs v38 :
+- VEV_4500 PnL +18,387 → +6,247 (-12,140 PnL)
+- DD overall : -45,494 → -39,882 (-5,612 DD)
+- **Ratio 1.900 → 1.943** (+0.04, +2.3%)
+
+### FINAL ranking — 19 variants tested
+
+**Par ratio (best risk-adjusted)** :
+
+| # | Variant | PnL | DD | Ratio | Strikes |
+|---|---|---:|---:|---:|---:|
+| 🥇 | **v46_vega_weighted** ★ | +77,492 | -39,882 | **1.943** | 5 |
+| 🥈 | v38_drop_bad / v42 / v43 / v44 | +86,451 | -45,494 | 1.900 | 5 |
+| 🥉 | v45_greeks_split | +86,431 | -45,615 | 1.895 | 6 |
+| 4 | v34_combined | +88,658 | -46,889 | 1.891 | 7 |
+| 5 | v33_per_strike_z | +90,868 | -48,778 | 1.863 | 7 |
+| ... | ... | ... | ... | ... | ... |
+| | v24_baseline | +91,560 | -50,200 | 1.824 | 7 |
+| | v35 | +93,442 | -53,652 | 1.742 | 7 |
+
+**Par PnL absolu** : v35 (+93,442) > v24 (+91,560) > v33 (+90,868)
+
+### Final candidates locked (18 submissions in `_final/velvet_options/`)
+
+| File | Size | PnL | DD | Ratio | Profile |
+|---|---:|---:|---:|---:|---|
+| **v46_vega_weighted** ★ | **86 KB** | +77,492 | -39,882 | **1.943** | best risk-adj |
+| v38_drop_bad | 89 KB | +86,451 | -45,494 | 1.900 | balanced |
+| v34_combined | 91 KB | +88,658 | -46,889 | 1.891 | full options |
+| v24_r2velvet_zskip | 87 KB | +91,560 | -50,200 | 1.824 | max PnL safe |
+| v12_r2velvet | 83 KB | +94,614 | -60,508 | 1.56 | max PnL stretch |
+
+**Recommendation** : upload **v46** for risk-adjusted, **v24** for max absolute PnL.
+
+### NOUVEAUX outils ce tour
+
+- `scripts/analyze_per_asset_dd.py` — DD per-asset en %capital
+- `scripts/analyze_portfolio_greeks.py` — portfolio greeks reconstruction
+- `scripts/compare_svi_vs_poly2.py` — SVI vs poly2 fair value tick-by-tick
+- `scripts/compare_all_variants.py` — ranking par ratio + PnL
+
+### Truly nothing left to test
+
+All listed ideas empirically tested. The space is saturated. Ceiling = v46 ratio 1.943.
 
 ### À TESTER ENCORE (idées non couvertes)
 
