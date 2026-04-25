@@ -1,5 +1,71 @@
 # Agent Handoff — Leo2 branch
 
+## 2026-04-25 16:10 — Claude: 4-strategy lockdown + LIVE-WINDOW reality check
+
+Léo asked for 4 final HYDRO strategies before moving to VELVET/options.
+
+### CRITICAL FINDING: anchor strategies LOSE in live-window
+
+The +84k 3-day backtest of anchor_max3d comes from the LATE session (after
+ts ~300k). In the FIRST 1000 ticks (= live IMC slice), it LOSES money.
+
+| Strategy | LW 3d sum | Full 3d | LW capture |
+|---|---|---|---|
+| anchor_max3d | **-15,096** | +84,005 | -18% (negative!) |
+| day2_oracle_regime | +40,923 | +73,243 | 56% (oracle hits early on D2) |
+| anchor_oracle_hybrid | +28,298 | +104,477 | 27% |
+| **r3_hydrogel_smart** | **+2,968** | +28,856 | **10% (steady)** |
+| r3_hydrogel_theo_drift_only (LIVE +1077) | +2,729 | +28,262 | 10% |
+
+anchor_max3d trajectory shows the issue clearly:
+- Day 0: -6,183 at ts=99k → +18,125 at ts=999k (recovers after live window)
+- Day 1: -4,855 at ts=99k → +37,016 final
+- Day 2: -4,058 at ts=99k → +28,864 final
+
+So if IMC sim is exactly 1000 ticks, anchor will LOSE. If sim is closer
+to full session, anchor wins big. **Léo's bet on max-3-day-PnL only pays
+off if final scoring is on full sessions, not 1000-tick slices.**
+
+### The 4 final HYDRO strategies
+
+| # | Strategy | Profile | Full 3d | LW 3d | LIVE D2 |
+|---|---|---|---|---|---|
+| 1 | r3_hydro_anchor_max3d | Pure anchor v4, max 3d | +84,005 | -15,096 | (untested) |
+| 2 | r3_hydro_day2_oracle_regime | Day 2 fingerprint + guarded Theo | +73,243 | +40,923 | (untested) |
+| 3 | r3_hydro_anchor_oracle_hybrid | Day 2 fingerprint + anchor | +104,477 | +28,298 | (untested) |
+| 4 | r3_hydrogel_smart (research best) | Theo + confirmed-reversal | +28,856 | +2,968 | (untested) |
+
+Validated live reference: r3_hydrogel_theo_drift_only LIVE +1,077 day 2.
+smart_mm uses same Theo base + better exit, predicts ~+1,200 live D2.
+
+### How each translates to live (1000-tick slice estimate)
+
+- **anchor_max3d**: -5k loss expected (live-window backtest negative)
+- **day2_oracle_regime**: +13k average if day 2 fingerprint, +750 otherwise
+- **hybrid**: +39k if day 2 detected, -5k otherwise
+- **smart**: +1k stable, regardless of regime
+
+### Recommendation per scenario
+
+- **IMC sim is full session(s)**: anchor_oracle_hybrid (+104k 3d, gambles on
+  day2 detection)
+- **IMC sim is 1000-tick slice of day 2**: hybrid still works (oracle path
+  hits, +39k LW) — but if validator catches off-L1, falls back to anchor
+  which loses
+- **Round 3 final scored over full sessions**: anchor_max3d (max 3d, no
+  overfit risk vs day 2 only)
+- **Robust live, any scenario**: smart_mm (steady +1k per session)
+
+User's intent: max 3-day PnL even knowing live sim is unfavorable. So
+prefer anchor_max3d / hybrid for selection.
+
+### Anchor tuning grid (running)
+
+48 configs over (anchor_drift_bound, ar_gain, take_edge_lo). Goal: push
+anchor_max3d above +84k. Results pending.
+
+---
+
 ## 2026-04-25 15:05 - Codex: HYDRO selector suite
 
 Built three HYDRO-only candidates before moving research to VELVET/options:
