@@ -52,6 +52,27 @@ Updated: 2026-04-25
 
 → **Aucun signal HYDROGEL → VELVET ni HYDROGEL → vol regime.** Mid correlation varie mais c'est juste la covariance des marches aléatoires. Pas de prédictivité pour trade.
 
+### Hedge low-frequency tested (last untested video-recap idea)
+
+Idea: hedge cost is high at every-tick freq. What if we throttle to 1 hedge
+per 1000 ticks (or 5000)? Maybe the cost amortizes while DD reduction stays.
+
+Built `velvet_delta_hedger` parameter `min_ticks_between_hedges`:
+
+| Variant | PnL | DD | Ratio | VELVET PnL | V_trades |
+|---|---:|---:|---:|---:|---:|
+| **v24_r2velvet_zskip (baseline)** | **+91,560** | -50,200 | **1.82** | +27,518 | 7,446 |
+| v30 (1000-tick gap) | +55,261 | -33,992 | 1.63 | -8,781 | 514 |
+| v31 (5000-tick gap) | +53,954 | -33,992 | 1.59 | -10,088 | 535 |
+
+**Both worse than v24** because the low-freq hedger REPLACES the R2 anchor MM
+on VELVET (which made +27k via mean-reversion spread capture) with a
+hedge-focused MM (which loses -10k). DD reduced by -16k but PnL lost -36k →
+worse ratio.
+
+**Verdict: low-freq hedging is also DEAD.** R2 anchor MM IS the optimal VELVET
+strategy — explicit hedging via velvet_delta_hedger never beats it.
+
 ### IV momentum test (ρ_1=+0.14 → user requested "essayons momentum")
 
 Built `iv_momentum_mm.py`:

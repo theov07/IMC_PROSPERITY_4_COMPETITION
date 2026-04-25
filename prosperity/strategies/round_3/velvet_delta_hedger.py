@@ -98,9 +98,12 @@ class VelvetDeltaHedgerStrategy(BaseStrategy):
             sell_cap=sell_cap,
             params=p,
             position=position,
+            memory=memory,
+            ts=ts,
         )
         if hedge_taker is not None:
             orders.append(hedge_taker)
+            memory["_last_hedge_ts"] = ts
             if hedge_taker.quantity > 0:
                 buy_cap -= hedge_taker.quantity
             else:
@@ -211,10 +214,19 @@ class VelvetDeltaHedgerStrategy(BaseStrategy):
         sell_cap: int,
         params: Dict[str, Any],
         position: int,
+        memory: Optional[Dict[str, Any]] = None,
+        ts: Optional[int] = None,
     ) -> Optional[Order]:
-        """Fire a taker order if |imbalance| > hedge_taker_edge."""
+        """Fire a taker order if |imbalance| > hedge_taker_edge.
+        Optionally enforce min_ticks_between_hedges throttle."""
         if abs(imbalance) < params["hedge_taker_edge"]:
             return None
+        # Throttle: only allow taker if enough ticks since last hedge
+        min_gap_ts = params.get("min_ticks_between_hedges", 0) * 100
+        if min_gap_ts > 0 and memory is not None and ts is not None:
+            last_hedge_ts = memory.get("_last_hedge_ts", -10**9)
+            if ts - last_hedge_ts < min_gap_ts:
+                return None
         trade_qty = recommend_delta_hedge(
             current_underlying_pos=position,
             option_portfolio_delta=imbalance - position,  # option delta only

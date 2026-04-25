@@ -134,6 +134,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
         "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
         "HydrogelGuardedReversionMMStrategy",
     ),
+    "hydro_anchor_zgate_mm": ("prosperity/strategies/round_3/hydro_anchor_zgate_mm.py", "HydroAnchorZGateMMStrategy"),
     "hydrogel_super_mm": ("prosperity/strategies/round_3/hydrogel_super_mm.py", "HydrogelSuperMMStrategy"),
     "hydrogel_reversion_v2": ("prosperity/strategies/round_3/hydrogel_reversion_v2.py", "HydrogelReversionV2Strategy"),
     "hydrogel_regime_switch_mm": ("prosperity/strategies/round_3/hydrogel_regime_switch_mm.py", "HydrogelRegimeSwitchMMStrategy"),
@@ -231,6 +232,7 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "gamma_scalp_zgated": _R3_OPTIONS_DEPS,
     "iv_momentum_mm": _R3_OPTIONS_DEPS,
     "velvet_r2_exhaustion_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "hydro_anchor_zgate_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
 }
 

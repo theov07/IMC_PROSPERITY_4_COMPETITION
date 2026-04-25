@@ -3737,6 +3737,34 @@ MEMBER_OVERRIDES["r3_hydro_anchor_max3d"] = {
     },
 }
 
+def _hydro_anchor_zgate_config(name: str, *, skip: float, taker: bool = False, take: float = 1.5) -> None:
+    params = {
+        **_R3_HYDROGEL_PARAMS,
+        "quote_trace_enabled": True,
+        "hzg_zscore_window": 500,
+        "hzg_skip_threshold": skip,
+        "hzg_enable_taker": taker,
+        "hzg_taker_threshold": take,
+        "hzg_taker_size": 6,
+        "hzg_cooldown_ts": 1000,
+    }
+    MEMBER_OVERRIDES[name] = {
+        3: {
+            "HYDROGEL_PACK": _override(
+                ROUND_3["HYDROGEL_PACK"],
+                strategy="hydro_anchor_zgate_mm",
+                position_limit=200,
+                **params,
+            ),
+            **_R3_HYDRO_DISABLE_REST,
+        },
+    }
+
+
+_hydro_anchor_zgate_config("r3_hydro_anchor_zgate_05", skip=0.5)
+_hydro_anchor_zgate_config("r3_hydro_anchor_zgate_10", skip=1.0)
+_hydro_anchor_zgate_config("r3_hydro_anchor_zgate_taker_15", skip=1.0, taker=True, take=1.5)
+
 # Use slim strategies (single-mode) instead of selector_mm (which loads both modes)
 # This brings inlined submission size down from 184 KB to <100 KB.
 _R3_HYDRO_SELECTOR_COMMON_SLIM = dict(
@@ -5323,6 +5351,77 @@ _R3_VEGA_PAIR_BASE = dict(
     ts_increment=100,
     last_ts_value=999900,
 )
+# v30: v24 architecture + LOW-FREQUENCY delta hedge (only 1 hedge per 1000 ticks)
+# Tests if rare-but-large hedges have better cost/benefit than every-tick.
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v30_dh_lowfreq_1000"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            position_limit=200,                # like v12 (R2 wants larger limit)
+            **{
+                **_R3_VELVET_DH_BASE,
+                "hedge_taker_edge": 100,        # fire when |delta| > 100
+                "min_ticks_between_hedges": 1000,  # NEW — at most 1 hedge per 1000 ticks
+                "max_hedge_size": 30,
+                "passive_skew_per_delta": 0.20,
+                "passive_base_size": 30,        # match R2-ish size
+            },
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v31: same but every 5000 ticks (very rare hedges)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v31_dh_lowfreq_5000"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            position_limit=200,
+            **{
+                **_R3_VELVET_DH_BASE,
+                "hedge_taker_edge": 200,
+                "min_ticks_between_hedges": 5000,
+                "max_hedge_size": 50,
+                "passive_skew_per_delta": 0.15,
+                "passive_base_size": 30,
+            },
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
 # v28_iv_momentum: v24 base + iv_momentum_mm on VEV_5300/5400 (replaces gamma+passive).
 # Tests: ρ_1=+0.14 IV residual momentum → BUY rich + SELL cheap (follow direction).
 _R3_IV_MOMENTUM_BASE = dict(
