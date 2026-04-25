@@ -3282,6 +3282,104 @@ MEMBER_OVERRIDES["tibo_velvet_v3"] = {
 }
 
 
+# ── tibo_velvet_v24: friend's merged strategy ─────────────────────────────────
+# VELVETFRUIT: MMFirstV4ComboStrategy (anchor-price MM + AR shift + takers)
+# VEV_4000:    OptionMMBSStrategy (symmetric BS-aware MM)
+# VEV_4500/5000/5100/5200/5300: GammaScalpZGatedStrategy (z-gated long-call accumulation)
+# VEV_5400:    OptionMMBSStrategy (tight passive MM, use_smile=False)
+_V24_OPT_BS_BASE = dict(
+    tte_days_initial=5.0,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    timestamp_units_per_day=1_000_000,
+    ts_increment=100,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    prior_vol=0.0125,
+    sigma_floor=0.005,
+    sigma_cap=0.1,
+    iv_ewma_alpha=0.3,
+    min_quote_price=2.0,
+    take_edge=3.0,
+    take_size=40,
+    enable_takers=False,
+    penny_improve_around_mkt=True,
+    inv_bias_per_unit=0.02,
+    log_flush_ts=1000,
+    last_ts_value=999900,
+)
+
+_V24_GAMMA_BASE = dict(
+    tte_days_initial=5.0,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    timestamp_units_per_day=1_000_000,
+    ts_increment=100,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    implied_vol_prior=0.0125,
+    min_quote_price=2.0,
+    entry_size=30,
+    passive_bid_size=24,
+    target_qty=300,
+    unwind_tte_threshold=1.5,
+    skip_when_expensive=True,
+    zscore_skip_threshold=0.5,
+    boost_when_cheap=False,
+    zscore_boost_threshold=1.0,
+    entry_size_boost=1.5,
+    sell_when_very_expensive=False,
+    edge_ticks=0.0,
+    zscore_window=500,
+    log_flush_ts=1000,
+    last_ts_value=999900,
+)
+
+MEMBER_OVERRIDES["tibo_velvet_v24"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+
+        "VEV_4000": ProductConfig(symbol="VEV_4000", strategy="option_mm_bs", position_limit=300,
+            params={**_V24_OPT_BS_BASE, "strike": 4000, "maker_edge": 2, "maker_size": 40,
+                    "use_smile": True}),
+
+        "VEV_4500": ProductConfig(symbol="VEV_4500", strategy="gamma_scalp_zgated", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 4500}),
+        "VEV_5000": ProductConfig(symbol="VEV_5000", strategy="gamma_scalp_zgated", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5000}),
+        "VEV_5100": ProductConfig(symbol="VEV_5100", strategy="gamma_scalp_zgated", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5100}),
+        "VEV_5200": ProductConfig(symbol="VEV_5200", strategy="gamma_scalp_zgated", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5200}),
+        "VEV_5300": ProductConfig(symbol="VEV_5300", strategy="gamma_scalp_zgated", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5300}),
+
+        "VEV_5400": ProductConfig(symbol="VEV_5400", strategy="option_mm_bs", position_limit=300,
+            params={**_V24_OPT_BS_BASE, "strike": 5400, "maker_edge": 1, "maker_size": 10,
+                    "min_quote_price": 1.0, "inv_bias_per_unit": 0.04, "use_smile": False}),
+
+        "VEV_5500": None, "VEV_6000": None, "VEV_6500": None,
+
+        "VELVETFRUIT_EXTRACT": ProductConfig(symbol="VELVETFRUIT_EXTRACT",
+            strategy="mm_first_v4_combo", position_limit=200,
+            params=dict(
+                anchor_price=5250.0,
+                anchor_alpha=0.02,
+                anchor_drift_bound=2.0,
+                ar_gain=0.3,
+                ar_shift_source="mid_smooth",
+                maker_size=30,
+                pct_kept_for_takers=0.05,
+                take_edge_lo=0.3,
+                take_edge_hi=0.8,
+                inventory_aversion_gamma=0.0015,
+                unwind_take_edge=3.0,
+                tighten_ticks=1,
+                full_capacity_on_empty=True,
+                ts_increment=100,
+                last_ts_value=999900,
+                log_flush_ts=1000,
+            )),
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
