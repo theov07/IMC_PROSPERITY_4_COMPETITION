@@ -138,6 +138,13 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "ms_regime_delta":    ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeDeltaOneStrategy"),
     "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
     "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
+    # ── Tibo Round 3 ──
+    "velvet_strat":        ("prosperity/strategies/round_3/tibo/velvet_strat.py",    "VelvetStratV1"),
+    "velvet_strat_v2_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v2.py", "VelvetMMV2"),
+    "velvet_strat_v2_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v2.py", "VEVOptionMMV2"),
+    "velvet_strat_v3":     ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetStratV3"),
+    "velvet_strat_v3_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetMMV3"),
+    "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -162,6 +169,10 @@ _R3_OPTIONS_DEPS_SLIM = [
     "prosperity/options/implied_vol.py",
     "prosperity/options/smile.py",
 ]
+_R3_OPTIONS_DEPS_BS_ONLY = [
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+]
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "option_mm_bs":       _R3_OPTIONS_DEPS,
     "velvet_delta_hedger": _R3_OPTIONS_DEPS,
@@ -170,6 +181,8 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "anchor_adaptive":    ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
     "gamma_scalp":        _R3_OPTIONS_DEPS,
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
+    "velvet_strat_v3_mm":  _R3_OPTIONS_DEPS_BS_ONLY,
+    "velvet_strat_v3_opt": _R3_OPTIONS_DEPS_BS_ONLY,
 }
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).

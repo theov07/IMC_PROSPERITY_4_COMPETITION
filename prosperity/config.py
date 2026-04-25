@@ -3193,6 +3193,95 @@ MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
 }
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  TIBO ROUND 3 — velvet_strat series
+# ══════════════════════════════════════════════════════════════════════════════
+
+# v1: pure passive MM on VELVETFRUIT_EXTRACT only
+# Grid-tuned: maker_size_base_pct=0.30, pct_kept_for_takers=0.15 (+20,127 over 3 days)
+MEMBER_OVERRIDES["tibo_velvet_v1"] = {
+    3: {
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT",
+            strategy="velvet_strat",
+            position_limit=200,
+            params=dict(
+                maker_size_base_pct=0.30,       # grid winner: 60 units base per side
+                pct_kept_for_takers=0.15,       # hard stop at 85% of limit
+                mid_smooth_window=50,
+                mid_smooth_half_life=20,
+                take_edge=999.0,                # takers off
+                gap_trigger_min=0,              # gap exploit off
+                gap_trigger_max_vol_pct=0.10,
+                gap_trigger_confirm_ticks=2,
+                OB_cleared_shift=10,
+                ts_increment=100,
+                last_ts_value=999900,
+                log_flush_ts=1000,
+            ),
+        ),
+    },
+}
+
+
+# ── v3: z-score signal-gated VEV option accumulation ─────────────────────────
+# ask_adapt mode: tighten ask when VELVETFRUIT expensive, widen when cheap
+# 3-day backtest: +48,922
+_VEV_OPT_V3_BASE = dict(
+    tte_days_initial=5.0,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    ticks_per_day=10000,
+    ts_increment=100,
+    timestamp_units_per_day=1_000_000,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    delta_sigma=0.022,
+    min_quote_price=2.0,
+    log_flush_ts=1000,
+    last_ts_value=999900,
+    zscore_window=500,
+    zscore_threshold=1.0,
+    zscore_bid_scale=2.0,
+    zscore_bid_max=4.0,
+    zscore_exec_mode="ask_adapt",
+    ask_offset_neutral=10,
+    ask_offset_sell=1,
+)
+
+_VELVET_V3_MM_PARAMS = dict(
+    maker_size_base_pct=0.30,
+    pct_kept_for_takers=0.15,
+    mid_smooth_window=50,
+    mid_smooth_half_life=20,
+    use_delta_hedge=True,
+    zscore_window=500,
+    ts_increment=100,
+    last_ts_value=999900,
+    log_flush_ts=1000,
+)
+
+MEMBER_OVERRIDES["tibo_velvet_v3"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        # VEV options run BEFORE VELVETFRUIT so delta is published first
+        "VEV_4000": ProductConfig(symbol="VEV_4000", strategy="velvet_strat_v3_opt", position_limit=300,
+            params={**_VEV_OPT_V3_BASE, "strike": 4000.0, "maker_size_bid": 20, "maker_size_ask": 20,
+                    "ask_offset_neutral": 1, "ask_offset_sell": 1}),  # deep ITM: always symmetric
+        "VEV_5200": ProductConfig(symbol="VEV_5200", strategy="velvet_strat_v3_opt", position_limit=300,
+            params={**_VEV_OPT_V3_BASE, "strike": 5200.0, "maker_size_bid": 20, "maker_size_ask": 5}),
+        "VEV_5300": ProductConfig(symbol="VEV_5300", strategy="velvet_strat_v3_opt", position_limit=300,
+            params={**_VEV_OPT_V3_BASE, "strike": 5300.0, "maker_size_bid": 20, "maker_size_ask": 5}),
+        "VEV_5400": ProductConfig(symbol="VEV_5400", strategy="velvet_strat_v3_opt", position_limit=300,
+            params={**_VEV_OPT_V3_BASE, "strike": 5400.0, "maker_size_bid": 20, "maker_size_ask": 5,
+                    "prevent_crossing": True}),  # 1-tick spread: stay passive
+        "VEV_4500": None, "VEV_5000": None, "VEV_5100": None,
+        "VEV_5500": None, "VEV_6000": None, "VEV_6500": None,
+        # VELVETFRUIT MM runs LAST (reads vev_total_delta from shared)
+        "VELVETFRUIT_EXTRACT": ProductConfig(symbol="VELVETFRUIT_EXTRACT", strategy="velvet_strat_v3_mm",
+            position_limit=200, params=_VELVET_V3_MM_PARAMS),
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))

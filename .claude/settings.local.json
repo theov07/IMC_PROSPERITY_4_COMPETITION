@@ -105,7 +105,23 @@
       "Bash(python3 backtest.py --strategy submissions.theo_vrai_strat --round 1 --days -2 -1 0 --match-trades realistic)",
       "Bash(python backtest.py --strategy theo_best_generalized --round 1 --days -2 --match-trades realistic)",
       "Bash(python -c \"from prosperity.tooling.dashboard import build_backtest_figure, build_imc_figure; print\\('OK'\\)\")",
-      "Bash(python -c \"from prosperity.strategies.metal_winner.mm_first_v2 import MMFirstStrategy; print\\('OK'\\)\")"
+      "Bash(python -c \"from prosperity.strategies.metal_winner.mm_first_v2 import MMFirstStrategy; print\\('OK'\\)\")",
+      "Bash(python backtest.py --strategy tibo_velvet_v1 --round 3 --days 0 1 2 --match-trades realistic --display-product VELVETFRUIT_EXTRACT)",
+      "Bash(cp submissions/tibo_velvet_v1.py /tmp/_tmp_sub.py)",
+      "Bash(python -c ' *)",
+      "Bash(python backtest.py --strategy tmp_velvet --round 3 --days 0 1 2 --match-trades realistic --display-product VELVETFRUIT_EXTRACT)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy tibo_velvet_v1 --round 3 --days 1 --execution-rule realistic --param VELVETFRUIT_EXTRACT.maker_size_base_pct=0.15,0.20,0.25,0.30 --param VELVETFRUIT_EXTRACT.pct_kept_for_takers=0.05,0.10,0.15 --top 5 --rank-by pnl)",
+      "Bash(python backtest.py --strategy tibo_velvet_v1b --round 3 --days 0 1 2 --match-trades realistic --display-product VELVETFRUIT_EXTRACT)",
+      "Bash(python backtest.py --strategy tibo_velvet_v1c --round 3 --days 0 1 2 --match-trades realistic --display-product VELVETFRUIT_EXTRACT)",
+      "Bash(python backtest.py --strategy tibo_velvet_v2 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v1b --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v3_none --round 3 --days 1 --match-trades realistic)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy tibo_velvet_v3_bid --round 3 --days 1 --execution-rule realistic --param VEV_5300.zscore_threshold=0.3,0.5,0.8,1.0,1.2,1.5 --top 6 --rank-by pnl)",
+      "Bash(python backtest.py --strategy tibo_velvet_v3_none --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v3_bid --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v3_ask --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy tibo_velvet_v3_ask --round 3 --days 1 --execution-rule realistic --param VEV_5300.zscore_threshold=0.3,0.5,0.8,1.2,1.5,2.0 --top 6 --rank-by pnl)",
+      "Bash(python scripts/export_submission.py --member tibo_velvet_v3 --round 3)"
     ]
   }
 }
