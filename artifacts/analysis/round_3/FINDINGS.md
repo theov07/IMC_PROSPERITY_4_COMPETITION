@@ -62,6 +62,66 @@ passive fills become toxic, using own fill side, recent mid move, spread/depth,
 and post-fill markout. That is closer to the live failure mode than a pure
 price z-score.
 
+## LATEST - DD% and per-asset risk review (Codex 2026-04-26)
+
+Metric used here: `DD% = max_drawdown / final PnL`. This is not a true capital
+drawdown, because IMC has no fixed initial capital in the backtest, but it is a
+better comparison than raw DD when strategy sizes differ.
+
+HYDRO conclusion:
+
+| Strategy | PnL | DD | DD% | Read |
+| --- | ---: | ---: | ---: | --- |
+| `r3_hydro_anchor_max3d` | +86,838 | 18,976 | 21.9% | Best clean max-PnL HYDRO |
+| `r3_hydro_anchor_zgate_10` | +85,784 | 19,234 | 22.4% | Worse PnL and worse DD% |
+| `r3_hydro_anchor_zgate_05` | +85,174 | 19,343 | 22.7% | Worse PnL and worse DD% |
+| `r3_hydro_anchor_zgate_taker_15` | +72,374 | 19,968 | 27.6% | Worse |
+| `r3_hydrogel_smart` | +28,856 | 2,652 | 9.2% | Best clean risk-adjusted fallback |
+
+So for Leo's current objective, keep `r3_hydro_anchor_max3d`: the DD is larger
+in absolute terms, but the relative DD is acceptable for a 3x higher PnL. It is
+not the safest HYDRO, but it is still the correct clean max-backtest lock.
+
+VELVET/options high-PnL comparison:
+
+| Strategy | PnL | DD | DD% | Read |
+| --- | ---: | ---: | ---: | --- |
+| `v12_r2velvet` | +94,614 | 60,508 | 64.0% | Max stretch, high DD |
+| `v25_r2velvet_zskip_loose` | +93,556 | 57,070 | 61.0% | High PnL, still high DD |
+| `v35_per_strike_z_rev` | +93,442 | 53,652 | 57.4% | Near-v25 PnL with better DD% |
+| `v24_r2velvet_zskip` | +91,560 | 50,200 | 54.8% | Current balanced candidate |
+| `v33_per_strike_z` | +90,868 | 48,778 | 53.7% | Slightly better DD% |
+| `v34_combined` | +88,658 | 46,889 | 52.9% | Best exported high-PnL DD% |
+
+Per-asset read on `v34_combined`:
+
+| Asset | PnL | DD | DD% | Read |
+| --- | ---: | ---: | ---: | --- |
+| `VELVETFRUIT_EXTRACT` | +27,518 | 10,138 | 36.8% | Good core |
+| `VEV_4000` | +8,810 | 1,778 | 20.2% | Excellent risk/PnL |
+| `VEV_4500` | +15,254 | 11,888 | 77.9% | Profitable but volatile |
+| `VEV_5000` | +7,326 | 6,246 | 85.2% | Profitable but volatile |
+| `VEV_5100` | +19,564 | 18,600 | 95.1% | Big PnL, big DD |
+| `VEV_5200` | +7,172 | 12,450 | 173.6% | Bad DD% |
+| `VEV_5300` | +2,686 | 8,250 | 307.1% | Bad DD% |
+| `VEV_5400` | +330 | 810 | 245.7% | Noise / not worth risk |
+
+Curve-recomposition sanity check from per-product MTM curves:
+
+| Basket from `v34` | PnL | DD | DD% | Note |
+| --- | ---: | ---: | ---: | --- |
+| All active legs | +88,658 | 46,889 | 52.9% | Stored backtest |
+| No `5300/5400` | +85,643 | 43,742 | 51.1% | Better DD%, -3.0k PnL |
+| No `5200/5300/5400` | +78,472 | 38,374 | 48.9% | Much cleaner, -10.2k PnL |
+| `VELVET + VEV_4000` only | +36,328 | 10,242 | 28.2% | Very clean core, lower PnL |
+
+Potential miss: `v35_per_strike_z_rev` deserves attention as a max-PnL
+VELVET/options candidate because it nearly matches `v25` PnL while improving
+DD%. For risk-adjusted VELVET/options, `v34_combined` remains the best exported
+candidate, but a new explicit backtest without `VEV_5200/5300/5400` could be a
+useful cleaner variant. The recomposition above is indicative; if used for
+upload it should be built and backtested as a real config.
+
 Updated: 2026-04-25
 
 ---
@@ -125,6 +185,44 @@ Updated: 2026-04-25
 | 26 | Multi-strike vega-weighted basket | low — not designed yet |
 | 27 | Time-of-session adaptive params | very low — live = 1k ticks |
 | 28 | call_gamma weight target_qty | very low — IMC limit 300 already hit |
+| 29 | Greeks split (long ATM gamma + short OTM theta) | medium — premium OTM tiny |
+
+### NEW INSIGHTS — per-asset DD analysis (2026-04-26)
+
+User a demandé : "DD en % et per-asset, on rate des trucs ?" — YES on en ratait.
+
+Built `scripts/analyze_per_asset_dd.py` qui reconstruit l'equity curve par produit
+depuis les fills + price data, calcule DD per-asset en absolu ET en % de capital
+déployé (max_pos × avg_price).
+
+**Per-asset risk-adjusted ranking (across all v24-v35 variants)** :
+
+| Strike | PnL%cap | DD%cap | PnL/DD ratio | Verdict |
+|---|---:|---:|---:|---|
+| **VEV_4000** | **+17.8%** | **3.8%** | **4.69** | ★ Best risk-adj (option_mm_bs penny-improve) |
+| VELVET | +1.56% | 0.99% | 1.58 | Solid (R2 anchor MM) |
+| VEV_4500 | +6.78% | 9.15% | 0.74 | médiocre |
+| VEV_5000 | +18.07% | 25.84% | 0.70 | médiocre |
+| VEV_5100 | +26.44% | 37.17% | 0.71 | acceptable |
+| VEV_5200 | +33.23% | 45.86% | 0.72 | limite |
+| **VEV_5300** | +27.85% | **66.15%** | **0.42** | ⚠️ **DRAG** |
+| **VEV_5400** | +22.75% | **76.04%** | **0.30** | ❌ **TERRIBLE** |
+
+**Hidden findings hidden by aggregate** :
+1. **VEV_5400 fait +330 PnL** (seems neutral) **mais 76% DD** — drag énorme. À DROP.
+2. **VEV_5300 ratio 0.42** — drag aussi. Sous-performe le 4500/5100/5200.
+3. **VEV_4000 best risk-adj de TOUTE la stack** (4.69). On underweight peut-être.
+
+**Variant deltas (où ils diffèrent per-asset)** :
+- v32/v34 IV gate sur VEV_5000 : -4k PnL pour -6k DD = ratio swap +0.66 → IV gate utile sur 5000
+- v33/v34 z>0.3 sur VEV_4500 : -2k PnL pour -4k DD = ratio swap +0.52 → z=0.5 reste optimal
+- v35 z>1.0 sur VEV_4500 : +5.5k PnL pour +9.8k DD = ratio swap 0.57 worse
+
+**Tests follow-up running** :
+- v38: drop VEV_5300 + VEV_5400 (drop both drag strikes)
+- v39: drop VEV_5400 only (keep 5300 with looser z + IV gate)
+
+Si v38 garde +85k+ PnL avec DD significativement réduit, c'est le nouveau leader.
 
 ### À TESTER ENCORE (idées non couvertes)
 

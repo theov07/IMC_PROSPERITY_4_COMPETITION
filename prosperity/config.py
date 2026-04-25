@@ -5483,6 +5483,106 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v35_per_strike_z_rev"] = {
 }
 
 
+# v40: v24 base + VEV_4000 BIG size boost (best risk-adj 4.69, underweighted)
+# Try maker_size 40 → 80 to see if more flow available
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v40_4000_boost"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 80},  # 2x boost
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v41: combo BEST = drop VEV_5400 + VEV_4000 size boost + IV gate + 5300 z>0.8
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v41_combo_best"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 80},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_with_iv_gate(z_skip=0.8),
+        ),
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},  # drop 5400
+    },
+}
+
+
+# v38: drop VEV_5300/5400 (per-asset analysis: ratio 0.42/0.30 = drag).
+# Keep IV gate + standard z>0.5 on remaining gamma cluster.
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v38_drop_bad"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # Gamma cluster on 4500-5200 (drop 5300!)
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        # DROP 5300 and 5400 (poor risk-adjusted ratios)
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v39: drop only VEV_5400 (keep 5300 — ratio 0.42 still adds some PnL)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v39_drop_5400_only"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        # Keep 5300 with looser z (0.8) + IV gate
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_with_iv_gate(z_skip=0.8),
+        ),
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},
+    },
+}
+
+
 # v37: BEST OF ALL — IV gate + 5300 z>0.8 (only param tweak that worked) + others stay 0.5
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v37_best_combo"] = {
     3: {
