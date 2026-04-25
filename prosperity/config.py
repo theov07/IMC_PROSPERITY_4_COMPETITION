@@ -5305,6 +5305,108 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v22_z_sell_aggro"] = {
 }
 
 
+# v23_vega_pair: vega-neutral pair on K=5100 + K=5300 (similar vegas, opposite IV bias)
+# rest of stack = v11 unchanged
+_R3_VEGA_PAIR_BASE = dict(
+    strategy="vega_neutral_pair_mm",
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    prior_vol=0.0125,
+    base_size=50,
+    maker_size=10,
+    exit_size=10,
+    iv_gap_threshold=0.0005,    # 5 bps IV (per-day) gap to enter
+    exit_threshold=0.0001,      # 1 bp gap to exit
+    tte_days_initial=5.0,
+    timestamp_units_per_day=1000000,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+# v24_r2velvet_zskip: v12 (R2 anchor MM on VELVET) + v20's z-skip on gamma cluster
+# Goal: keep VELVET +27k drift gain + reduce DD via z-gated gamma entries
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v24_r2velvet_zskip"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        # R2 anchor MM on VELVET (proven Tibo strat — +27k historical)
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # gamma_scalp_zgated on 4500-5300 with skip when z > 0.5 (v20's tuning)
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v25_r2velvet_zskip_loose: same but z>1.0 (less aggressive gate, keep more PnL)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v25_r2velvet_zskip_loose"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=1.0),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v23_vega_pair"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # gamma cluster on 4500 + 5000 + 5200 (skip 5100/5300 — used by pair below)
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=300, entry_size=30, passive_bid_size=24),
+            )
+            for strike in [4500, 5000, 5200]
+        },
+        # Vega-neutral pair: K=5100 partners with K=5300
+        "VEV_5100": _override(
+            ROUND_3["VEV_5100"], position_limit=300, strike=5100,
+            **{**_R3_VEGA_PAIR_BASE, "partner_strike": 5300},
+        ),
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **{**_R3_VEGA_PAIR_BASE, "partner_strike": 5100},
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
 # Dynamic skew detector base params
 _R3_SKEW_DYNAMIC_BASE = dict(
     strategy="option_skew_dynamic_mm",

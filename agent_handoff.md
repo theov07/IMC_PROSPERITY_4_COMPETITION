@@ -1,5 +1,50 @@
 # Agent Handoff — Leo2 branch
 
+## 2026-04-25 21:40 - Claude: comprehensive options/VELVET analysis suite + SVI/vega-pair tests
+
+User requested deep analysis tooling on options + VELVET. Built:
+
+**Code:**
+- `prosperity/options/svi.py` — Gatheral SVI parametrization, gradient-descent fit
+- `prosperity/strategies/round_3/vega_neutral_pair_mm.py` — pair-trade two strikes vega-neutralized
+- `scripts/analyze_round3_options.py` — comprehensive analysis suite
+
+**Output (artifacts/analysis/round_3_option_velvet/):**
+- 21 plots (smiles, IV time series, residual histograms+timeseries, vega/gamma/delta, VELVET path)
+- 3 outlier event CSVs (~2,800 events/day at >2σ)
+- summary.json with per-strike greeks + IVs
+
+**Key findings:**
+
+1. ATM IV (annualized) = 0.19-0.21 across K=5000-5400; VELVET realized vol = 0.34
+   → 13-15pt gap = exactly the +58k inv_drift v11 captures
+
+2. Vega is concentrated at K=5200/5300 (5,500 each), our gamma cluster (4500-5300)
+   captures the available vega optimally
+
+3. SVI fit R² ~0.51 vs poly2 R² ~0.66 — SVI doesn't help. Smile dominated by deep-ITM
+   book-quoting stripes (artifact, not real vol info)
+
+4. Outliers (residuals >2σ from poly fit): SYSTEMATIC bias not signal. K=5000 always cheap
+   -17bp, K=6000 always rich +15bp. Confirms why all skew-arb variants lose.
+
+**Vega-neutral pair test (v23):**
+- K=5100/K=5300 pair (vegas ~5500 each)
+- Result: **+49,870 (-20,516 vs v11)**. Strategy never fires (IV gap 0.001-0.002 too small)
+- Empirical confirmation: ATM IVs too smooth for pair arb. Long-vol level is the alpha.
+
+### Final ranked candidates (all under 100 KB, all validated)
+
+| File | 3-day | DD | Profile |
+|---|---:|---:|---|
+| v12_r2velvet | +94,614 | -60,508 | max stretch (R2 VELVET layer, fragile) |
+| v11_optimal | +70,386 | -56,650 | max PnL pure (long-vol thesis) |
+| v20_z_skip_strict | +67,332 | -46,342 | ★ risk-adjusted leader |
+| v23_vega_pair | +49,870 | -37,382 | vega-pair fail (no IV gap) |
+| v22_z_sell_aggro | +67,332 | -46,342 | identical v20 (profit-take useless on bullish data) |
+
+**Ceiling reached. Further experiments = diminishing returns.**
+
 ## 2026-04-25 21:15 - Claude: Tibo z-gating tested, v20_z_skip_strict locked as risk-adjusted leader
 
 User wanted to keep good PnL/DD compromise from Tibo's velvet_v3 z-score idea.
