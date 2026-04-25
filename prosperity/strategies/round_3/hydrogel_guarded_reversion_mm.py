@@ -75,6 +75,22 @@ class HydrogelGuardedReversionMMStrategy(BaseStrategy):
             direction_score=direction_score,
             p=p,
         )
+        exhaustion_side = self._exhaustion_side(
+            state=state,
+            position=position,
+            direction_score=direction_score,
+            hydro_mom_1000=hydro_mom_1000,
+            hydro_mom_10000=hydro_mom_10000,
+            hydro_mom_20000=hydro_mom_20000,
+            memory=memory,
+            p=p,
+        )
+        if exhaustion_side > 0:
+            ask_size = 0
+            mode = "exhaustion_buy_armed"
+        elif exhaustion_side < 0:
+            bid_size = 0
+            mode = "exhaustion_sell_armed"
 
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
@@ -300,40 +316,75 @@ class HydrogelGuardedReversionMMStrategy(BaseStrategy):
         sell_cap: int,
         p: Dict[str, Any],
     ) -> Optional[Order]:
-        if not p["enable_exhaustion_taker"]:
-            return None
-        if hydro_mom_10000 is None or hydro_mom_20000 is None or hydro_mom_1000 is None:
+        signal = self._exhaustion_side(
+            state=state,
+            position=position,
+            direction_score=direction_score,
+            hydro_mom_1000=hydro_mom_1000,
+            hydro_mom_10000=hydro_mom_10000,
+            hydro_mom_20000=hydro_mom_20000,
+            memory=memory,
+            p=p,
+        )
+        if signal == 0:
             return None
         ts = int(state.timestamp)
-        last_ts = int(memory.get("_hgr_last_exhaustion_take_ts", -10**9))
-        if ts - last_ts < p["exhaustion_cooldown_ts"]:
-            return None
-
-        buy_signal = (
-            (hydro_mom_10000 <= -p["exhaustion_fast_ticks"] or hydro_mom_20000 <= -p["exhaustion_slow_ticks"])
-            and hydro_mom_1000 >= -p["exhaustion_max_recent_against"]
-            and direction_score >= p["exhaustion_buy_min_score"]
-        )
-        sell_signal = (
-            (hydro_mom_10000 >= p["exhaustion_fast_ticks"] or hydro_mom_20000 >= p["exhaustion_slow_ticks"])
-            and hydro_mom_1000 <= p["exhaustion_max_recent_against"]
-            and direction_score <= -p["exhaustion_sell_min_score"]
-        )
 
         max_pos = min(p["exhaustion_max_position"], self.position_limit())
-        if buy_signal and position < max_pos and buy_cap > 0:
+        if signal > 0 and position < max_pos and buy_cap > 0:
             price, available = self._best_take(order_depth.sell_orders, is_buy=True)
             qty = min(p["exhaustion_size"], buy_cap, max_pos - position, available)
             if price is not None and qty > 0:
                 memory["_hgr_last_exhaustion_take_ts"] = ts
                 return Order(self.product, price, qty)
-        if sell_signal and position > -max_pos and sell_cap > 0:
+        if signal < 0 and position > -max_pos and sell_cap > 0:
             price, available = self._best_take(order_depth.buy_orders, is_buy=False)
             qty = min(p["exhaustion_size"], sell_cap, max_pos + position, available)
             if price is not None and qty > 0:
                 memory["_hgr_last_exhaustion_take_ts"] = ts
                 return Order(self.product, price, -qty)
         return None
+
+    def _exhaustion_side(
+        self,
+        *,
+        state: TradingState,
+        position: int,
+        direction_score: float,
+        hydro_mom_1000: Optional[float],
+        hydro_mom_10000: Optional[float],
+        hydro_mom_20000: Optional[float],
+        memory: Dict[str, Any],
+        p: Dict[str, Any],
+    ) -> int:
+        if not p["enable_exhaustion_taker"]:
+            return 0
+        if hydro_mom_10000 is None or hydro_mom_20000 is None or hydro_mom_1000 is None:
+            return 0
+        ts = int(state.timestamp)
+        last_ts = int(memory.get("_hgr_last_exhaustion_take_ts", -10**9))
+        if ts - last_ts < p["exhaustion_cooldown_ts"]:
+            return 0
+
+        max_pos = min(p["exhaustion_max_position"], self.position_limit())
+        buy_signal = (
+            (hydro_mom_10000 <= -p["exhaustion_fast_ticks"] or hydro_mom_20000 <= -p["exhaustion_slow_ticks"])
+            and hydro_mom_1000 >= -p["exhaustion_max_recent_against"]
+            and direction_score >= p["exhaustion_buy_min_score"]
+            and position < max_pos
+            and self.buy_capacity(position) > 0
+        )
+        if buy_signal:
+            return 1
+
+        sell_signal = (
+            (hydro_mom_10000 >= p["exhaustion_fast_ticks"] or hydro_mom_20000 >= p["exhaustion_slow_ticks"])
+            and hydro_mom_1000 <= p["exhaustion_max_recent_against"]
+            and direction_score <= -p["exhaustion_sell_min_score"]
+            and position > -max_pos
+            and self.sell_capacity(position) > 0
+        )
+        return -1 if sell_signal else 0
 
     @staticmethod
     def _best_take(side_book: Dict[int, int], *, is_buy: bool) -> Tuple[Optional[int], int]:
@@ -489,6 +540,8 @@ class HydrogelGuardedReversionMMStrategy(BaseStrategy):
             "hard_bear": 4,
             "wrong_short": 5,
             "wrong_long": 6,
+            "exhaustion_buy_armed": 7,
+            "exhaustion_sell_armed": 8,
         }.get(mode, -1)
 
     def _read_params(self) -> Dict[str, Any]:

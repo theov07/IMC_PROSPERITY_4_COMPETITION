@@ -3809,6 +3809,151 @@ _R3_VELVET_OPT_OPTION_PARAMS = dict(
     use_smile=True,
 )
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 COMBINED — HYDRO (anchor+oracle hybrid TUNED) + VELVET + options
+# Combines best HYDRO strategy (#3 hybrid +106k 3-day) with best VELVET+options
+# (#5 velvet_options_alpha +13k 3-day). Goal: ~+120k 3-day total.
+# ──────────────────────────────────────────────────────────────────────────────
+# MEDIUM combined variant: anchor_max3d HYDRO (no oracle) + velvet+options
+MEMBER_OVERRIDES["r3_combined_anchor_options"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDROGEL_V4_F5,
+            quote_trace_enabled=True,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **_R3_VELVET_OPT_OPTION_PARAMS,
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# SLIM combined variant: smart HYDRO + velvet+options (under 100 KB)
+MEMBER_OVERRIDES["r3_combined_smart_options"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_smart_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            extreme_dev_threshold=22.0,
+            reversal_persist_ticks=3,
+            min_pos_for_reversal_take=8,
+            reversal_take_base=3,
+            reversal_take_max=12,
+            reversal_take_scale_div=4.0,
+            reversal_cooldown_ts=1000,
+            session_drift_bias=4,
+            session_bias_strong_until_ts=100_000,
+            session_bias_fade_until_ts=300_000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **_R3_VELVET_OPT_OPTION_PARAMS,
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_combined_hybrid_options"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_day2_oracle_anchor",
+            **_R3_HYDRO_SELECTOR_COMMON_SLIM,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **_R3_VELVET_OPT_OPTION_PARAMS,
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_velvet_options_alpha"] = {
     3: {
         "HYDROGEL_PACK": None,           # NO HYDRO — focus on options alpha
@@ -3840,6 +3985,1505 @@ MEMBER_OVERRIDES["r3_velvet_options_alpha"] = {
             for strike in [4500, 5000, 5100, 5200]
         },
         # VEV_5300+: DISABLE — adverse selected (40-43% adverse, negative markout)
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_alpha_v3 — same as v2 (alpha) but with selective taker on
+# VEV_4500 ONLY (alpha analysis: rich_edge ≤ -2.0 → +3.6 markout, 84% win
+# over 1000 ticks). All other strikes keep takers OFF (passive only).
+# Also bumps inv_bias_per_unit 0.02 → 0.04 to attack the -4k inventory drift.
+_R3_VELVET_OPT_OPTION_PARAMS_V3 = {
+    **_R3_VELVET_OPT_OPTION_PARAMS,
+    "inv_bias_per_unit": 0.04,
+}
+MEMBER_OVERRIDES["r3_velvet_options_alpha_v3"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS_V3, "maker_size": 40},
+        ),
+        # VEV_4500: enable takers (selective alpha — rich_edge_le_-2 has 84% win)
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"],
+            position_limit=300,
+            strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True,
+                "take_edge": 2.0,         # match alpha-scan threshold
+                "take_size": 20,          # cap per-tick taker size
+                "maker_size": 28,         # boost passive too
+            },
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_alpha_v4_sizeup"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS_V3, "maker_size": 64},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"],
+            position_limit=300,
+            strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True,
+                "take_edge": 2.0,
+                "take_size": 20,
+                "maker_size": 28,
+            },
+        ),
+        "VEV_5200": _override(
+            ROUND_3["VEV_5200"],
+            position_limit=300,
+            strike=5200,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS_V3, "maker_size": 48},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+            )
+            for strike in [5000, 5100]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_alpha_v4_high_k — fixes strike selection based on actual
+# trade flow: VEV_4500/5000/5100 have ~0 market trades, VEV_5300/5400/5500
+# have 37-94 trades/day. Switches to the active set with use_smile=False to
+# avoid the smile-overshoot adverse selection that previously disabled them.
+_R3_VELVET_OPT_HIGH_K = {
+    **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+    "use_smile": False,
+    "maker_size": 10,
+    "maker_edge": 1,
+    "min_quote_price": 1.0,
+}
+MEMBER_OVERRIDES["r3_velvet_options_alpha_v4_high_k"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS_V3, "maker_size": 40},
+        ),
+        "VEV_5200": _override(
+            ROUND_3["VEV_5200"],
+            position_limit=300,
+            strike=5200,
+            **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+        ),
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"],
+            position_limit=300,
+            strike=5300,
+            **_R3_VELVET_OPT_HIGH_K,
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"],
+            position_limit=300,
+            strike=5400,
+            **_R3_VELVET_OPT_HIGH_K,
+        ),
+        "VEV_5500": _override(
+            ROUND_3["VEV_5500"],
+            position_limit=300,
+            strike=5500,
+            **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [4500, 5000, 5100, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_alpha_v5_boost — same shape as v4_high_k but boosts
+# VEV_5300 maker_size 10 → 18 (it produced +2,787 from 116 trades, max_pos
+# 150/300 — capacity for more flow). Smaller boost on 5400 (12), keep 5500
+# at break-even threshold (8).
+MEMBER_OVERRIDES["r3_velvet_options_alpha_v5_boost"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS_V3, "maker_size": 40},
+        ),
+        "VEV_5200": _override(
+            ROUND_3["VEV_5200"],
+            position_limit=300,
+            strike=5200,
+            **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+        ),
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"],
+            position_limit=300,
+            strike=5300,
+            **{**_R3_VELVET_OPT_HIGH_K, "maker_size": 18},
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"],
+            position_limit=300,
+            strike=5400,
+            **{**_R3_VELVET_OPT_HIGH_K, "maker_size": 12},
+        ),
+        "VEV_5500": _override(
+            ROUND_3["VEV_5500"],
+            position_limit=300,
+            strike=5500,
+            **{**_R3_VELVET_OPT_HIGH_K, "maker_size": 8},
+        ),
+        **{f"VEV_{k}": None for k in [4500, 5000, 5100, 6000, 6500]},
+    },
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLASSIC MM BASELINES (velvet + options only, HYDRO disabled)
+# Used to anchor the alpha-comparison: how much does each piece of cleverness
+# contribute on top of "what someone would write on day one of round 3"?
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Naive MM baseline — naive_tight_mm on every product, no Black-Scholes,
+# no smile, no inventory bias, no taker. Just: post penny-improved bid/ask.
+MEMBER_OVERRIDES["r3_velvet_options_naive_mm"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=80,
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{
+            f"VEV_{k}": ProductConfig(
+                symbol=f"VEV_{k}",
+                strategy="naive_tight_mm",
+                position_limit=300,
+                params=dict(
+                    maker_size=30,
+                    tighten_ticks=1,
+                    log_flush_ts=1000,
+                    ts_increment=100,
+                    last_ts_value=999900,
+                ),
+            )
+            for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+        },
+    },
+}
+
+
+# BS baseline — option_mm_bs with EVERYTHING disabled: no smile, no taker,
+# no inventory bias. Just: penny-improve around BS-fair-implied EWMA mid.
+# All 10 strikes enabled. This is what you'd write after reading the docs
+# of option_mm_bs and toggling the "safest" defaults.
+_R3_VELVET_OPT_BASELINE_BS = dict(
+    strategy="option_mm_bs",
+    enable_takers=False,
+    inv_bias_per_unit=0.0,            # OFF
+    iv_ewma_alpha=0.3,
+    log_flush_ts=1000,
+    maker_edge=2,
+    maker_size=20,
+    min_quote_price=2.0,
+    penny_improve_around_mkt=True,
+    prior_vol=0.0125,
+    sigma_cap=0.10,
+    sigma_floor=0.005,
+    take_edge=3.0,
+    take_size=40,
+    timestamp_units_per_day=1000000,
+    ts_increment=100,
+    last_ts_value=999900,
+    tte_days_initial=5.0,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    use_smile=False,                  # OFF — no smile
+)
+MEMBER_OVERRIDES["r3_velvet_options_baseline_bs"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=80,
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{
+            f"VEV_{k}": _override(
+                ROUND_3[f"VEV_{k}"],
+                position_limit=300,
+                strike=k,
+                **_R3_VELVET_OPT_BASELINE_BS,
+            )
+            for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+        },
+    },
+}
+
+
+# r3_combined_hybrid_v4_high_k — HYDRO oracle+anchor hybrid (best 3d HYDRO)
+# combined with v4_high_k velvet/options (active strikes 5300/5400/5500
+# instead of dead 4500/5000/5100). Best of both worlds.
+MEMBER_OVERRIDES["r3_combined_hybrid_v4_high_k"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_day2_oracle_anchor",
+            **_R3_HYDRO_SELECTOR_COMMON_SLIM,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=40,
+            maker_size=20,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS_V3, "maker_size": 40},
+        ),
+        "VEV_5200": _override(
+            ROUND_3["VEV_5200"],
+            position_limit=300,
+            strike=5200,
+            **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+        ),
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"],
+            position_limit=300,
+            strike=5300,
+            **_R3_VELVET_OPT_HIGH_K,
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"],
+            position_limit=300,
+            strike=5400,
+            **_R3_VELVET_OPT_HIGH_K,
+        ),
+        "VEV_5500": _override(
+            ROUND_3["VEV_5500"],
+            position_limit=300,
+            strike=5500,
+            **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [4500, 5000, 5100, 6000, 6500]},
+    },
+}
+
+
+# R3 VELVET/options research variants (HYDRO disabled).
+# These are intentionally separated so live tests can isolate the source of PnL.
+_R3_VELVET_SMALL_MM = dict(
+    strategy="naive_tight_mm",
+    position_limit=40,
+    maker_size=20,
+    tighten_ticks=1,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+_R3_OPTION_SKEW_SIGNAL_BASE = dict(
+    strategy="option_skew_signal_mm",
+    tte_days_initial=5.0,
+    ticks_per_day=10000,
+    timestamp_units_per_day=1000000,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    strike_prefix="VEV_",
+    smile_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500],
+    prior_vol=0.0125,
+    sigma_floor=0.005,
+    sigma_cap=0.10,
+    min_quote_price=2.0,
+    maker_size=16,
+    neutral_size=0,
+    exit_size=10,
+    take_size=10,
+    enable_takers=False,
+    quote_neutral=False,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+MEMBER_OVERRIDES["r3_velvet_options_skew_signal"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_VELVET_SMALL_MM,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"],
+            position_limit=300,
+            strike=4500,
+            **{
+                **_R3_OPTION_SKEW_SIGNAL_BASE,
+                "entry_edge": 2.0,
+                "maker_size": 24,
+                "max_long": 20,
+                "max_short": 100,
+                "allow_new_shorts": True,
+            },
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **{
+                    **_R3_OPTION_SKEW_SIGNAL_BASE,
+                    "entry_edge": (2.0 if strike in [5000, 5100] else 5.0),
+                    "maker_size": 18,
+                    "max_long": 80,
+                    "max_short": 0,
+                    "allow_new_shorts": False,
+                },
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_skew_taker"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_VELVET_SMALL_MM,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"],
+            position_limit=300,
+            strike=4500,
+            **{
+                **_R3_OPTION_SKEW_SIGNAL_BASE,
+                "entry_edge": 2.0,
+                "take_edge": 2.0,
+                "maker_size": 8,
+                "take_size": 8,
+                "max_long": 10,
+                "max_short": 80,
+                "allow_new_shorts": True,
+                "enable_takers": True,
+            },
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **{
+                    **_R3_OPTION_SKEW_SIGNAL_BASE,
+                    "entry_edge": (2.0 if strike in [5000, 5100] else 5.0),
+                    "take_edge": (2.0 if strike in [5000, 5100] else 5.0),
+                    "maker_size": 8,
+                    "take_size": 8,
+                    "max_long": 60,
+                    "max_short": 0,
+                    "allow_new_shorts": False,
+                    "enable_takers": True,
+                },
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+_R3_VOL_HARVEST_OPTION_PARAMS = dict(
+    strategy="vol_harvest",
+    tte_days_initial=5.0,
+    ticks_per_day=10000,
+    timestamp_units_per_day=1000000,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    realized_vol_prior=0.0215,
+    entry_edge=1.0,
+    exit_edge=2.0,
+    target_position=50,
+    entry_size=8,
+    exit_size=16,
+    passive_bid_size=5,
+    post_passive=True,
+    min_quote_price=2.0,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+MEMBER_OVERRIDES["r3_velvet_options_vol_harvest"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_delta_hedger",
+            position_limit=200,
+            underlying_symbol="VELVETFRUIT_EXTRACT",
+            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500],
+            strike_prefix="VEV_",
+            tte_days_initial=5.0,
+            timestamp_units_per_day=1000000,
+            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+            target_delta=0.0,
+            hedge_taker_edge=25.0,
+            max_hedge_size=35,
+            passive_base_size=18,
+            passive_skew_per_delta=0.25,
+            quote_inside_book=True,
+            sigma_floor=0.005,
+            sigma_cap=0.10,
+            prior_vol=0.0215,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **_R3_VOL_HARVEST_OPTION_PARAMS,
+            )
+            for strike in [5000, 5100, 5200, 5300, 5400, 5500]
+        },
+        **{f"VEV_{k}": None for k in [4500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_vol_harvest_unhedged"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_VELVET_SMALL_MM,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **_R3_VOL_HARVEST_OPTION_PARAMS,
+            )
+            for strike in [5000, 5100, 5200, 5300, 5400, 5500]
+        },
+        **{f"VEV_{k}": None for k in [4500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_gamma_scalp"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_delta_hedger",
+            position_limit=200,
+            underlying_symbol="VELVETFRUIT_EXTRACT",
+            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500],
+            strike_prefix="VEV_",
+            tte_days_initial=5.0,
+            timestamp_units_per_day=1000000,
+            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+            target_delta=0.0,
+            hedge_taker_edge=10.0,
+            max_hedge_size=35,
+            passive_base_size=18,
+            passive_skew_per_delta=0.30,
+            quote_inside_book=True,
+            sigma_floor=0.005,
+            sigma_cap=0.10,
+            prior_vol=0.018,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                strategy="gamma_scalp",
+                position_limit=300,
+                strike=strike,
+                tte_days_initial=5.0,
+                ticks_per_day=10000,
+                timestamp_units_per_day=1000000,
+                historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+                implied_vol_prior=0.0125,
+                edge_ticks=0.0,
+                target_qty=60,
+                entry_size=8,
+                passive_bid_size=6,
+                unwind_tte_threshold=1.5,
+                min_quote_price=2.0,
+                underlying_symbol="VELVETFRUIT_EXTRACT",
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            )
+            for strike in [5000, 5100, 5200, 5300]
+        },
+        **{f"VEV_{k}": None for k in [4500, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_gamma_unhedged"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_VELVET_SMALL_MM,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                strategy="gamma_scalp",
+                position_limit=300,
+                strike=strike,
+                tte_days_initial=5.0,
+                ticks_per_day=10000,
+                timestamp_units_per_day=1000000,
+                historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+                implied_vol_prior=0.0125,
+                edge_ticks=0.0,
+                target_qty=60,
+                entry_size=8,
+                passive_bid_size=6,
+                unwind_tte_threshold=1.5,
+                min_quote_price=2.0,
+                underlying_symbol="VELVETFRUIT_EXTRACT",
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            )
+            for strike in [5000, 5100, 5200, 5300]
+        },
+        **{f"VEV_{k}": None for k in [4500, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_max3d_blend -- product-wise best-of for maximum 3-day
+# VELVET/options backtest PnL.  This intentionally combines independent legs:
+# VEV_4500 selective option_mm_bs, VEV_5000/5100/5200 unhedged gamma, and
+# VEV_5300/5400 high-k passive.  VEV_5500 is disabled because it was slightly
+# negative in the high-k baseline.
+MEMBER_OVERRIDES["r3_velvet_options_max3d_blend"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_VELVET_SMALL_MM,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=300,
+            strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"],
+            position_limit=300,
+            strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True,
+                "take_edge": 2.0,
+                "take_size": 20,
+                "maker_size": 28,
+            },
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                strategy="gamma_scalp",
+                position_limit=300,
+                strike=strike,
+                tte_days_initial=5.0,
+                ticks_per_day=10000,
+                timestamp_units_per_day=1000000,
+                historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+                implied_vol_prior=0.0125,
+                edge_ticks=0.0,
+                target_qty=60,
+                entry_size=8,
+                passive_bid_size=6,
+                unwind_tte_threshold=1.5,
+                min_quote_price=2.0,
+                underlying_symbol="VELVETFRUIT_EXTRACT",
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"],
+            position_limit=300,
+            strike=5300,
+            **_R3_VELVET_OPT_HIGH_K,
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"],
+            position_limit=300,
+            strike=5400,
+            **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# Shared gamma_scalp params (UNHEDGED — hedging burns -21k)
+def _gamma_scalp_params(target_qty: int, entry_size: int = 8, passive_bid_size: int = 6,
+                        edge_ticks: float = 0.0, min_q: float = 2.0):
+    return dict(
+        strategy="gamma_scalp",
+        tte_days_initial=5.0,
+        ticks_per_day=10000,
+        timestamp_units_per_day=1000000,
+        historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+        implied_vol_prior=0.0125,
+        edge_ticks=edge_ticks,
+        target_qty=target_qty,
+        entry_size=entry_size,
+        passive_bid_size=passive_bid_size,
+        unwind_tte_threshold=1.5,
+        min_quote_price=min_q,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+# r3_velvet_options_max3d_v2 — extends max3d_blend with:
+#   - gamma_scalp on VEV_5400 (was passive +330)
+#   - gamma_scalp on VEV_5500 (was disabled, has 81-94 trades/day)
+#   - target_qty raised 60→100 on VEV_5000/5100/5200 (capacity-uncapped)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v2"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True, "take_edge": 2.0, "take_size": 20, "maker_size": 28,
+            },
+        ),
+        # gamma cluster — bigger target
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=100, entry_size=10, passive_bid_size=8),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        # NEW — VEV_5300 keep no-smile passive (it beat gamma here +2787 vs +915)
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        # NEW — VEV_5400 try gamma_scalp (was passive +330)
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400,
+            **_gamma_scalp_params(target_qty=80, entry_size=8, passive_bid_size=6, min_q=2.0),
+        ),
+        # NEW — VEV_5500 try gamma_scalp (was disabled — 81-94 trades/day)
+        "VEV_5500": _override(
+            ROUND_3["VEV_5500"], position_limit=300, strike=5500,
+            **_gamma_scalp_params(target_qty=40, entry_size=5, passive_bid_size=4, min_q=1.0),
+        ),
+        **{f"VEV_{k}": None for k in [6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_max3d_v3 — adds skew TILT (option_skew_signal_mm with low
+# entry_edge + quote_neutral=True) on VEV_5300/5400 instead of no-smile passive.
+# This captures the leave-one-out smile residual as a size bias rather than as
+# a binary taker signal — the user's "informed-vs-OA" dichotomy.
+_R3_SKEW_TILT_BASE = dict(
+    strategy="option_skew_signal_mm",
+    tte_days_initial=5.0,
+    ticks_per_day=10000,
+    timestamp_units_per_day=1000000,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    strike_prefix="VEV_",
+    smile_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500],
+    prior_vol=0.0125,
+    sigma_floor=0.005,
+    sigma_cap=0.10,
+    min_quote_price=1.0,
+    entry_edge=1.0,                    # LOWER threshold — fire more often
+    enable_takers=False,
+    quote_neutral=True,                # <— always quote
+    neutral_size=8,                    # smaller in neutral
+    maker_size=16,                     # bigger when signal fires
+    exit_size=10,
+    take_size=10,
+    max_long=80,
+    max_short=40,
+    allow_new_shorts=True,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v3"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True, "take_edge": 2.0, "take_size": 20, "maker_size": 28,
+            },
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=60, entry_size=8, passive_bid_size=6),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        # NEW — skew tilt instead of no-smile passive
+        "VEV_5300": _override(ROUND_3["VEV_5300"], position_limit=300, strike=5300, **_R3_SKEW_TILT_BASE),
+        "VEV_5400": _override(ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_SKEW_TILT_BASE),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_max3d_v5_optimal — best-of after v2/v3/v4 ablation:
+#   - target_qty=100 on 5000/5100/5200 (the big +4.5k gain from v2)
+#   - keep no-smile passive on 5300/5400 (beats both gamma and skew_tilt)
+#   - VEV_5500 stays disabled (gamma loses, passive marginal-negative)
+# Expected: ~+28,300 (= v2 minus the gamma-5400 loss minus the gamma-5500 loss)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v5_optimal"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True, "take_edge": 2.0, "take_size": 20, "maker_size": 28,
+            },
+        ),
+        # gamma cluster — target_qty=100 is the v2 unlock
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=100, entry_size=10, passive_bid_size=8),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        # 5300 + 5400 — no-smile passive beats gamma_scalp here
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_max3d_v7_target200 / v8_target300 — keep pushing target_qty
+# until we find the inflection. v6@150 = +36,548 still capped at max_pos=150.
+def _v_with_target(target_qty: int):
+    return {
+        3: {
+            "HYDROGEL_PACK": None,
+            "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+            "VEV_4000": _override(
+                ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+                **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+            ),
+            "VEV_4500": _override(
+                ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+                **{
+                    **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                    "enable_takers": True, "take_edge": 2.0, "take_size": 20, "maker_size": 28,
+                },
+            ),
+            **{
+                f"VEV_{strike}": _override(
+                    ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                    **_gamma_scalp_params(
+                        target_qty=target_qty,
+                        entry_size=max(int(target_qty * 0.10), 10),
+                        passive_bid_size=max(int(target_qty * 0.08), 8),
+                    ),
+                )
+                for strike in [5000, 5100, 5200]
+            },
+            "VEV_5300": _override(ROUND_3["VEV_5300"], position_limit=300, strike=5300, **_R3_VELVET_OPT_HIGH_K),
+            "VEV_5400": _override(ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K),
+            **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+        },
+    }
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v7_target200"] = _v_with_target(200)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v8_target300"] = _v_with_target(300)
+
+
+# r3_velvet_options_max3d_v9_widegamma — extend gamma cluster to VEV_5300 too
+# (was no-smile passive +2,787; gamma at target=300 might unlock more)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v9_widegamma"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True, "take_edge": 2.0, "take_size": 20, "maker_size": 28,
+            },
+        ),
+        # Extend gamma cluster to 5300 too
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=300, entry_size=30, passive_bid_size=24),
+            )
+            for strike in [5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_max3d_v11_optimal — best of all variants:
+#   - gamma_scalp@target=300 on VEV_4500/5000/5100/5200/5300 (the +18k VEV_4500 unlock from v10)
+#   - VEV_5400 stays no-smile passive (gamma loses there in v10: -296 vs +330 passive)
+#   - VEV_4000 stays option_mm_bs default (smile, the +8.8k workhorse)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v11_optimal"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # gamma cluster — 4500 to 5300 at target=300
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=300, entry_size=30, passive_bid_size=24),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        # VEV_5400 stays no-smile passive (gamma fails here)
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Delta hedge variants on top of v11_optimal (the +70,386 leader). The default
+# velvet_delta_hedger burns -21k via aggressive taker hedges. These variants
+# damp the hedger to passive-only / low-frequency to keep the gamma PnL while
+# reducing the -56k max drawdown.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# v12_dh_passive — passive size skew only, no taker hedge ever
+def _v11_options_only():
+    """Returns the option leg of v11 (HYDROGEL=None, all 8 VEV strikes set)."""
+    return {
+        "HYDROGEL_PACK": None,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=300, entry_size=30, passive_bid_size=24),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    }
+
+
+_R3_VELVET_DH_BASE = dict(
+    strategy="velvet_delta_hedger",
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    strike_prefix="VEV_",
+    hedge_strikes=[4500, 5000, 5100, 5200, 5300, 5400],
+    target_delta=0.0,
+    passive_base_size=30,
+    quote_inside_book=True,
+    tte_days_initial=5.0,
+    timestamp_units_per_day=1000000,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    sigma_floor=0.005,
+    sigma_cap=0.10,
+    prior_vol=0.0125,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+
+# v12: passive-only hedger (taker_edge huge → never fires), small size skew
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v12_dh_passive"] = {
+    3: {
+        **_v11_options_only(),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            position_limit=40,                 # same as v11 cap
+            **{
+                **_R3_VELVET_DH_BASE,
+                "hedge_taker_edge": 99999,     # NEVER fire taker
+                "passive_skew_per_delta": 0.05,  # small bias (per unit option delta)
+                "passive_base_size": 20,        # match v11 maker_size
+            },
+        ),
+    },
+}
+
+
+# v13: low-freq hedger — taker only on huge imbalance + bigger passive bias
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v13_dh_lowfreq"] = {
+    3: {
+        **_v11_options_only(),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            position_limit=40,
+            **{
+                **_R3_VELVET_DH_BASE,
+                "hedge_taker_edge": 250,        # rare — option delta sums easily reach 100s
+                "max_hedge_size": 20,           # smaller hedge size when fired
+                "passive_skew_per_delta": 0.10,
+                "passive_base_size": 20,
+            },
+        ),
+    },
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tibo-inspired variants: VELVET z-score gating on gamma_scalp entries
+# (skip when expensive, optionally boost when cheap)
+# ─────────────────────────────────────────────────────────────────────────────
+def _gamma_zgated_params(target_qty: int, entry_size: int = 30, passive_size: int = 24,
+                          skip_when_expensive: bool = True,
+                          boost_when_cheap: bool = False,
+                          z_skip_threshold: float = 1.0,
+                          z_boost_threshold: float = 1.0,
+                          entry_size_boost: float = 1.5,
+                          edge_ticks: float = 0.0,
+                          min_q: float = 2.0):
+    return dict(
+        strategy="gamma_scalp_zgated",
+        tte_days_initial=5.0,
+        ticks_per_day=10000,
+        timestamp_units_per_day=1000000,
+        historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+        implied_vol_prior=0.0125,
+        edge_ticks=edge_ticks,
+        target_qty=target_qty,
+        entry_size=entry_size,
+        passive_bid_size=passive_size,
+        unwind_tte_threshold=1.5,
+        min_quote_price=min_q,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        # z-gate
+        zscore_window=500,
+        zscore_skip_threshold=z_skip_threshold,
+        zscore_boost_threshold=z_boost_threshold,
+        skip_when_expensive=skip_when_expensive,
+        boost_when_cheap=boost_when_cheap,
+        entry_size_boost=entry_size_boost,
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+# v18_z_skip: v11 + skip entries when VELVET z > +1.0 (Tibo's "expensive" gate)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v18_z_skip"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # gamma_scalp_zgated on 4500-5300 with skip_when_expensive=True
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, skip_when_expensive=True),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v19_z_skip_loose: same but z_skip_threshold=1.5 (less aggressive gate)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v19_z_skip_loose"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=1.5),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v20_z_skip_strict: aggressive gate z_skip_threshold=0.5 (most reduction in DD)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v20_z_skip_strict"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# Dynamic skew detector base params
+_R3_SKEW_DYNAMIC_BASE = dict(
+    strategy="option_skew_dynamic_mm",
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    strike_prefix="VEV_",
+    smile_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500],
+    prior_vol=0.0125,
+    sigma_floor=0.005,
+    sigma_cap=0.10,
+    min_quote_price=1.0,
+    signal_threshold=0.001,    # 10 bps IV residual
+    delta_threshold=0.0005,    # 5 bps change
+    ewma_slow_alpha=0.02,      # half-life ~35
+    ewma_fast_alpha=0.10,      # half-life ~7
+    maker_size=14,
+    neutral_size=6,
+    exit_size=10,
+    take_size=8,
+    max_long=120,
+    max_short=80,
+    allow_new_shorts=True,
+    enable_takers=False,
+    tte_days_initial=5.0,
+    timestamp_units_per_day=1000000,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+
+# v15_skew_dynamic_auto: replace VEV_5300/5400 with dynamic skew detector in
+# AUTO mode (informed → follow, OA → fade based on residual change). Compare
+# vs v11 (no-smile passive on those strikes).
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v15_skew_dyn_auto"] = {
+    3: {
+        **_v11_options_only(),
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        # Override 5300 / 5400 to dynamic skew (was gamma / passive in v11)
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **{**_R3_SKEW_DYNAMIC_BASE, "mode": "auto"},
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400,
+            **{**_R3_SKEW_DYNAMIC_BASE, "mode": "auto"},
+        ),
+    },
+}
+
+
+# v16: same but FOLLOW mode only (treat all deformation as informed)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v16_skew_dyn_follow"] = {
+    3: {
+        **_v11_options_only(),
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **{**_R3_SKEW_DYNAMIC_BASE, "mode": "follow"},
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400,
+            **{**_R3_SKEW_DYNAMIC_BASE, "mode": "follow"},
+        ),
+    },
+}
+
+
+# v17: same but FADE mode only (treat all deformation as OA → mean-revert)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v17_skew_dyn_fade"] = {
+    3: {
+        **_v11_options_only(),
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **{**_R3_SKEW_DYNAMIC_BASE, "mode": "fade"},
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400,
+            **{**_R3_SKEW_DYNAMIC_BASE, "mode": "fade"},
+        ),
+    },
+}
+
+
+# v14: aggressive hedge — full hedger with default-ish params on top of v11
+# (sanity check: did the previous -21k drag persist on the v11 stack?)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v14_dh_default"] = {
+    3: {
+        **_v11_options_only(),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            position_limit=40,
+            **{
+                **_R3_VELVET_DH_BASE,
+                "hedge_taker_edge": 60,
+                "max_hedge_size": 20,
+                "passive_skew_per_delta": 0.30,
+                "passive_base_size": 20,
+            },
+        ),
+    },
+}
+
+
+# r3_velvet_options_max3d_v10_fullgamma — every active strike on gamma_scalp
+# at target=300 (4500/5000/5100/5200/5300/5400). Stress test: does the strategy
+# work for non-ATM strikes too?
+# r3_velvet_options_max3d_v12_r2velvet -- same option stack as v11, but restores
+# the round-2/v4 anchor MM on VELVET itself. This is explicitly max-backtest:
+# v4 anchor made +27.5k on historical VELVET but was live-fragile.
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v12_r2velvet"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=300, entry_size=30, passive_bid_size=24),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v10_fullgamma"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=300, entry_size=30, passive_bid_size=24),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300, 5400]
+        },
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_max3d_v6_pushtarget — push target_qty even further (150)
+# on the gamma cluster to test if 5000-5200 are still capacity-capped.
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v6_pushtarget"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True, "take_edge": 2.0, "take_size": 20, "maker_size": 28,
+            },
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=150, entry_size=15, passive_bid_size=12),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# r3_velvet_options_max3d_v4 — combines v2 (gamma everywhere + bigger target)
+# with v3 (skew tilt on 5300). Goal: stack independent alpha sources.
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v4"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+                "enable_takers": True, "take_edge": 2.0, "take_size": 20, "maker_size": 28,
+            },
+        ),
+        # gamma cluster bigger target
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_scalp_params(target_qty=100, entry_size=10, passive_bid_size=8),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        # skew tilt on 5300/5400
+        "VEV_5300": _override(ROUND_3["VEV_5300"], position_limit=300, strike=5300, **_R3_SKEW_TILT_BASE),
+        "VEV_5400": _override(ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_SKEW_TILT_BASE),
+        # gamma on 5500
+        "VEV_5500": _override(
+            ROUND_3["VEV_5500"], position_limit=300, strike=5500,
+            **_gamma_scalp_params(target_qty=40, entry_size=5, passive_bid_size=4, min_q=1.0),
+        ),
+        **{f"VEV_{k}": None for k in [6000, 6500]},
+    },
+}
+
+
+_R3_BS_GUARDED_TAKER_PARAMS = {
+    **_R3_VELVET_OPT_OPTION_PARAMS,
+    "penny_improve_around_mkt": False,
+    "enable_takers": True,
+    "maker_edge": 4,
+    "maker_size": 12,
+    "take_edge": 10.0,
+    "take_size": 8,
+    "inv_bias_per_unit": 0.04,
+}
+
+MEMBER_OVERRIDES["r3_velvet_options_bs_guarded_taker"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_VELVET_SMALL_MM,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=300,
+                strike=strike,
+                **(
+                    _R3_BS_GUARDED_TAKER_PARAMS
+                    if strike != 4000
+                    else {**_R3_BS_GUARDED_TAKER_PARAMS, "maker_size": 24}
+                ),
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200]
+        },
         **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
     },
 }

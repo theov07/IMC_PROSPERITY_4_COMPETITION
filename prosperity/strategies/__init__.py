@@ -92,6 +92,9 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "theo_best_clean_generalized_v4": ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedV4Strategy"),
     # ── Round 3 ──
     "option_mm_bs": ("prosperity.strategies.round_3.option_mm_bs", "OptionMMBSStrategy"),
+    "option_skew_signal_mm": ("prosperity.strategies.round_3.option_skew_signal_mm", "OptionSkewSignalMMStrategy"),
+    "option_skew_dynamic_mm": ("prosperity.strategies.round_3.option_skew_dynamic_mm", "OptionSkewDynamicMMStrategy"),
+    "gamma_scalp_zgated": ("prosperity.strategies.round_3.gamma_scalp_zgated", "GammaScalpZGatedStrategy"),
     "velvet_delta_hedger": ("prosperity.strategies.round_3.velvet_delta_hedger", "VelvetDeltaHedgerStrategy"),
     "vol_harvest": ("prosperity.strategies.round_3.vol_harvest", "VolHarvestStrategy"),
     "anchor_adaptive": ("prosperity.strategies.round_3.anchor_adaptive", "AnchorAdaptiveStrategy"),

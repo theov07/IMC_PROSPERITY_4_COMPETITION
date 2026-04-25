@@ -4,7 +4,889 @@ Updated: 2026-04-25
 
 ---
 
-## 🚨 LATEST — 4 final HYDRO strategies (Léo's request)
+## 🚨 LATEST — Tibo z-gating tested + v20_z_skip_strict locked as risk-adjusted leader
+
+User asked to test Tibo's velvet_v3 ideas. Built `gamma_scalp_zgated` strategy
+(gamma_scalp + VELVET z-score gate on entries: skip when |z| > threshold).
+Tested 3 thresholds:
+
+| Variant | 3-day | Δ PnL | Max DD | Δ DD | PnL/DD ratio |
+|---|---:|---:|---:|---:|---:|
+| **v11_optimal** | **+70,386** | — | -56,650 | — | 1.24 |
+| v18 z_skip (z>1.0) | +69,328 | -1,058 | -53,211 | -3,439 | 1.30 |
+| v19 z_skip_loose (z>1.5) | +70,298 | -88 | -55,994 | -656 | 1.26 |
+| **v20 z_skip_strict (z>0.5)** ★ | **+67,332** | -3,054 | **-46,342** | **-10,308 (-18%)** | **1.45** |
+
+**v20_z_skip_strict locked** as the risk-adjusted leader: trades -4% PnL for
+-18% max drawdown reduction. Best PnL-per-DD ratio of all variants tested.
+
+### How v20_z_skip_strict works
+
+Each gamma strike (4500/5000/5100/5200/5300) maintains its own rolling
+500-tick buffer of VELVETFRUIT spot. Computes `z = (S - mean) / std`. When
+`z > +0.5` → SKIP new entries (no taker, no passive bid). Existing positions
+held; unwind logic unchanged.
+
+The strategy effectively:
+- Avoids accumulating long-vol positions when VELVET is over-extended
+  (z > 0.5 = ~30% of ticks in a trending session)
+- Locks in the +57k of long-vol drift from cheaper accumulation phases
+- Sacrifices ~+3k of "buy at the peak before further drift" gains
+
+### Tibo idea outcomes
+
+| Idea | Status | PnL impact | DD impact |
+|---|---|---:|---:|
+| **Z-score skip on entries** | ✅ ACCEPTED in v20 | -3,054 | **-10,308 (-18%)** |
+| Delta hedge bidirectional | ❌ TESTED v12-v14 | -3.7k to -5.3k | <-1k benefit |
+| Asymmetric ASK timing | ⚠️ Not applicable | gamma_scalp uses different exit logic | — |
+| `prevent_crossing` per strike | ⚠️ Not needed | VEV_5400 already passive | — |
+| Hard-stop 85% inv | ✅ Implicit | target_qty=300 caps | — |
+
+### Submissions in `_final/` (14 total, all <100 KB)
+
+`velvet_options/` (6 candidates):
+- `r3_velvet_options_alpha` (60 KB, +13,380) — baseline locked
+- `r3_velvet_options_alpha_v4_high_k` (55 KB, +16,510)
+- `r3_velvet_options_max3d_blend` (63 KB, +23,440) — Codex baseline
+- `r3_velvet_options_max3d_v11_optimal` (63 KB, **+70,386**, DD -56,650) — max PnL pure
+- `r3_velvet_options_max3d_v12_r2velvet` (83 KB, **+94,614**, DD -60,508) — max PnL stretch (R2 VELVET overlap)
+- `r3_velvet_options_max3d_v20_z_skip_strict` (67 KB, **+67,332**, **DD -46,342**) ★ — **risk-adjusted leader**
+
+### Recommended upload candidates
+
+Three viable picks depending on risk tolerance:
+1. **v20_z_skip_strict** (+67k / -46k DD) — best risk-adjusted, locked
+2. **v11_optimal** (+70k / -57k DD) — max PnL with identifiable directional alpha
+3. **v12_r2velvet** (+94k / -60k DD) — max PnL but spread/take cost is huge,
+   relies entirely on VELVET drift. Risky.
+
+---
+
+## PREVIOUS — NEW LEADER: v12_r2velvet +94,614 (Codex's R2 anchor MM on VELVET)
+
+While Claude was finishing the 10-idea audit, **Codex spotted a transfer
+opportunity**: v11 keeps VELVET on `naive_tight_mm` at +3,290, but the
+historical R2/v4 anchor MM on VELVET makes **+27,518** (proven historical
+result). Codex built `v12_r2velvet` = v11's option stack + the R2 anchor MM
+on VELVET. Backtest result: **+94,614** (+24,228 vs v11).
+
+### v12_r2velvet per-product breakdown
+
+| Product | PnL | Trades | Max Pos | Strategy |
+|---|---:|---:|---:|---|
+| **VELVETFRUIT_EXTRACT** | **+27,518** | **7,446** | **195** | **R2/v4 anchor MM (Tibo's v4_F5)** |
+| VEV_4500 | +18,387 | 258 | 300 | gamma_scalp UNHEDGED target=300 |
+| VEV_5100 | +17,154 | 124 | 300 | gamma_scalp |
+| VEV_5000 | +11,801 | 186 | 257 | gamma_scalp |
+| VEV_4000 | +8,810 | 464 | 44 | option_mm_bs default smile |
+| VEV_5200 | +7,352 | 75 | 300 | gamma_scalp |
+| VEV_5300 | +3,262 | 109 | 300 | gamma_scalp |
+| VEV_5400 | +330 | 62 | 77 | option_mm_bs no-smile passive |
+| **TOTAL** | **+94,614** | | | |
+
+D2 LW = +1,384 (BEST among all variants — even the live window benefits).
+
+### PnL attribution (v12_r2velvet — extreme directional)
+
+- **inventory_drift: +166,850** (long ~195 VELVET + ~1,500 option-delta combined)
+- **spread_capture: -72,236** (the R2 anchor MM AGGRESSIVELY trades, paying spread)
+- **take_edge: -86,832** (huge taker cost from anchor MM crossing)
+- aggressive_adverse_selection: +10,051
+- make_edge: +14,596
+
+This is a **maximum-directional** stack: VELVET trades 7,446 times (vs 1,176
+in v11) and racks up max_pos 195. Combined with options' ~1,500 option delta,
+total long exposure ≈ 1,700+ net delta. The strategy literally pays -159k in
+spread/takers but earns +166k from VELVET's upward drift over 3 days.
+
+### Risk caveat for v12_r2velvet
+
+- max_drawdown -60,508 (worse than v11's -56,650)
+- If VELVET goes flat or drops on a single day: -86k taker cost + -72k spread
+  cost would be paid WITHOUT the +166k drift offset.
+- Codex tagged it explicitly: "v4 anchor made +27.5k on historical VELVET but
+  was live-fragile" — i.e., the strategy is overfit to the 3 days where VELVET
+  drifted positively.
+
+### Updated submission status
+
+13 submissions in `_final/`. Velvet+options-only group:
+
+| File | Size | 3-day | Notes |
+|---|---:|---:|---|
+| `r3_velvet_options_alpha` | 60 KB | +13,380 | baseline (locked) |
+| `r3_velvet_options_alpha_v4_high_k` | 55 KB | +16,510 | high-K passive |
+| `r3_velvet_options_max3d_blend` | 63 KB | +23,440 | Codex baseline |
+| `r3_velvet_options_max3d_v11_optimal` | 63 KB | +70,386 | gamma cluster 4500-5300 |
+| **`r3_velvet_options_max3d_v12_r2velvet`** | **83 KB** | **+94,614** ★ | **+ R2 anchor on VELVET** |
+
+The +94,614 is the maximum-3-day-backtest leader; the v11 (+70,386) is the
+safer fallback if v12's directional bet feels risky.
+
+---
+
+## PREVIOUS — Full 10-idea audit complete; v11_optimal +70,386 stays leader
+
+User listed 10 alpha ideas. After this session, ALL are tested or ruled out.
+v11 stays the leader at +70,386. Verdicts:
+
+| # | Idea | Status | Outcome |
+|---|---|---|---:|
+| 1 | Pair trading VELVET-HYDRO + copule | ❌ DEAD | Return corr ≈ 0 (D0:+0.011 / D1:+0.012 / D2:-0.005) |
+| 2 | Régimes corr / anti-corr / no-corr | ❌ DEAD | Mid corr varies but it's noise, not tradeable |
+| 3 | Skew brutal change detector (informed/OA) | ❌ TESTED | v15-v17 (auto/follow/fade) all lose -858 to -1,076 |
+| 4 | IV/moneyness plot dynamique | ❌ DEAD | Signal #3 doesn't work → plot wouldn't help |
+| 5 | SVI/SSVI calibration | ⚠️ NOT BUILT | gamma_scalp doesn't use smile, marginal value |
+| 6 | Greeks split (sell theta + buy gamma) | ⚠️ NOT BUILT | OTM premium too small ($1-7) for theta seller |
+| **7** | **Realized > implied vol arb** | ✅ **CORE ALPHA** | **+58,832 inventory_drift in v11 = THE source** |
+| 8 | B&S mispriced arb | ✅ WORKS | option_mm_bs on VEV_4000 = +8,810 workhorse |
+| 9 | Delta hedge variants | ❌ TESTED | All 3 variants lose -3.7k to -5.3k (hedge cancels long-vol source) |
+| 10 | Inventory bias via informed/uninformed | ❌ TESTED (=#3) | Same as skew dynamic — no exploitable signal |
+
+### Why delta hedge fails
+
+v11 makes +58k from `inventory_drift` (long ~1500 net delta paying off as
+VELVET drifts up). Hedging via velvet_delta_hedger:
+- Damages VELVET MM PnL: +3,290 → -447 to -2,010 (size bias makes us sell into rallies)
+- Doesn't reduce DD meaningfully (-590 / -56k baseline)
+- Net: -3,738 to -5,300 vs v11
+
+The hedger CONVERTS option DD into VELVET losses without reducing total DD,
+because the DD comes from option-position drawdowns, not the underlying.
+
+| Variant | 3-day | VELVET | DD |
+|---|---:|---:|---:|
+| v11 (no hedge) | +70,386 | +3,290 | -56,650 |
+| v12 dh_passive | +66,648 | -447 | -56,060 |
+| v13 dh_lowfreq | +66,408 | -688 | -56,060 |
+| v14 dh_default | +65,086 | -2,010 | -56,060 |
+
+### Why skew dynamic detector fails (built option_skew_dynamic_mm)
+
+EWMA(slow, half-life ~35) + EWMA(fast, half-life ~7) of iv_residual.
+Decision logic:
+- delta_resid (= fast - slow) crossing thresholds discriminates persistent
+  (informed) vs reverting (OA) deformations.
+- AUTO mode: follow when getting richer/cheaper (informed); fade when reverting (OA).
+- FOLLOW: always trade signal direction.
+- FADE: always trade contrarian.
+
+Tested on VEV_5300 + VEV_5400 (replacing v11's gamma + passive):
+
+| Variant | 3-day | Δ vs v11 |
+|---|---:|---:|
+| v11 (gamma 5300, passive 5400) | +70,386 | — |
+| v15 dyn_auto | +69,528 | -858 |
+| v16 dyn_follow | +69,310 | -1,076 |
+| v17 dyn_fade | +69,528 | -858 |
+
+The signal genuinely fires (VEV_5300 trades 103-109 times across modes), but
+**profit per fill is lower** ($23 vs $30 with gamma_scalp). On VEV_5400 the
+signal threshold (10 bps IV residual) is rarely met → strategy effectively
+becomes the no-smile passive baseline (+330) for auto/fade, less for follow.
+
+**Conclusion: dynamic skew has signal but no alpha.** The discriminator
+(informed/OA) doesn't add information beyond what gamma_scalp already extracts
+via realized > implied vol thesis.
+
+### What v11 actually is (the +70,386 recipe)
+
+```
+HYDROGEL_PACK:        None (not in scope)
+VELVETFRUIT_EXTRACT:  naive_tight_mm pos_limit=40 maker_size=20
+VEV_4000:             option_mm_bs (smile, default — workhorse +8,810)
+VEV_4500:             gamma_scalp UNHEDGED target=300 (the +18.4k unlock)
+VEV_5000/5100/5200:   gamma_scalp UNHEDGED target=300 (each +7-17k)
+VEV_5300:             gamma_scalp UNHEDGED target=300 (+3,262)
+VEV_5400:             option_mm_bs no-smile passive (+330)
+VEV_5500/6000/6500:   None
+```
+
+Total: **+70,386 over 3-day backtest** with max DD -56,650.
+
+### What's left (low priority)
+
+- **Greeks split (#6)**: theta seller on VEV_5500 (avg price 7) + gamma buyer
+  on VEV_5000 (already in v11). Theta on $7-premium options earns ~$0.05/tick
+  per unit, multiplied by ~150 max-pos × 30,000 ticks = $225k notional → maybe
+  $1-2k actual edge. Not zero but not transformative.
+- **SVI/SSVI (#5)**: would only help `option_mm_bs` (VEV_4000 strategy) which
+  uses penny-improve override. Smile fitting choice doesn't bind the quote.
+  Replacing polynomial fit with SVI gives at most marginal improvement on the
+  +8,810 contribution.
+- **Per-participant flow analysis**: dig into trades CSV by buyer/seller name
+  to find a "predator participant" we should fade. Not yet attempted.
+
+### Submissions exported (under 100 KB, all validated)
+
+12 submissions total in `_final/`. Velvet+options-only group:
+- `r3_velvet_options_alpha` (60 KB, +13k baseline)
+- `r3_velvet_options_alpha_v4_high_k` (55 KB, +16.5k)
+- `r3_velvet_options_max3d_blend` (63 KB, +23k Codex baseline)
+- **`r3_velvet_options_max3d_v11_optimal` (63 KB, +70,386)** ★ upload candidate
+
+---
+
+## PREVIOUS — VELVET+options 3-day NEW LEADER: v11_optimal +70,386 (gamma on 4500-5300)
+
+The v10 stress test (gamma on every strike 4500-5400) revealed a HUGE gem:
+**VEV_4500 with gamma_scalp at target=300 generates +18,387** (vs +149 with
+the previous selective taker). Combined with v8/v9's gamma cluster on
+5000-5200/5300, v11_optimal locks the best mix:
+
+- VEV_4000: option_mm_bs default (smile, the +8.8k workhorse)
+- VEV_4500/5000/5100/5200/5300: gamma_scalp UNHEDGED at target=300
+- VEV_5400: no-smile passive (gamma fails here, -296 vs +330 passive)
+- VELVET: naive_tight_mm (+3,290)
+
+### v8 → v11 progression
+
+| Variant | 3-day | D2 LW | max DD |
+|---|---:|---:|---:|
+| v8 (gamma 5000/5100/5200) | +51,672 | +1,070 | -38,556 |
+| v9 (+ gamma 5300 too) | +52,148 | +1,070 | -38,556 |
+| v10 (+ gamma 5400 too) | +69,760 | **+825** | **-59,384** |
+| **v11 optimal** ★ | **+70,386** | **+1,208** | -56,650 |
+
+### v11 per-product breakdown
+
+| Product | PnL | Trades | Max Pos | Strategy |
+|---|---:|---:|---:|---|
+| VEV_4500 | **+18,387** | 258 | 300 | **gamma_scalp UNHEDGED, target=300 (NEW)** |
+| VEV_5100 | +17,154 | 124 | 300 | gamma_scalp |
+| VEV_5000 | +11,801 | 186 | 257 | gamma_scalp (capped by market flow) |
+| VEV_4000 | +8,810 | 464 | 44 | option_mm_bs default smile |
+| VEV_5200 | +7,352 | 75 | 300 | gamma_scalp |
+| VELVETFRUIT_EXTRACT | +3,290 | 1,176 | 40 | naive_tight_mm pos_limit=40 |
+| VEV_5300 | +3,262 | 109 | 300 | gamma_scalp |
+| VEV_5400 | +330 | 62 | 77 | option_mm_bs no-smile passive |
+| **TOTAL** | **+70,386** | | | |
+
+### PnL attribution (v11)
+
+- **inventory_drift: +58,832** (dominant — long-vol position pays as VELVET drifts)
+- make_edge: +17,435
+- spread_capture: +11,553 (down from v8 +15,194 — gamma takers eat spread)
+- aggressive_adverse_selection: +5,690 (gamma BUYs appreciated by ~6k)
+- take_edge: -5,882 (cost of gamma takers)
+- passive_adverse_selection: -1,783
+
+### Why VEV_4500 with gamma is the new gem
+
+VEV_4500 has 258 fills — gamma_scalp aggressively takes asks because
+realized vol > implied at this strike (avg_iv ≈ 0.016 vs realized 0.0215).
+The strike is moderately ITM (S=5246, K=4500, intrinsic=750+) so each unit
+has solid delta (~0.95) and decent vega. At max_pos=300, the position
+catches +18.4k of inventory drift over 3 days as VELVET drifts up.
+
+The previous "selective taker on rich edge" generated only 2 fills (+149)
+because rich-edge events at threshold ≤-2.0 are rare. gamma_scalp's
+"buy whenever market < BS@realized" fires 258 times.
+
+### Why VEV_5400 with gamma fails
+
+avg price 17 ticks. Spread ~1.4 ticks. Each round-trip captures < 1 tick
+of spread but pays full taker fee + adverse. At target=300 the strategy
+buys 300 lots × 1 ticks each = -300 spread cost vs gain from gamma which
+is too small (low delta, low gamma at deep OTM). Net negative.
+
+### Risk caveat
+
+max_drawdown -56,650 — large. The strategy holds **1,557 long-option-units
+worth of delta** (300×5 strikes × ~delta-at-strike) which is enormous
+exposure. If the realized > implied vol gap closes for a day, the strategy
+could lose -50k+ on inventory drift reversal.
+
+For LIVE IMC (D2 first 1000 ticks): D2 LW +1,208 is the BEST among all
+v variants (vs +1,070 v8, +825 v10). The difference came from v11 catching
+better bids on VEV_4500 in the early window.
+
+### Submission status
+
+Exported `r3_velvet_options_max3d_v11_optimal_round3_submission.py` (63 KB,
+under 100 KB), copied to `_final/velvet_options/`. All 12 submissions
+validated.
+
+---
+
+## PREVIOUS — v8 leader (target_qty=300)
+
+target_qty extended further to 200, 300. **PnL keeps scaling linearly until
+the IMC position_limit=300 hard cap is hit on VEV_5100 and VEV_5200.**
+
+target_qty extended further to 200, 300. **PnL keeps scaling linearly until
+the IMC position_limit=300 hard cap is hit on VEV_5100 and VEV_5200.**
+v9/v10 (extending gamma cluster to 5300/5400) running.
+
+### Capacity scan (gamma_scalp UNHEDGED on 5000/5100/5200, full 3-day backtest)
+
+| target_qty | Total | VEV_5000 (max_pos) | VEV_5100 | VEV_5200 | max DD |
+|---:|---:|---|---|---|---:|
+| 60 | +23,440 | +2,928 (60) | +2,499 (60) | +2,648 (60) | — |
+| 100 | +28,292 | +4,596 (100) | +3,899 (100) | +4,432 (100) | — |
+| 150 | +36,548 | +8,918 (150) | +6,245 (150) | +6,020 (150) | -28,015 |
+| 200 | +42,566 | +10,887 (200) | +9,622 (200) | +6,692 (200) | -31,901 |
+| **300** | **+51,672** | +11,801 (**257**) | +17,154 (**300**) | +7,352 (**300**) | -38,556 |
+
+VEV_5000 plafonne à max_pos=257 (limite de flow marché — pas assez de market
+trades pour atteindre 300). VEV_5100 et VEV_5200 atteignent le hard-cap
+IMC=300.
+
+### PnL attribution at target=300
+
+The +51,672 breakdown is dominated by **directional gain**:
+
+| Component | v6 (target=150) | v8 (target=300) |
+|---|---:|---:|
+| inventory_drift | +20,332 | **+36,478** |
+| make_edge (spread) | +17,438 | +17,438 |
+| spread_capture | +16,216 | +15,194 |
+| take_edge | -1,222 | -2,243 |
+| passive_adverse_selection | -1,811 | -1,810 |
+
+**Inventory drift dominates** at target=300: +36k from holding long-vol
+positions while VELVET drifts. Spread capture stays constant — same fills,
+same edge per fill.
+
+**Risk caveat**: max_drawdown grows linearly with target (28k → 39k). If
+realized vol regime flattens (e.g., VELVET sits flat for a day), the
+unhedged gamma position pays no inventory_drift while continuing to lose
+theta. The strategy is heavily long-vol — performance depends on vol gap
+persisting.
+
+### Verdict on user's 4 ideas + the new target=300 unlock
+
+| Idea | Result | Verdict |
+|---|---:|---|
+| 1. gamma_scalp on VEV_5400 | -44 | ❌ |
+| **2. target_qty 60→300** | **+28,232** ★ | ✅ THE UNLOCK |
+| 3. gamma_scalp on VEV_5500 | -18 | ❌ |
+| 4. skew TILT on 5300/5400 | -2,793 | ❌ |
+
+### v6 ablation kept for reference
+
+| Variant | 3-day | Δ vs blend | D2 LW |
+|---|---:|---:|---:|
+| max3d_blend (Codex baseline) | +23,440 | — | +1,070 |
+| max3d_v3 (skew tilt) | +20,647 | -2,793 | +1,068 |
+| max3d_v4 (v2 + v3 tilt) | +25,480 | +2,040 | +1,072 |
+| max3d_v2 (target=100) | +27,900 | +4,460 | +968 |
+| max3d_v5_optimal (target=100, no gamma 5400/5500) | +28,292 | +4,852 | +1,070 |
+| max3d_v6_pushtarget (target=150) | +36,548 | +13,108 | +1,070 |
+| max3d_v7_target200 | +42,566 | +19,126 | (TBD) |
+| **max3d_v8_target300** ★ | **+51,672** | **+28,232** | (TBD) |
+
+### Why D2 LW stays flat at ~+1,070 across all v variants
+
+target_qty grows total PnL by +28k but **D2 first-1000-ticks PnL** is
+unchanged. The first 1000 ticks see ~10-20 fills per gamma strike, way
+under target=60 already. The +28k comes from D0/D1 + later D2 (after the
+gamma position has fully accumulated and ridden the underlying drift).
+
+For LIVE IMC = first 1000 ticks of D2, the v8 strategy is identical in
+behavior to v6 in that window. **The 3-day target boost has zero direct
+effect on live PnL.**
+
+### Where to push next (v9/v10 running)
+
+- **v9 (widegamma)**: extend gamma cluster to VEV_5300 too (currently
+  no-smile passive +2,787; gamma at target=300 might unlock more).
+- **v10 (fullgamma)**: gamma_scalp on every active strike from 4500 to 5400.
+  Stress test for non-ATM strikes. VEV_5400 already failed at target=80,
+  but with target=300 might still produce + via direct flow capture.
+
+---
+
+## PREVIOUS — VELVET+options 3-day v6: target_qty=150 was the leader
+
+User asked to test 4 ideas on top of max3d_blend. Built v2..v6, ran 3-day.
+**The unlock: target_qty was the only knob that mattered**. v6_pushtarget at
+target=150 produces +36,548 — a **+56% gain** over Codex's max3d_blend baseline.
+
+### v-set ablation results (3-day backtest, realistic)
+
+| Variant | 3-day | Δ vs blend | D2 LW | What changed |
+|---|---:|---:|---:|---|
+| max3d_blend (Codex baseline) | +23,440 | — | +1,070 | gamma 60 cap on 5000-5200, no-smile passive 5300/5400 |
+| max3d_v3 (skew tilt) | +20,647 | -2,793 | +1,068 | tilt on 5300/5400 (instead of no-smile passive) |
+| max3d_v4 (v2 + v3 tilt) | +25,480 | +2,040 | +1,072 | v2 + skew tilt on 5300/5400 |
+| max3d_v2 (target=100 + gamma 5400/5500) | +27,900 | +4,460 | +968 | target 60→100 + add gamma on 5400/5500 |
+| max3d_v5_optimal (target=100, no gamma 5400/5500) | +28,292 | +4,852 | +1,070 | best mix from ablation |
+| **max3d_v6_pushtarget** ★ | **+36,548** | **+13,108** | **+1,070** | **target_qty=150 (still capped at max_pos=150)** |
+
+### Per-product evolution as target_qty grows
+
+VEV_5000 PnL by target_qty (gamma_scalp UNHEDGED on ATM):
+
+| target_qty | max_pos | trades | PnL | PnL/fill |
+|---:|---:|---:|---:|---:|
+| 60 (blend) | 60 | 53 | +2,928 | +55 |
+| 100 (v2/v5) | 100 | 85 | +4,596 | +54 |
+| 150 (v6) | 150 | 128 | +8,918 | +70 |
+
+PnL grows linearly with target — every 50-unit cap increase adds ~+1.5k per
+strike. We're nowhere near the position_limit=300 cap; max_pos == target each
+time. **v7@200 and v8@300 running now.**
+
+### Per-strike per-target ablation (gamma cluster only)
+
+| Strike | target=60 | target=100 | target=150 |
+|---|---:|---:|---:|
+| VEV_5000 | +2,928 | +4,596 | +8,918 |
+| VEV_5100 | +2,499 | +3,899 | +6,245 |
+| VEV_5200 | +2,648 | +4,432 | +6,020 |
+| **subtotal** | **+8,075** | **+12,927** | **+21,183** |
+
+### Verdict on the 4 user-requested ideas
+
+| Idea | Result | Verdict |
+|---|---|---|
+| 1. gamma_scalp on VEV_5400 | -44 (vs +330 passive) | ❌ FAILS — strike avg price 17 too small |
+| **2. target_qty 60→150** | **+13,108** ★ | ✅ HUGE WIN — gamma_scalp was capacity-capped |
+| 3. gamma_scalp on VEV_5500 | -18 (vs 0 disabled) | ❌ break-even, marginal-negative |
+| 4. skew TILT on VEV_5300/5400 | -2,793 | ❌ FAILS — smile fitter has structural bias on 5300 |
+
+**Idea 2 is the only real unlock.** Ideas 1, 3, 4 either lose or break even.
+
+### Why skew tilt fails on VEV_5300
+
+The leave-one-out smile residual on VEV_5300 is `≈ -0.0005` consistently
+across all 3 days. The strategy reads this as "rich" → tilts toward selling.
+But the residual is a **structural artifact** of the polynomial smile fit
+on the 8-point chain, not a flow-event signal. So tilting against it is
+trading the fit error.
+
+The same logic that made `skew_taker` blow up -45k applies here in smaller
+form: any strategy that treats static smile residual as actionable info is
+trading noise.
+
+### Where skew COULD signal something (untested)
+
+The user asked about "OA vs informed trader" detection. The current
+strategies all use the **instantaneous** residual. To capture flow events,
+we'd need the **dynamics** of the residual:
+
+- EWMA-smooth `iv_residual_t` over a rolling window
+- Compute z-score of `iv_residual_t` vs the EWMA
+- |z| spike + persisting > N ticks → likely informed (follow direction)
+- |z| spike + reverting < N ticks → likely OA (fade)
+
+The existing `option_skew_signal_mm` reads instantaneous residual only. A
+v9 with dynamic residual tracking would be the proper test. Not yet built.
+
+### TTE handling — verified correct
+
+User asked: "le TTE décroît bien avec le temps?". Yes — measured in v5:
+
+| Day | ts=0 | ts=999900 |
+|---|---:|---:|
+| D0 | 8.0000 | 7.0001 |
+| D1 | 7.0000 | 6.0001 |
+| D2 | 6.0000 | 5.0001 |
+
+Linear decay within day, discrete reset between days via
+`historical_tte_by_day={0:8, 1:7, 2:6}`. Logic: `_backtest.day` key in
+trader_data drives the lookup; absent → falls back to default
+`tte_days_initial=5.0`.
+
+⚠️ **Live mismatch**: in actual live IMC, traderData has no `_backtest.day`
+key, so option_mm_bs uses TTE=5 at session start. But the backtest D2
+projection uses TTE=6. For ATM options that's ~22 ticks of time-value
+difference. Effect on live PnL: small (mostly affects OTM premium), but
+something to track once we have actual live data.
+
+---
+
+## PREVIOUS — 4-idea ablation (v2/v3/v4 only)
+
+| Variant | 3-day | Δ vs blend | What changed |
+|---|---:|---:|---|
+| max3d_blend (Codex's baseline) | +23,440 | — | gamma 60 cap on 5000-5200, no-smile passive on 5300/5400 |
+| **max3d_v2** ★ | **+27,899** | **+4,459** | target_qty 60→100 + gamma on 5400/5500 |
+| max3d_v4 (combined v2+v3) | +25,480 | +2,040 | v2 + skew tilt on 5300/5400 |
+| max3d_v3 | +20,647 | -2,793 | skew tilt on 5300/5400 (no target boost) |
+
+### Per-product breakdown — what worked, what didn't
+
+**max3d_v2 (+27,899)** vs max3d_blend (+23,440):
+
+| Strike | blend | v2 | Δ | Verdict |
+|---|---:|---:|---:|---|
+| VEV_5000 | +2,928 | +4,596 | **+1,668** | target_qty 100 unlocks more fills |
+| VEV_5100 | +2,499 | +3,899 | **+1,400** | same |
+| VEV_5200 | +2,648 | +4,432 | **+1,784** | same |
+| VEV_5400 | +330 | -44 | -374 | gamma_scalp LOSES vs no-smile passive |
+| VEV_5500 | 0 (off) | -18 | -18 | gamma break-even (was off in blend) |
+
+**Idea 1 — gamma_scalp on VEV_5400**: ❌ FAILS (-374 vs +330 passive). The
+strike's average price (~17 ticks) is too small for active vol harvesting —
+each round-trip captures < 1 tick edge but pays full taker spread.
+
+**Idea 2 — target_qty 60→100 on VEV_5000/5100/5200**: ✅ HUGE WIN (+4,852).
+Each strike was capacity-capped at 60 (max_pos hit it). With 100 cap, fills
+nearly double on 5000/5100/5200 and PnL grows ~50% on each.
+
+**Idea 3 — VEV_5500 with gamma_scalp**: ❌ break-even (-18). Avg price ~7
+makes spread too thin; gamma_scalp can't extract edge.
+
+**Idea 4 — skew TILT on VEV_5300/5400** (entry_edge=1, quote_neutral=True):
+❌ DESTROYS VEV_5300 (+2,787 → -6, **-2,793 loss**). The smile-fitter has a
+systematic bias on 5300 (`avg_loo_iv_residual ≈ -0.0005` consistently) that
+makes the tilt always say "rich" → strategy keeps offering instead of
+collecting bid spreads. The no-smile passive simply hits whatever the market
+offers.
+
+### What this proves about the user's "skew deformation: OA vs informed"
+
+The systematic skew residual (avg over 3 days, stable across all sessions) is
+NOT actionable — it's a **structural bias of the smile fitter**, not a flow
+event. Trading on it (skew_taker -45k, skew_tilt on 5300 -2,793) loses
+consistently. The skew is essentially noise vs. the simple naive_mm.
+
+Where skew DOES signal something: **dynamic deformations** (sudden change in
+residual). That's untested — would need a strategy that EWMA-smooths the
+residual and acts on z-score of the residual change, not the absolute value.
+The current `option_skew_signal_mm` reads instantaneous residual, missing
+the time-dynamics.
+
+### Optimal stack (v5_optimal, running now)
+
+Ablation conclusion: keep gamma on 5000/5100/5200 with target=100, keep
+no-smile passive on 5300/5400, drop the rest. Expected ~+28,300.
+
+- `r3_velvet_options_max3d_v5_optimal` — best mix (running)
+- `r3_velvet_options_max3d_v6_pushtarget` — target_qty=150 to test if we're
+  still capacity-capped (running)
+
+---
+
+## PREVIOUS — VELVET+options 3-day max: max3d_blend +23,440 (Codex's combo)
+
+User asked: did Codex test mispricing arb / traditional MM / vol arb / skew
+signal? **Yes, all four.** Full ranked comparison (3-day backtest, realistic):
+
+| Variant | 3-day | D2 full | D2 LW (live) | Strategy components |
+|---|---:|---:|---:|---|
+| **max3d_blend** ★ | **+23,440** | **+12,076** | **+1,070** | option_mm_bs(4000) + gamma_scalp UNHEDGED(5000-5200) + no-smile passive(5300/5400) + naive_mm(VELVET) |
+| **gamma_unhedged** | **+21,090** | +10,048 | **+1,051** | gamma_scalp UNHEDGED on 5000-5300, naive_mm(VELVET, 4000) |
+| v4_high_k | +16,510 | +7,088 | +791 | no-smile passive(5300-5500), classic mm(4000/5200) |
+| vol_harvest_unhedged | +14,720 | +7,218 | +42 | buy when market < BS(realized_vol) |
+| baseline_bs | +14,384 | +5,618 | +791 | option_mm_bs, no smile, no taker |
+| naive_mm (caveman) | +14,326 | +5,618 | +791 | naive_tight_mm on every product |
+| v3 (taker on 4500) | +13,562 | +4,867 | +815 | v2 + selective taker |
+| v2 alpha (locked) | +13,380 | +4,684 | +790 | smile + dead strikes |
+| skew_signal (passive) | +12,100 | +3,766 | +790 | leave-one-out smile bias, passive |
+| vol_harvest (hedged) | +10,794 | +2,106 | -355 | buy + delta-hedge → drag from over-hedge |
+| bs_guarded_taker | +6,947 | +2,358 | +707 | guarded taker on rich/cheap |
+| gamma_scalp (hedged) | +32 | -1,897 | +1 | long gamma + hedge → over-hedging burn |
+| **skew_taker** ❌ | **-45,734** | -9,854 | -644 | leave-one-out taker → adverse selection blowup |
+
+### Key findings about the 4 alpha pistes
+
+**1. Mispricing arbitrage (option_mm_bs penny-improve)**: ✅ Tested. Drives the
++8,810 from VEV_4000 alone. Adds nothing over `naive_mm` for other strikes
+because penny-improve overrides the BS quote.
+
+**2. Traditional MM (naive_tight_mm)**: ✅ Tested. +14,326 baseline. Best
+contribution: VELVETFRUIT_EXTRACT (+3,290 with `position_limit=40`).
+
+**3. Vol arbitrage (realized 2.15% vs implied 1.25%)**: ✅ Tested.
+- `gamma_scalp` UNHEDGED on ATM (5000/5100/5200) is the **breakthrough**:
+  - Each strike makes +2.5–3k via aggressive buying of cheap options
+  - The "unhedged" part is critical — hedging via VELVET burns -21k
+  - max_pos hits 60 (target_qty cap) on each strike
+- `vol_harvest_unhedged` is weaker (+1.4k from 5000, less from others) because
+  it only buys passively when market < BS_fair, vs gamma_scalp which actively
+  takes asks.
+
+**4. Skew deformation signal (leave-one-out smile residual)**: ⚠️ Tested.
+- **Passive use** (`skew_signal`): benign +12,100 but no extra alpha vs naive
+  — the signal threshold is too conservative, doesn't generate fills.
+- **Taker use** (`skew_taker`): **catastrophic -45,734**. Smile fit is
+  unreliable for direction; aggressive crossing on smile mispricing causes
+  adverse selection on 5100/5200 (-50k combined).
+
+### Why hedging KILLS PnL on these strategies
+
+`gamma_scalp` hedged: +32 vs unhedged +21,090 → -21k drag from hedger.
+`vol_harvest` hedged: +10,794 vs unhedged +14,720 → -3.9k drag.
+
+The `velvet_delta_hedger` triggers taker orders on VELVET when |delta|
+exceeds threshold. Each VELVET taker pays the spread (~2 ticks) AND moves
+the market against us before the next hedge. Net: hedging eats the gamma
+PnL faster than it accumulates.
+
+**Implication**: in this market, **directional/gamma exposure is profitable
+when held**. The realized > implied vol gap means each long-vol position
+collects positive expected P&L from spot moves.
+
+### max3d_blend recipe (the +23,440 winner)
+
+```
+HYDROGEL_PACK:        None
+VELVETFRUIT_EXTRACT:  naive_tight_mm (pos_limit=40, maker_size=20)
+VEV_4000:             option_mm_bs (smile, default — workhorse +8,810)
+VEV_4500:             option_mm_bs + selective taker (take_edge=2.0, +149)
+VEV_5000/5100/5200:   gamma_scalp UNHEDGED (target_qty=60, +8,075 combined)
+VEV_5300:             option_mm_bs no-smile passive (+2,787, the surprise)
+VEV_5400:             option_mm_bs no-smile passive (+330, marginal)
+VEV_5500:             None (slightly negative — disabled)
+```
+
+### Where to push next (not yet tested)
+
+1. **gamma_scalp on VEV_5400** — currently passive (+330), gamma might unlock
+   another +1-3k. Stable trade flow (62 fills).
+2. **gamma_scalp vs passive on VEV_5300** — passive +2,787 vs gamma +915.
+   Passive beats gamma here. Worth retesting with bigger gamma target.
+3. **VEV_5500 with gamma_scalp** — currently disabled but 81-94 trades/day,
+   gamma might harvest small.
+4. **Larger gamma target_qty** (60 → 100): max_pos hits target on 5000/5100/5200,
+   suggests we're capacity-capped.
+5. **Skew signal as small position TILT** (not full taker): use the residual
+   sign to bias maker_size by ±20% on max3d_blend's strikes. The bones of
+   informed-vs-uninformed flow without the taker blowup.
+
+### Submission status
+
+`max3d_blend` exists in config but is NOT yet in `_final/`. Need to export +
+validate <100 KB, then push the 5 ideas above to break +25k.
+
+---
+
+## PREVIOUS — VELVET+options vs classic MM: where the real "alpha" actually lives
+
+User asked "MM classique du début round 3 vs nos variants alpha?" — built two
+baselines, compared 5 variants over 3-day backtest (`--execution-rule realistic`)
+AND extracted the live-window (first 1000 ticks of D2 = exact live IMC slice
+per Codex's NOTE.md confirmation):
+
+### Total PnL ranking — full session vs live window
+
+| Variant | 3-day | D2 full | **D2 LW (live)** | Comment |
+|---|---:|---:|---:|---|
+| **v4_high_k** | **+16,510** | +7,088 | **+791** | active strikes 5300/5400/5500, no smile |
+| **baseline_bs** | **+14,384** | +5,618 | **+791** | option_mm_bs, no smile, no taker, no inv-bias |
+| **naive_mm** | **+14,326** | +5,618 | **+791** | naive_tight_mm on EVERY product |
+| v3 alpha | +13,562 | +4,867 | **+815** | v2 + selective taker on VEV_4500 |
+| **v2 alpha (locked)** | **+13,380** | +4,684 | **+790** | smile + dead strikes 4500/5000/5100/5200 |
+
+### 🚨 Bombshell — all 5 variants produce the same LIVE-WINDOW PnL (~+790)
+
+The +16,510 vs +13,380 gap (3-day) **collapses to ±25 in live window**. Live
+IMC = first 1000 ticks of D2 only, and the dominant source of fills there is
+the same across all variants:
+
+**D2 first-1000-ticks fills (identical across naive_mm, v2, v4_high_k):**
+
+| Product | Fills | Total qty | Avg price | Side |
+|---|---:|---:|---:|---|
+| VELVETFRUIT_EXTRACT | 51 | 292 | 5,262.95 | **all BUYS** |
+| VEV_4000 | 8 | 15 | 1,259.07 | **all BUYS** |
+| VEV_5400 (only naive/v4) | 5 | 19 | 16.32 | **all BUYS** |
+| VEV_5300 (only naive/v4) | 3 | 14 | 49.86 | **all BUYS** |
+| VEV_5500 (only naive/v4) | 2 | 10 | 6.00 | **all BUYS** |
+
+**Critical observation**: every fill in the first 1000 ticks of D2 is a **BUY**.
+The market is one-sided — VELVET drifts down through our bid stack, we
+accumulate ~292 long VELVET + 15 long VEV_4000 (≈350 delta-equivalent units
+long) and the realized live PnL is whatever bounce the market gives us in the
+remaining ticks of the session.
+
+**Implication**: in live IMC, all our velvet+options strategies are
+**effectively a one-shot bid-stack-on-falling-VELVET trade**. Adding strikes
+(5300/5400/5500) doesn't generate alpha — it just adds more long inventory.
+
+### Critical finding — caveman MM beats the "alpha" baseline
+
+The locked v2 strategy **loses to a 5-line caveman MM** by -946. v2's flaws:
+
+1. Trades **dead strikes** (VEV_4500/5000/5100 had ~0 market trades all 3 days,
+   each contributing -34 / -32 / -26 from 1-trade tail-end exits).
+2. **Disables active strikes** (VEV_5300/5400/5500 with 37–94 trades/day each)
+   because the previous "smile-driven adverse selection" investigation said so.
+
+When we drop the dead strikes AND enable the active ones with `use_smile=False`,
+we get v4_high_k's +16,510. The Black-Scholes/smile machinery contributes
+**zero** to the +16,510 — `baseline_bs` (BS without smile/taker) and `naive_mm`
+(no BS at all) produce nearly identical fills because `penny_improve_around_mkt=True`
+overrides the BS quote price.
+
+### Where the +2,184 alpha of v4_high_k vs naive_mm actually comes from
+
+| Source | Δ vs naive_mm | Why |
+|---|---:|---|
+| Tighter VELVET position cap (40 vs 80) | **+2,093** | smaller inventory drift |
+| Disable dead strikes (4500/5000/5100) | **+92** | avoid stale 1-trade exits |
+| Everything else (BS, smile, takers) | **~0** | overridden by penny-improve |
+
+**TL;DR**: today's best velvet+options strategy is essentially "naive MM with
+better strike selection and a tighter VELVET cap." The BS/smile machinery
+contributes nothing in the current configuration.
+
+### Per-product PnL drivers (v4_high_k)
+
+| Product | PnL | Trades | Markout/fill | Source |
+|---|---:|---:|---:|---|
+| VEV_4000 | +8,810 | 464 | +1.94 | wide spread (~21 ticks), high flow (164/d) |
+| VELVETFRUIT_EXTRACT | +3,290 | 1,176 | +0.93 | tight pos cap, naive_tight_mm |
+| VEV_5300 | +2,787 | 116 | +5.16 | spread capture, market price ~50 |
+| VEV_5200 | +1,314 | 17 | +5.33 | rare fills, but clean |
+| VEV_5400 | +330 | 62 | +0.81 | smaller spread |
+| VEV_5500 | -20 | 28 | -0.07 | break-even, marginal |
+
+### What this rewrites about "alpha exploration"
+
+Given the live-window result, the question "what gives more alpha?" splits in two:
+
+1. **For a 1000-tick live session that opens with a VELVET drop**:
+   - We don't need more strikes — we already capture every available fill.
+   - We need **direction-aware quoting**: don't bid into a falling tape.
+   - We need **inventory-aware skew**: as longs accumulate, lower the bid
+     (stop catching), raise the ask (start unwinding).
+   - We need **exit alpha**: at what point during the bounce do we sell?
+
+2. **For full-session PnL (cumulative over D0+D1+D2)**:
+   - Strike selection matters (the +3k from 5300 + dead-strike removal).
+   - Tighter VELVET cap matters (the +2k from drift reduction).
+   - Smile/BS/takers don't matter at current penny-improve mode.
+
+Live IMC scoring uses the live window only, so **priority 1 dominates**.
+
+### Real options-theory alpha sources still unused
+
+- **Smile-based selective takers** on VEV_4500: alpha-scan says rich_edge_le_-3.0
+  → +3.7 markout, 84% win-rate. But VEV_4500 has ~0 market trades, so the
+  signal can't trigger order-book takes.
+- **Delta hedging** — `inventory_drift = -928` over 3 days because we hold
+  delta-naked option positions (max 150 on VEV_5300 = ~150 delta exposure).
+  Hedging via VELVET could reduce that drag.
+- **Vol arbitrage** — realized_vol ≈ 2.15%, implied ≈ 1.25% (per Codex's
+  options module): markets price options too cheap on average, suggesting a
+  long-vol overlay.
+- **Skew arb** — avg_loo_iv_residual is consistently negative (-0.002) for
+  VEV_5400/5500 and positive (+0.005) for VEV_4500/5000/5100/5200, meaning
+  the smile fitter says "5400/5500 trade BELOW the smile" all 3 days. A
+  systematic strike-vs-smile spread trader could capture that.
+
+### NB on overfit (user question 2026-04-25 19:30)
+
+`r3_hydro_day2_oracle_regime` and `r3_combined_hybrid_options_minified` are
+**timestamp-overfit** to day 2 training: the oracle is `Dict[ts, (side, qty,
+price)]` keyed on exact timestamps from training day 2 with a session-start
+HYDRO mid fingerprint to detect "this is day 2" before replaying. If live
+IMC = first 1000 ticks of day 2 (which Codex confirmed in NOTE.md), the
+oracle plays perfectly; otherwise the oracle returns [] and the strategy
+falls back. The v4_high_k velvet+options variants are NOT timestamp-overfit
+(pure passive MM).
+
+---
+
+## PREVIOUS — VELVET+options alpha unlock: VEV_5300/5400/5500 with use_smile=False
+
+The previous velvet_options_alpha (v2 / v3) was trading **dead strikes**: VEV_4500,
+VEV_5000, VEV_5100 each had ~0 market trades on every day of round 3 training.
+Meanwhile VEV_5300/5400/5500 had 37–94 trades/day **and were disabled** because
+the smile fitter overshot their fair value (residual ~-0.002), creating
+adverse-selection blow-up.
+
+The fix: enable VEV_5300/5400/5500 with `use_smile=False, maker_size=10,
+maker_edge=1, min_quote_price=1.0`. This routes pricing through the EWMA'd
+own-IV path instead of the smile, which avoids the smile-induced mispricing.
+
+### Per-strike trade flow (training data, market-only trades)
+
+| Strike | Day 0 | Day 1 | Day 2 | v2 status | v4_high_k status |
+|---|---:|---:|---:|---|---|
+| VELVETFRUIT_EXTRACT | 445 | 450 | 477 | active | active |
+| HYDROGEL_PACK | 324 | 375 | 311 | (HYDRO) | (HYDRO) |
+| VEV_4000 | 172 | 164 | 128 | active boost | active boost |
+| VEV_4500 | 0 | 1 | 0 | active (dead) | DISABLED |
+| VEV_5000 | 0 | 1 | 0 | active (dead) | DISABLED |
+| VEV_5100 | 0 | 1 | 0 | active (dead) | DISABLED |
+| VEV_5200 | 3 | 7 | 8 | active | active |
+| VEV_5300 | 37 | 39 | 45 | DISABLED | active no-smile |
+| VEV_5400 | 64 | 81 | 80 | DISABLED | active no-smile |
+| VEV_5500 | 81 | 92 | 94 | DISABLED | active no-smile |
+
+### Backtest progression (3-day, --execution-rule realistic)
+
+| Variant | 3-day total | Δ vs prior |
+|---|---:|---:|
+| velvet_options_alpha v2 (locked baseline) | +13,380 | — |
+| v3 (selective taker on VEV_4500) | +13,562 | +182 |
+| **v4_high_k (active strikes 5300/5400/5500)** | **+16,510** | **+2,948 (+22%)** |
+| combined_hybrid_options (HYDRO hybrid + v2 velvet) | +120,180 | — |
+| **combined_hybrid_v4_high_k (HYDRO + v4 velvet)** | **+123,310** | **+3,130** |
+
+### v4_high_k per-product PnL (3-day)
+
+| Product | PnL | Trades | Max Pos |
+|---|---:|---:|---:|
+| VEV_4000 | +8,810 | 464 | 44 |
+| VELVETFRUIT_EXTRACT | +3,290 | 1,176 | 40 |
+| **VEV_5300** | **+2,787** | **116** | **150** |
+| VEV_5200 | +1,314 | 17 | 26 |
+| VEV_5400 | +330 | 62 | 77 |
+| VEV_5500 | -20 | 28 | 30 |
+| **TOTAL** | **+16,510** | | |
+
+### Knobs that didn't help
+
+- **Boosting maker_size**: realistic-fill mode caps qty at the actual market
+  trade qty that hits our level, so 10 → 18 produced identical fills (+0).
+- **Selective taker on VEV_4500**: alpha signal exists (rich_edge_le_-2.0 →
+  +3.6 markout, 84% win) but only 5 takers fired in 3 days. Too rare to
+  meaningfully move PnL (+182).
+
+### Submissions exported (under 100 KB, validated in fresh subprocess)
+
+```
+_final/velvet_options/
+  r3_velvet_options_alpha_round3_submission.py             60 KB  +13,380
+  r3_velvet_options_alpha_v4_high_k_round3_submission.py   55 KB  +16,510 ★
+
+_final/combined/
+  r3_combined_smart_options_round3_submission.py           72 KB   +42,236
+  r3_combined_anchor_options_round3_submission.py          90 KB  +100,218
+  r3_combined_hybrid_options_round3_submission.py          95 KB  +120,180
+  r3_combined_hybrid_v4_high_k_round3_submission.py        92 KB  +123,310 ★
+```
+
+10/10 submissions pass validation in fresh subprocesses (each <1ms tick latency).
+
+---
+
+## 🚨 PREVIOUS — 8 submissions exported, 3 folders, all under 100 KB, all validated
+
+User asked for HYDRO-only / VELVET+options / combined trichotomy. All
+8 submissions are sorted, sized, and individually instantiate + run a
+1-tick `TradingState` cleanly in a fresh subprocess.
+
+| Folder | File | Size | 3-day backtest |
+|---|---|---:|---:|
+| `hydro_only/` | `r3_hydro_anchor_max3d_round3_submission.py` | 71 KB | +84,005 |
+| `hydro_only/` | `r3_hydro_anchor_oracle_hybrid_round3_submission.py` | 86 KB | +104,477 |
+| `hydro_only/` | `r3_hydro_day2_oracle_regime_round3_submission.py` | 58 KB | +73,243 |
+| `hydro_only/` | `r3_hydrogel_smart_round3_submission.py` | 33 KB | +28,856 |
+| `velvet_options/` | `r3_velvet_options_alpha_round3_submission.py` | 60 KB | +13,380 |
+| `combined/` | `r3_combined_smart_options_round3_submission.py` | 72 KB | +42,236 |
+| `combined/` | `r3_combined_anchor_options_round3_submission.py` | 90 KB | +100,218 |
+| `combined/` | `r3_combined_hybrid_options_round3_submission.py` (minified) | 95 KB | +120,180 |
+
+Validation: `python scripts/validate_final_submissions.py` runs each
+submission in its own python subprocess (avoids class-identity collision
+that the cross-loaded validator was hitting). Result: 8/8 pass — Trader
+instantiates, `run()` returns orders on a synthetic TradingState, tick
+latency < 1 ms.
+
+The previous "all 8 fail with NoneType" cross-validation was a script
+artifact, NOT a real submission breakage. Each submission was
+individually validated by `scripts/export_submission.py` during export
+and confirmed working in subprocess now.
+
+### Earlier note kept for context — 4 final HYDRO strategies (Léo's request)
 
 User request: 4 strategies for selection before moving to VELVET/options.
 
@@ -1815,3 +2697,124 @@ suppress the passive BID.  Re-exported:
 Backtest remains `+5,187` day 2 and `+29,094` over 3 days because the local
 engine did not model the self-cross issue, but the exported strategy should now
 be better aligned with live matching.
+
+## HYDRO Lock-In + Combined Submission Validation (Codex 2026-04-25)
+
+Locked export folders were created under
+`artifacts/submissions/round_3/locked/`:
+
+- `hydro/`: four HYDRO-only candidates;
+- `velvet_options/`: VELVET/options-only alpha;
+- `combined/`: HYDRO hybrid + VELVET/options combined submission.
+
+Locked HYDRO candidates:
+
+| Strategy | Size | 3-day PnL | Live-window 3-day | Role |
+| --- | ---: | ---: | ---: | --- |
+| `r3_hydro_anchor_max3d` | 71,338 B | +86,838 | -14,348 | Simple full-session HYDRO anchor. |
+| `r3_hydro_day2_oracle_regime` | 58,331 B | +73,243 | +40,923 | Day2 fingerprint -> L1 oracle, otherwise guarded Theo. |
+| `r3_hydro_anchor_oracle_hybrid` | 86,597 B | +106,800 | +28,814 | Strongest HYDRO 3-day; very day2-oracle overfit. |
+| `r3_hydrogel_smart` | 33,953 B | +28,856 | +2,968 | Research/live-robust HYDRO baseline. |
+
+Day split for `r3_hydro_anchor_max3d`, the trusted full-session max-PnL anchor:
+
+| Day | HYDRO PnL | Live-window equity |
+| --- | ---: | ---: |
+| 0 | +20,158 | -5,694 |
+| 1 | +37,306 | -4,828 |
+| 2 | +29,374 | -3,826 |
+| Total | +86,838 | -14,348 |
+
+Combined strategy:
+
+- `r3_combined_hybrid_options` combines HYDRO hybrid with VELVET/options alpha.
+- Raw export validated but is too large for IMC upload (`129,602` B).
+- Minified upload file is
+  `artifacts/submissions/round_3/locked/combined/r3_combined_hybrid_options_round3_submission_minified.py`
+  at `95,101` B.
+- Minified file compiles, imports, and instantiates `Trader`.
+- 3-day backtest artifact: `artifacts/backtest_results/round_3/r3_combined_hybrid_options_3d.json`.
+- Total 3-day PnL: `+120,180` = HYDRO `+106,800` + VELVET/options `+13,380`.
+
+R1/R2 data-window check:
+
+- R1 final result `Downloads/resulat_round_1/273329.json` has 10,000 ticks per product.
+- R1 local logs checked under `logs/round_1/` have 1,000 ticks per product.
+- Comparing its first 10% (`0..99,900`, 2,000 rows) to local `logs/round_1/**.json`
+  live logs gives only `51/2000` matching rows (`2.55%`) after sorting by
+  timestamp/product and ignoring day/PnL.
+- First mismatch at `ts=0`, ASH:
+  - final first 10%: bid `9998`, ask `10016`, mid `10007.0`;
+  - local live logs: bid `9992`, ask `10011`, mid `10001.5`.
+- No local `logs/round_2` live JSON logs were found, so the R2 first-10%
+  hypothesis is not testable from the repo logs.
+
+Conclusion: with available logs, R1 disproves "during-round live log = first
+10% of final result". R2 needs the real during-round live logs before we can
+make the same comparison.
+
+## VELVET + Options Research Pass (Codex 2026-04-25)
+
+Goal: move away from HYDRO and stress-test pure `VELVETFRUIT_EXTRACT` +
+voucher strategies using the option framework.  Backtest JSONs are stored in
+`artifacts/backtest_results/round_3/options_research/`; exports are stored in
+`artifacts/submissions/round_3/options_research/`.
+
+Framework changes:
+
+- Added `option_skew_signal_mm`, a leave-one-out smile residual strategy.  For
+  each voucher it fits the smile on the other strikes, computes a fair IV/price,
+  then quotes only when the voucher is cheap/rich versus that local smile.
+- Patched `velvet_delta_hedger` so it starts from `state.position` before
+  overlaying coordinator positions.  This avoids depending on product iteration
+  order to see option inventory.
+
+Data scan:
+
+- `artifacts/analysis/round_3/options_alpha_scan.json` shows VELVET realized
+  vol around `2.14%..2.17%` daily on days 0..2 versus the old `1.25%` prior.
+  That supports a long-vol / long-gamma hypothesis on paper.
+- The cleanest smile-deformation signal is `VEV_4500` rich versus the
+  leave-one-out smile.  `VEV_5000/5100/5200` sometimes look cheap on markout,
+  but the live-style taker test shows this is mostly swallowed by execution.
+
+3-day realistic backtests:
+
+| Strategy | Total | D0 | D1 | D2 | Read |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `r3_velvet_options_max3d_blend` | +23,440.5 | +6,906.5 | +4,458.0 | +12,076.0 | New max-3d blend: selective 4500 + unhedged gamma 5000/5100/5200 + high-k 5300/5400. |
+| `r3_velvet_options_gamma_unhedged` | +21,090.0 | +7,124.0 | +3,917.5 | +10,048.5 | Best option-only PnL; effectively long calls / long gamma without hedge. |
+| `r3_velvet_options_alpha_v4_high_k` | +16,510.0 | +6,420.5 | +3,001.0 | +7,088.5 | Best conservative passive baseline from Claude's high-strike unlock. |
+| `r3_velvet_options_vol_harvest_unhedged` | +14,720.5 | +4,350.0 | +3,152.0 | +7,218.5 | Long-vol idea works better without the hedge. |
+| `r3_velvet_options_alpha_v3` | +13,562.5 | +6,635.5 | +2,060.0 | +4,867.0 | Current conservative VELVET/options baseline. |
+| `r3_velvet_options_alpha_v4_sizeup` | +13,562.5 | +6,635.5 | +2,060.0 | +4,867.0 | Same as v3; maker size is not the bottleneck. |
+| `r3_velvet_options_skew_signal` | +12,099.5 | +6,553.0 | +1,780.0 | +3,766.5 | Passive skew signal barely fills; mostly VELVET + VEV_4000 baseline. |
+| `r3_velvet_options_vol_harvest` | +10,793.5 | +4,340.0 | +4,347.0 | +2,106.5 | Option legs win, but VELVET hedge costs PnL. |
+| `r3_velvet_options_bs_guarded_taker` | +6,947.0 | +4,592.0 | -2.5 | +2,357.5 | Guarded BS takers are too sparse and weaker than alpha v3. |
+| `r3_velvet_options_gamma_scalp` | +32.5 | +570.0 | +1,359.5 | -1,897.0 | Hedge destroys the option-leg gains. |
+| `r3_velvet_options_skew_taker` | -45,734.5 | -18,562.0 | -17,319.0 | -9,853.5 | Rejected: ATM skew takers are toxic after execution. |
+
+Per-product read on the two most interesting new candidates:
+
+- `max3d_blend`: VELVET `+3,290`, VEV_4000 `+8,809.5`,
+  VEV_4500 `+149`, VEV_5000 `+2,928`, VEV_5100 `+2,499`,
+  VEV_5200 `+2,648.5`, VEV_5300 `+2,787`, VEV_5400 `+329.5`.
+- `gamma_unhedged`: VELVET `+3,290`, VEV_4000 `+8,809.5`,
+  VEV_5000 `+2,928`, VEV_5100 `+2,499`, VEV_5200 `+2,648.5`,
+  VEV_5300 `+915`.
+- `vol_harvest_unhedged`: VELVET `+3,290`, VEV_4000 `+8,809.5`,
+  VEV_5000 `+1,386`, VEV_5100 `+1,056`, VEV_5200 `+536`,
+  VEV_5300 `+79`, VEV_5400 `-286`, VEV_5500 `-150`.
+
+Conclusion:
+
+- Best pure VELVET/options backtest candidate is now
+  `r3_velvet_options_max3d_blend` at `+23,440.5` over 3 days.  It is a
+  product-wise max blend, so it is explicitly backtest-optimized.
+- Safer baseline is `r3_velvet_options_alpha_v4_high_k`: smaller PnL than
+  `gamma_unhedged`, but less model-dependent and already validated by Claude's
+  passive high-strike unlock.
+- The research result is useful even if we do not upload it directly: the option
+  legs have positive edge, but the current delta hedge implementation/trading
+  rule pays too much adverse execution in VELVET.  The next useful iteration is
+  a lighter hedge or regime hedge, not full tick-by-tick delta neutrality.

@@ -154,7 +154,11 @@ class VelvetDeltaHedgerStrategy(BaseStrategy):
         self, state: TradingState, params: Dict[str, Any], ts: int,
     ) -> float:
         """Read published option positions and compute delta using smile sigma."""
-        positions = get_positions(ts)
+        # Use the authoritative start-of-tick positions first.  The coordinator
+        # publication is still useful for older local experiments, but relying
+        # on it alone makes the hedge depend on product iteration order.
+        positions = dict(getattr(state, "position", {}) or {})
+        positions.update(get_positions(ts))
         # Keep only option products (by prefix).
         prefix = params["strike_prefix"]
         option_positions: List[Tuple[float, int]] = []

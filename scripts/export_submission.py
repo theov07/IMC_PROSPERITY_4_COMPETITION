@@ -110,6 +110,9 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+    "option_skew_signal_mm": ("prosperity/strategies/round_3/option_skew_signal_mm.py", "OptionSkewSignalMMStrategy"),
+    "option_skew_dynamic_mm": ("prosperity/strategies/round_3/option_skew_dynamic_mm.py", "OptionSkewDynamicMMStrategy"),
+    "gamma_scalp_zgated":  ("prosperity/strategies/round_3/gamma_scalp_zgated.py", "GammaScalpZGatedStrategy"),
     "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
     "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
     "anchor_adaptive":    ("prosperity/strategies/round_3/anchor_adaptive.py", "AnchorAdaptiveStrategy"),
@@ -183,6 +186,14 @@ _R3_OPTIONS_DEPS = [
     "prosperity/options/implied_vol.py",
     "prosperity/options/smile.py",
     "prosperity/options/coordinator.py",
+    # NOTE: hedging.py omitted (only used by velvet_delta_hedger which we don't ship)
+]
+_R3_OPTIONS_DEPS_FULL = [  # explicit full list when hedging is needed
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+    "prosperity/options/coordinator.py",
     "prosperity/options/hedging.py",
 ]
 _R3_OPTIONS_DEPS_SLIM = [
@@ -193,7 +204,9 @@ _R3_OPTIONS_DEPS_SLIM = [
 ]
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "option_mm_bs":       _R3_OPTIONS_DEPS,
-    "velvet_delta_hedger": _R3_OPTIONS_DEPS,
+    "option_skew_signal_mm": _R3_OPTIONS_DEPS,
+    "option_skew_dynamic_mm": _R3_OPTIONS_DEPS,
+    "velvet_delta_hedger": _R3_OPTIONS_DEPS_FULL,  # needs hedging.py
     "vol_harvest":        _R3_OPTIONS_DEPS,
     "ms_regime_option":   _R3_OPTIONS_DEPS,
     "anchor_adaptive":    ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
