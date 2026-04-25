@@ -122,6 +122,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "theo_best_clean_generalized_v7": ("prosperity.strategies.round_2.theo.theo_v7_continuous", "TheoBestCleanGeneralizedV7Strategy"),
     "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
     # ── Tibo Round 3 ──
+    "gamma_scalp_zgated":  ("prosperity.strategies.round_3.tibo.gamma_scalp_zgated", "GammaScalpZGatedStrategy"),
     "velvet_strat":        ("prosperity.strategies.round_3.tibo.velvet_strat",    "VelvetStratV1"),
     "velvet_strat_v2_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v2", "VelvetMMV2"),
     "velvet_strat_v2_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v2", "VEVOptionMMV2"),

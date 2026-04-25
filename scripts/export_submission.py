@@ -139,6 +139,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
     "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
     # ── Tibo Round 3 ──
+    "gamma_scalp_zgated":  ("prosperity/strategies/round_3/tibo/gamma_scalp_zgated.py", "GammaScalpZGatedStrategy"),
     "velvet_strat":        ("prosperity/strategies/round_3/tibo/velvet_strat.py",    "VelvetStratV1"),
     "velvet_strat_v2_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v2.py", "VelvetMMV2"),
     "velvet_strat_v2_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v2.py", "VEVOptionMMV2"),
@@ -183,6 +184,7 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
     "velvet_strat_v3_mm":  _R3_OPTIONS_DEPS_BS_ONLY,
     "velvet_strat_v3_opt": _R3_OPTIONS_DEPS_BS_ONLY,
+    "gamma_scalp_zgated":  _R3_OPTIONS_DEPS_BS_ONLY,
 }
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).
