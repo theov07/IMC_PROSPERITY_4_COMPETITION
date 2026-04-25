@@ -4,6 +4,80 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 2026-04-25 03:00 — Claude: **THEO'S STRAT DISSECTED** + multi-product clone built
+
+### Léo brought 2 logs to compare
+
+1. `log_3/386829.json`: our follow_mm live → +610 total (HYDRO only)
+2. `pnl_pas_mal/386998.json`: Theo's strat → **+1,867 total** (3x ours!)
+
+### Theo's secret sauce
+
+**HYDROGEL strategy `R3HydroReversionMM`** (live +920 vs our +610):
+- Dual EMA: slow (α=0.008), fast (α=0.03)
+- `trend = fast_ema - slow_ema`
+- **`trend_guard=6.0`**: mean-rev signal ONLY fires when `|trend| < 6 ticks`
+- This is what we missed — when day 2 trended down, our z-score said
+  "mid is rich vs EMA" but EMA was lagging the decline. trend_guard
+  detects this and SKIPS the bad signal.
+
+**Multi-product**: Theo trades 8 products (we trade 1):
+- HYDROGEL: +920 (R3HydroReversionMM with trend_guard)
+- VELVETFRUIT: +677 (`naive_tight_mm` passive ladder, maker_size=30)
+- VEV 4000-5300: +275 total (`option_mm_bs` BS-fair MM, smile, no takers)
+- 1257 PnL of his +1867 came from products we IGNORED
+
+### Léo's daily-trend hypothesis — CONFIRMED
+
+Average HYDROGEL drift across day 0/1/2:
+
+| First N ticks | Day 0 | Day 1 | Day 2 | **Avg** |
+|---|---|---|---|---|
+| 1000 (=live window) | -46 | -15 | -51 | **-37.3** |
+| 5000 | -15 | +40 | -31 | -2.0 |
+| 10000 | -42 | +57 | -1 | +4.7 |
+
+**The live window is systematically bearish** (-37 ticks avg). Mean-reverts
+to ~0 by 5k ticks, then can rebound. Short bias in early session = edge.
+
+### Léo's bid/ask cross EWM signal
+
+Backtested as predictive: NOT robust (markout unstable across days).
+But IS descriptive of regime — equivalent to Theo's `trend_guard` which
+already encodes "current bid/ask diverged from EMA → trend mode".
+
+### Built: `r3_theo_inspired` + `r3_theo_drift`
+
+1. **`r3_theo_inspired`**: exact clone of Theo's stack
+   - HYDRO=`hydrogel_reversion_mm` (R3HydroReversionMM clone with trend_guard=6)
+   - VELVET=`naive_tight_mm` (maker_size=30)
+   - VEV 4000-5300=`option_mm_bs` (BS-fair MM, smile, min_quote=2.0, no takers)
+   - VEV 5400-6500=disabled
+
+2. **`r3_theo_drift`**: same + Léo's `session_drift_bias=4` for first 1000 ticks.
+   Backtest: identical PnL — bias redundant because mean-rev signal already
+   leans short. Kept as documented experiment.
+
+### Backtest live-window (day 2, ts 0-99900)
+
+| Strategy | Final | Peak | DD | Notes |
+|---|---|---|---|---|
+| **`r3_theo_inspired` clone** | **+1,708** | +2,621 | -1,076 | predicts Theo's actual +1,867 (91% match) |
+| follow_mm v2 (ours, HYDRO only) | +717 | +1,457 | -740 | live: +610 |
+| asym_mm v2 (validated live) | +672 | +763 | -201 | safest, lowest alpha |
+
+**theo_inspired beats our previous best by +1,036 PnL (2.5x).**
+
+### Recommendation
+
+Upload `r3_theo_inspired` next. Expected live ~+1,700-1,900.
+- Submission: `artifacts/submissions/round_3/theo/r3_theo_inspired_round3_submission.py` (66 KB)
+
+If Round 3 final session is longer than 1k ticks, the multi-product
+edge compounds (HYDRO mean-rev + VELVET passive + VEV options all linear in time).
+
+---
+
 ## 2026-04-25 02:00 — Claude: **hydrogel_ladder_mm** + **ladder_v2** built (volume play)
 
 ### Idea (Léo): level quoting to amplify volume
@@ -334,6 +408,35 @@ reduced fill count** (20 → 10 trades) because it shrinks bid/ask size when
 2. Try **trend follower** on VELVETFRUIT and correlate to HYDROGEL (mild cross-asset)
 3. Hybrid: oracle-like aggressive action when we KNOW a profitable taker is possible (e.g. ask visible < anchor − 10), else stay passive
 4. Investigate why Codex oracle can do 42k HYDROGEL alone (vs our 10k) — it takes aggressive positions at key moments
+
+---
+
+## 2026-04-25 02:10 - Codex: dashboard log loading / quote traces
+
+Problem seen by Leo:
+- `python -m prosperity.tooling.dashboard --log logs/round_3/386829.json --data-dir data`
+  showed market prices but not own trades / quoted bid-ask.
+
+Diagnosis:
+- `logs/round_3/386829.json` is only the IMC summary payload:
+  `activitiesLog`, `graphLog`, positions, profit.
+- The detailed payload with `tradeHistory` is in
+  `Downloads/log_3/386829.log`, not in `logs/round_3/`.
+- The old `386829.log` has `tradeHistory` but no non-empty `lambdaLog`, so
+  quoted bid/ask cannot be recovered from that historical log.
+
+Fixes:
+- `prosperity.tooling.logs.load_official_log` now searches common IMC download
+  folders (`Downloads/`, `Downloads/log_*`) for same-stem `.log/.json/.py`
+  companions when only a moved JSON is passed.
+- With the command above, it now loads:
+  `logs/round_3/386829.json` + `Downloads/log_3/386829.log` +
+  `Downloads/log_3/386829.py`.
+- `HYDROGEL_PACK` own trades for `386829`: `20` rows; dashboard figure now has
+  Buy/Sell markers, Submission Flow, and Position.
+- Added `quote_trace_enabled=True` to `r3_hydrogel_follow_mm` and added
+  `log_quote_snapshot(...)` in `hydrogel_follow_mm.py`, so future logs from
+  this strategy should show MM Bid/Ask traces in the dashboard.
 
 ---
 

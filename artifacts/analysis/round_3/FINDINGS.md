@@ -4,7 +4,116 @@ Updated: 2026-04-25
 
 ---
 
-## 🚨 LATEST — follow_mm LIVE confirmed (log 386829)
+## 🚨 BREAKTHROUGH — Theo's strat dissected + multi-product clone (log 386998)
+
+### Theo's live result: total **+1,867** vs our +610 (3x better)
+
+**Per-product breakdown** (Theo, log 386998, day 2 live):
+| Product | PnL | Position |
+|---|---|---|
+| HYDROGEL_PACK | +920 | -22 |
+| VELVETFRUIT_EXTRACT | +677 | +2 |
+| VEV_4000 | +134 | +3 |
+| VEV_4500 | +99 | +3 |
+| VEV_5000 | +25 | +3 |
+| VEV_5100 | +12 | +3 |
+| VEV_5200 | +5 | +3 |
+| VEV_5300 | -5 | +6 |
+| **TOTAL** | **+1,867** | — |
+
+We were trading HYDROGEL only. Theo trades 8 products. **+1,257 of his edge
+comes from VELVET + VEV options that we ignored.**
+
+### Theo's HYDROGEL strategy (`R3HydroReversionMM`)
+
+The KEY innovation we missed in our `asym_mm`: **`trend_guard=6.0`**.
+
+```python
+# Mean-rev signal ONLY fires if NOT trending strongly
+if abs(trend) < trend_guard:        # trend = fast_ema - slow_ema
+    if deviation > quote_threshold:  # deviation = mid - slow_ema
+        bid_size = 0
+        ask_size = maker + min(boost, |dev|//4)
+    elif deviation < -quote_threshold:
+        ask_size = 0
+        bid_size = maker + min(boost, |dev|//4)
+# Else: SKIP signal, just inventory-skewed symmetric MM
+```
+
+This is the missing piece in our asym_mm v2: when day 2 trended down strongly,
+our z-score said "mid is rich vs EMA" so we kept selling. But the EMA was
+LAGGING the decline, making us bet against a real trend. Theo's trend_guard
+detects "fast EMA diverged from slow EMA → trend mode → skip mean-rev signal."
+
+### Léo's daily-trend hypothesis (CONFIRMED)
+
+Average HYDROGEL drift over first N ticks across day 0/1/2:
+
+| N (ticks) | Day 0 | Day 1 | Day 2 | Avg |
+|---|---|---|---|---|
+| 100 | +6 | -11 | +10 | +1.5 |
+| 200 | +10 | -6 | +7 | +3.7 |
+| 500 | -19 | +24 | -56 | -17.0 |
+| **1000 (live window)** | **-46** | **-15** | **-51** | **-37.3** |
+| 2000 | -30 | +58 | -41 | -4.3 |
+| 5000 | -15 | +40 | -31 | -2.0 |
+| 7000 | +21 | +89 | -3 | +35.7 |
+| 10000 | -42 | +57 | -1 | +4.7 |
+
+**The live window (1000 ticks) is systematically bearish on all 3 days
+(-37 ticks avg)**. After ts ~5M (5000 ticks) drift mean-reverts to ~0,
+then rebounds up by ts ~7M. So during live tests, **a short bias is
+statistically favorable**.
+
+### Léo's bid/ask cross EWM idea (mixed)
+
+Backtested signal: bull = `bid > ewm`, bear = `ask < ewm`. Markout 5000ts
+ahead is UNSTABLE across days (sometimes mean-rev, sometimes trend continuation).
+However the signal IS descriptive of current regime (337 bear vs 96 bull
+signals on day 0 confirms its bearish drift). Equivalent function: Theo's
+`trend_guard` already encodes this regime detection via `|fast_ema - slow_ema|`.
+
+### Built: `r3_theo_inspired` + `r3_theo_drift`
+
+Two new strategies:
+
+1. **`r3_theo_inspired`** — exact clone of Theo's stack:
+   - HYDROGEL: `hydrogel_reversion_mm` (R3HydroReversionMM clone with trend_guard=6)
+   - VELVETFRUIT: `naive_tight_mm` (passive ladder, maker_size=30)
+   - VEV 4000-5300: `option_mm_bs` (BS-fair MM, smile, no takers, min_quote=2.0)
+   - VEV 5400-6500: disabled (too far OTM)
+
+2. **`r3_theo_drift`** — same as theo_inspired + Léo's session_drift_bias=4
+   for first 1000 ticks (lean short via -4 bid/+4 ask). Backtest shows the
+   bias is REDUNDANT (HYDRO already finishes -22 short via mean-rev signal),
+   no PnL difference. Kept as documented experiment.
+
+### Backtest validation
+
+Day 2 live-window comparison:
+
+| Strategy | Final | Peak | DD | vs Live actual |
+|---|---|---|---|---|
+| **theo_inspired** | **+1,708** | +2,621 | -1,076 | Theo's live: +1,867 (91% match) |
+| follow_mm | +717 | +1,457 | -740 | live: +610 |
+| ladder_v2 | +467 | +1,346 | -879 | (untested live) |
+| asym_mm v2 LIVE | +672 | +763 | -201 | confirmed |
+
+**theo_inspired beats our previous best (asym_mm v2 +672) by +1,036 in
+live-window backtest** (2.5x improvement).
+
+### Recommendation for next live
+
+**Upload `r3_theo_inspired`**. Expected live PnL ~+1,700-1,900 based on:
+- backtest live-window prediction +1,708
+- Theo's actual live +1,867 (same strategy)
+- HYDROGEL alone ~+920, VELVET ~+677, VEV options ~+275
+
+Submission: `artifacts/submissions/round_3/theo/r3_theo_inspired_round3_submission.py` (66 KB)
+
+---
+
+## 🚨 PREVIOUS — follow_mm LIVE confirmed (log 386829)
 
 **Live result (ts 0-99900 of day 2, exact replay)**:
 - Final **+610**

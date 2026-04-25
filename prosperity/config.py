@@ -3036,6 +3036,7 @@ MEMBER_OVERRIDES["r3_hydrogel_follow_mm"] = {
             min_pos_for_take=8,                 # takers only fire when |pos|>=8
             min_samples=200,
             log_flush_ts=1000,
+            quote_trace_enabled=True,
             ts_increment=100,
             last_ts_value=999900,
         ),
@@ -3117,6 +3118,151 @@ MEMBER_OVERRIDES["r3_hydrogel_ladder_v2"] = {
         ),
         "VELVETFRUIT_EXTRACT": None,
         **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 THEO INSPIRED — multi-product clone of Theo's live winner (log 386998)
+# Theo's live: total +1,867 (HYDRO +920, VELVET +677, VEV options +275)
+# Strategy stack:
+#   - HYDROGEL: hydrogel_reversion_mm (clone of R3HydroReversionMM with trend_guard)
+#   - VELVETFRUIT: naive_tight_mm (passive ladder, maker_size=30)
+#   - VEV options: option_mm_bs (BS-fair MM with smile, no takers, min_quote=2.0)
+# ──────────────────────────────────────────────────────────────────────────────
+_THEO_VEV_OPTION_PARAMS = dict(
+    enable_takers=False,
+    inv_bias_per_unit=0.02,
+    iv_ewma_alpha=0.3,
+    log_flush_ts=1000,
+    maker_edge=2,
+    maker_size=20,
+    min_quote_price=2.0,
+    penny_improve_around_mkt=True,
+    prior_vol=0.0125,
+    sigma_cap=0.1,
+    sigma_floor=0.005,
+    take_edge=3.0,
+    take_size=40,
+    timestamp_units_per_day=1000000,
+    ts_increment=100,
+    last_ts_value=999900,
+    tte_days_initial=5.0,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    use_smile=True,
+)
+
+
+MEMBER_OVERRIDES["r3_theo_inspired"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,                # slow EMA (half-life ~86 ticks)
+            fast_ema_alpha=0.03,            # fast EMA (half-life ~23 ticks)
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,            # mid > ema+6 → mean-rev signal fires
+            max_signal_size_boost=12,
+            trend_guard=6.0,                # CRITICAL: skip signal if |fast-slow|>=6
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            session_drift_bias=0,           # OFF (matches Theo's exact params)
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        # Trade only ITM-ish strikes (4000-5300) — same as Theo's strategy.
+        # Skipped: 5400, 5500, 6000, 6500 (too far OTM, min_quote_price gate).
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                strategy="option_mm_bs",
+                position_limit=300,
+                strike=strike,
+                **_THEO_VEV_OPTION_PARAMS,
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200, 5300]
+        },
+        # Disable far OTM strikes (too risky / illiquid)
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 THEO INSPIRED + LÉO'S DAILY-TREND BIAS
+# Same as r3_theo_inspired but with session_drift_bias=4 (lean short in
+# first 100k ts of session). Backtest on day 0/1/2 shows -37 ticks avg drift
+# in first 1000 ticks, so short bias is statistically favorable.
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_theo_drift"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            # Léo's daily-trend bias
+            session_drift_bias=4,                       # +4 to ask, -4 to bid in early session
+            session_bias_strong_until_ts=100_000,       # 1000 ticks (live window length)
+            session_bias_fade_until_ts=300_000,         # fade out by ts 300k
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                strategy="option_mm_bs",
+                position_limit=300,
+                strike=strike,
+                **_THEO_VEV_OPTION_PARAMS,
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200, 5300]
+        },
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},
     },
 }
 
