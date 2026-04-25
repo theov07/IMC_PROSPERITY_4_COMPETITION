@@ -119,6 +119,92 @@ quote traces before upload.
 
 ---
 
+## 2026-04-25 08:00 — Claude: regime-switch v3 (range-based) — robustness conclusion
+
+Léo asked again about regime switching: "ressusciter early algos qui faisaient
+super PnL day 0/1 + signal de switch régime".
+
+### Found CLEAN regime signal: cumulative_range_since_open
+
+| ts | Day 0 | Day 1 | Day 2 |
+|---|---|---|---|
+| 50,000 | 57 | 48 | **79** |
+| 99,900 | 84 | 66 | **116** |
+
+By ts=50k, range > 70 cleanly identifies day 2.
+
+### Built `r3_hydrogel_robust` (range-based regime switch)
+
+- Default mode: AGGRESSIVE z-skew (maker=30, signal_boost=24, threshold=4)
+  — old r3_hydrogel_mean_rev style
+- Defensive (sticky once range>70): Theo's exact params
+
+### Result: STILL doesn't beat theo_drift_only
+
+3-day backtest live-window:
+
+| Strategy | D0 | D1 | D2 | sum |
+|---|---|---|---|---|
+| **theo_drift_only (LIVE +1,077)** | +829 | +984 | +916 | **+2,729** |
+| robust (range_thr=70) | +686 | +947 | +528 | +2,161 |
+| robust (mild aggressive) | +627 | +920 | +1,073 | +2,620 |
+| robust (range_thr=60) | +686 | +954 | +882 | +2,522 |
+
+Aggressive mode threshold=4 fires signal too often → adverse selection
+on minor mean-rev moves. Bigger maker_size doesn't help because live
+queue priority is the bottleneck.
+
+### Three regime-switch attempts, all FAILED
+
+1. **reversion_v2 + bypass**: backtest +3527, live -95 vs theo_drift
+   (bypass covers too early)
+2. **regime_switch_mm** (vol-based): vol too uniform, no trigger
+3. **robust_mm** (range-based): aggressive mode hurts D0/D1
+
+### Why "old aggressive mean-rev" doesn't transfer to live
+
+r3_hydrogel_mean_rev: +44k 3-day BACKTEST → +385 LIVE (4% capture).
+theo_drift_only: ~+27k 3-day → +1,077 LIVE (11% capture).
+**theo_drift captures 2.7x more of its edge in live**. Aggressive sizing
+amplifies adverse selection.
+
+### Léo's "overfit timestamps then generalize" idea
+
+Tested via r3_hydrogel_exhaustion_taker. Generalized version (LB=200,
+TH=60, H=300) only +480 3-day. Timestamp-overfit doesn't transfer
+because each live session is a fresh slice.
+
+### THE ROBUST CONCLUSION
+
+After 6+ strategy variants, **theo_drift_only is the robust answer**:
+- Live-validated +1,077 (best)
+- Captures 11% of backtest in live (vs 4% for aggressive variants)
+- Simple, no overrides that fail in live
+- Already uses Theo's `trend_guard` for instant regime handling
+
+Léo's intuition about regime switching was correct, but in 1000-tick
+windows the regime signal doesn't have time to manifest reliably enough
+to beat the simple validated strategy.
+
+### Final strategy bench (HYDRO only)
+
+- ✅ **r3_hydrogel_theo_drift_only** ← PRIMARY (live +1,077)
+- 🟢 r3_hydrogel_theo_only (clean baseline, live ~+916)
+- 🟢 r3_hydrogel_asym_mm v2 (live +672, lowest DD)
+- 🟡 r3_hydrogel_reversion_v2 (live +982, bypass too aggressive)
+- 🟡 r3_hydrogel_robust (no live test, no backtest improvement)
+- 🟡 r3_hydrogel_regime_switch (vol-based, no improvement)
+- 🟡 r3_hydrogel_super_mm (informed-flow gate, failed)
+- 🟡 r3_hydrogel_combo_mm (3-signal ladder, failed)
+
+### Recommendation
+
+Stay with theo_drift_only. The data is clear: in 1000-tick live, simple
+beats complex. Save complexity for longer sessions if Round 3 final has
+extended live time.
+
+---
+
 ## 2026-04-25 07:00 — Claude: reversion_v2 LIVE +982 + regime-switch test (FAILED)
 
 ### reversion_v2 LIVE (log 406369, mislabeled "mean_rev"): **+982 final**

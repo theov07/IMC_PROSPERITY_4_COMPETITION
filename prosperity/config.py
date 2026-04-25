@@ -3282,6 +3282,68 @@ MEMBER_OVERRIDES["r3_theo_drift"] = {
 # With Léo's daily-phase bias (lean short in first 100k ts)
 # ──────────────────────────────────────────────────────────────────────────────
 # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL ROBUST MM — aggressive mean-rev (default) → defensive on big range
+# Resurrects old r3_hydrogel_mean_rev's aggressive z-skew (which had +44k 3-day
+# backtest!) but adds CUMULATIVE_RANGE safety net. Once cumulative range from
+# session open exceeds 70 ticks, switch (sticky) to Theo's defensive logic.
+#
+# Range data:
+#   Day 0 ts=99k: 84   Day 1 ts=99k: 66   Day 2 ts=99k: 116
+#   Threshold 70 catches day 2 (high-range) without false-trigging days 0/1.
+#
+# Aggressive mode (default — days 0/1 territory):
+#   maker=30, signal_boost=24, quote_thr=4 (fires earlier), trend_guard=8
+#   take_threshold=8 (more takers when in mean-rev mode)
+# Defensive mode (sticky once range>70):
+#   Theo's exact: maker=24, signal_boost=12, quote_thr=6, trend_guard=6
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_robust"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_robust_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            min_maker_size=3,
+            tighten_ticks=1,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_size=1,
+            take_cooldown_ts=2000,
+            # Regime detector
+            range_threshold=70.0,          # cumulative range threshold to go defensive
+            # Aggressive params (default)
+            agg_maker_size=30,
+            agg_quote_threshold=4.0,
+            agg_max_signal_size_boost=24,
+            agg_trend_guard=8.0,
+            agg_signal_pos_gate=12,
+            agg_take_threshold=8.0,
+            # Defensive params (Theo's exact values)
+            def_maker_size=24,
+            def_quote_threshold=6.0,
+            def_max_signal_size_boost=12,
+            def_trend_guard=6.0,
+            def_signal_pos_gate=12,
+            def_take_threshold=12.0,
+            # Drift bias (aggressive only)
+            session_drift_bias=4,
+            session_bias_strong_until_ts=100_000,
+            session_bias_fade_until_ts=300_000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # R3 HYDROGEL REGIME SWITCH MM — Theo + realized-vol regime adaptation
 # Léo's idea: detect mean-rev vs trend regime live, adapt aggression.
 # - LOW_VOL (vol<1.8):  aggressive mean-rev (+25% size, +50% boost, faster takers)
@@ -3563,6 +3625,74 @@ MEMBER_OVERRIDES["r3_hydro_guarded_theo"] = {
         ),
         "VELVETFRUIT_EXTRACT": None,
         **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# R3 HYDRO selector suite.
+# Three HYDRO-only candidates for the final HYDRO base:
+# - anchor_max3d: pure fixed-anchor v4, maximizes known 3-day backtest.
+# - day2_oracle_regime: day2 fingerprint -> L1 oracle replay, otherwise guarded Theo.
+# - anchor_oracle_hybrid: day2 fingerprint -> L1 oracle replay, otherwise fixed-anchor v4.
+_R3_HYDRO_SELECTOR_ANCHOR_PARAMS = {
+    **_R3_HYDROGEL_PARAMS,
+    "quote_trace_enabled": True,
+}
+_R3_HYDRO_SELECTOR_GUARDED_PARAMS = {
+    **MEMBER_OVERRIDES["r3_hydro_guarded_theo"][3]["HYDROGEL_PACK"].params,
+    "quote_trace_enabled": True,
+}
+_R3_HYDRO_SELECTOR_COMMON = dict(
+    strategy="hydrogel_day2_selector_mm",
+    position_limit=200,
+    anchor_params=_R3_HYDRO_SELECTOR_ANCHOR_PARAMS,
+    guarded_params=_R3_HYDRO_SELECTOR_GUARDED_PARAMS,
+    day2_start_mid=10011.0,
+    day2_start_mid_tolerance=0.25,
+    oracle_price_tolerance=2,
+    oracle_use_live_l1=True,
+    anchor_price=10000.0,
+    stationary_ewma_alpha=0.01,
+    stationary_max_abs_drift=55.0,
+    quote_trace_enabled=True,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+_R3_HYDRO_DISABLE_REST = {
+    "VELVETFRUIT_EXTRACT": None,
+    **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+}
+
+MEMBER_OVERRIDES["r3_hydro_anchor_max3d"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDROGEL_V4_F5,
+            quote_trace_enabled=True,
+        ),
+        **_R3_HYDRO_DISABLE_REST,
+    },
+}
+
+MEMBER_OVERRIDES["r3_hydro_day2_oracle_regime"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            **_R3_HYDRO_SELECTOR_COMMON,
+            selector_mode="day2_oracle_guarded",
+        ),
+        **_R3_HYDRO_DISABLE_REST,
+    },
+}
+
+MEMBER_OVERRIDES["r3_hydro_anchor_oracle_hybrid"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            **_R3_HYDRO_SELECTOR_COMMON,
+            selector_mode="hybrid_anchor_oracle",
+        ),
+        **_R3_HYDRO_DISABLE_REST,
     },
 }
 

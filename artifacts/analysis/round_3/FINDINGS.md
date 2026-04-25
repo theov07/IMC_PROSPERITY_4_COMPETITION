@@ -117,7 +117,127 @@ Artifacts:
 
 ---
 
-## 🚨 LATEST — reversion_v2 LIVE +982 + regime-switch experiment (FAILED)
+## 🚨 LATEST — robustness-through-simplicity (3 regime-switch attempts FAILED)
+
+Léo asked: "early algos faisaient super PnL day 0/1, peut-être ressusciter
+ces versions et ajouter un signal de switch régime ?". Tested rigorously.
+
+### Found a CLEAN regime signal: `cumulative_range_since_open`
+
+| ts | Day 0 | Day 1 | Day 2 |
+|---|---|---|---|
+| 10,000 | 24 | 28 | 21 |
+| 50,000 | 57 | 48 | **79** |
+| 70,000 | 57 | 50 | **96** |
+| 99,900 | 84 | 66 | **116** |
+
+By ts=50k, range > 70 cleanly identifies day 2. Days 0/1 stay below.
+
+### Built `r3_hydrogel_robust` (regime switch on cumulative range)
+
+- Default mode: AGGRESSIVE z-skew (maker=30, signal_boost=24, threshold=4)
+  inspired by old `r3_hydrogel_mean_rev` which had +44k 3-day backtest
+- Defensive (sticky once range>70): Theo's exact params (24/12/6)
+- Drift bias only in aggressive mode
+
+### Result: REGIME SWITCH STILL DOESN'T BEAT theo_drift_only
+
+3-day backtest live-window:
+
+| Strategy | D0 | D1 | D2 | sum | maxDD |
+|---|---|---|---|---|---|
+| **theo_drift_only (LIVE +1,077)** | **+829** | **+984** | **+916** | **+2,729** | -1,011 |
+| robust (range_thr=70) | +686 | +947 | +528 | +2,161 | -650 |
+| robust (range_thr=50, mild agg) | +627 | +920 | +1,073 | +2,620 | -1,196 |
+| robust (range_thr=60, conservative) | +686 | +954 | +882 | +2,522 | -920 |
+| reversion_v2 (LIVE +982) | +627 | +1,588 | +1,312 | +3,527 | -347 |
+| regime_switch (vol-based) | +729 | +940 | +916 | +2,585 | -1,011 |
+
+**No variant beats theo_drift_only**. Aggressive mode with lower threshold
+fires signal more often → more adverse selection on weak mean-rev.
+Defensive mode = same as theo_drift = no edge gained.
+
+### Three regime-switch attempts, all FAILED
+
+1. **reversion_v2 + bypass** (taker bypass at extreme |dev|):
+   Backtest +3527 (best!), live -95 vs theo_drift. Bypass covers TOO EARLY
+   in live, missing deeper drops.
+
+2. **regime_switch_mm** (vol-based, low/normal/high):
+   Vol too uniform across days (2.13/2.13/2.25), thresholds inactive.
+   Similar to theo_drift in backtest, no improvement.
+
+3. **robust_mm** (range-based, aggressive default → defensive):
+   Aggressive mode hurts D0/D1 even when range stays low. The threshold=4
+   for one-sided quote fires on noise, getting adverse-selected.
+
+### Why "more aggressive in mean-rev mode" fails in live
+
+Old r3_hydrogel_mean_rev had +44k 3-day backtest BUT only +385 live.
+Backtest assumes you fill at posted prices with realistic queue. Live
+queue priority is much weaker — we get filled at WORSE moments (after
+adverse moves). Aggressive sizing AMPLIFIES adverse selection.
+
+theo_drift_only's smaller, conservative quoting captures the reliable
+mean-rev edge without amplifying adverse selection.
+
+### Léo's "overfit timestamps then generalize" idea
+
+Tested implicitly via `r3_hydrogel_exhaustion_taker`. Day 2 backtest
++154k (oracle-style overfit), live +2,294 → but rejected by validator
+on off-L1 fills. Generalization (LB=200, TH=60, H=300) gave only +480
+3-day backtest — too narrow to be useful.
+
+**Why timestamp-overfit doesn't transfer**: each live session is a fresh
+slice. The TIMING signals from day 2 backtest don't repeat. Only the
+RELATIONSHIP signals (|dev|, trend, range) carry over — and those are
+what theo_drift already uses.
+
+### THE ROBUST CONCLUSION
+
+After 6+ strategy variants tested:
+
+| Strategy | Live PnL | Backtest 3d | Verdict |
+|---|---|---|---|
+| **theo_drift_only** | **+1,077** | +2,729 | **WINNER** (validated, simple) |
+| reversion_v2 | +982 | +3,527 | -8% live (bypass too aggressive) |
+| asym_mm v2 | +672 | — | safest but lower alpha |
+| follow_mm | +610 | +2,158 | trend-follow doesn't work in 1k ticks |
+| robust_mm | (untested) | +2,161-2,620 | no improvement vs theo_drift |
+| regime_switch | (untested) | +2,585 | no improvement vs theo_drift |
+
+**Léo's intuition was right that early algos worked on D0/D1**. But:
+- Live capture rate is the bottleneck, not signal quality
+- Aggressive sizing amplifies adverse selection in live
+- Theo's strategy already captures ~11% of backtest in live (vs
+  4% for old r3_hydrogel_mean_rev)
+- Adding regime switching costs more in false positives than it gains
+
+**The robust strategy IS theo_drift_only**. It works on all 3 days
+without overrides, captures more of the edge in live than any aggressive
+variant, and is validated at +1,077 live.
+
+### What Léo's "approche inversée" could mean (for future)
+
+In a true trend regime (which we can't detect in time), an inverted
+trend-follow approach could capture the move. But without reliable
+regime detection in 1000 ticks, this is theoretical only.
+
+If Round 3 final session is longer (10k+ ticks), regime detection has
+time to manifest — the robust strategy's defensive mode (which currently
+just falls back to Theo) could be replaced with active trend-follow.
+
+### FINAL RECOMMENDATION
+
+**Stay with `r3_hydrogel_theo_drift_only`**. Live-validated +1,077, simple,
+robust. Don't add complexity that doesn't transfer to live.
+
+For exploration: longer-session test of `r3_hydrogel_robust` (sticky
+defensive mode) might reveal value in extended sessions.
+
+---
+
+## 🚨 PREVIOUS — reversion_v2 LIVE +982 + regime-switch experiment (FAILED)
 
 ### reversion_v2 LIVE result (log 406369): **+982 final / +1,943 peak / -1,045 DD**
 
