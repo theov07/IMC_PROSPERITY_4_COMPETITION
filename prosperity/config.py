@@ -3318,13 +3318,17 @@ MEMBER_OVERRIDES["r3_hydrogel_smart"] = {
             take_size=1,
             take_cooldown_ts=2000,
             # Confirmed-reversal taker (NEW)
-            extreme_dev_threshold=25.0,        # |dev| must be >= 20 to consider firing
-            reversal_persist_ticks=4,          # mid must reverse for 3 consecutive ticks
-            min_pos_for_reversal_take=10,      # position must be >= 10 for cover to matter
+            extreme_dev_threshold=22.0,        # |dev| must be >= 20 to consider firing
+            reversal_persist_ticks=3,          # mid must reverse for 3 consecutive ticks
+            min_pos_for_reversal_take=8,      # position must be >= 10 for cover to matter
             reversal_take_base=3,              # base size when |dev|=20
             reversal_take_max=12,              # cap
             reversal_take_scale_div=4.0,       # +1 size per 4 ticks of excess |dev|
             reversal_cooldown_ts=1000,         # min 1000ts between reversal takers
+            # Adaptive pos_gate (v2 — disabled by default)
+            adaptive_pos_gate=False,
+            adaptive_pos_gate_range_thr=60.0,
+            adaptive_pos_gate_max=18,
             # Léo's session drift bias
             session_drift_bias=4,
             session_bias_strong_until_ts=100_000,

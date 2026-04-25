@@ -458,12 +458,20 @@ class HydrogelSmartMMStrategy(BaseStrategy):
         memory["_dev"] = deviation
         memory["_trend"] = trend
 
+        # Track cumulative session range (for adaptive pos_gate)
+        session_max = max(memory.get("_session_max", mid), mid)
+        session_min = min(memory.get("_session_min", mid), mid)
+        memory["_session_max"] = session_max
+        memory["_session_min"] = session_min
+        cum_range = session_max - session_min
+        memory["_cum_range"] = cum_range
+
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
         orders: List[Order] = []
 
         bid_price, ask_price = self._quote_prices(book, p["tighten_ticks"])
-        bid_size, ask_size = self._quote_sizes(position, deviation, trend, p)
+        bid_size, ask_size = self._quote_sizes(position, deviation, trend, p, cum_range)
 
         # Léo's session-drift bias
         bias = self._session_drift_bias(state, p)
@@ -521,13 +529,26 @@ class HydrogelSmartMMStrategy(BaseStrategy):
         deviation: float,
         trend: float,
         p: Dict[str, Any],
+        cum_range: float = 0.0,
     ) -> Tuple[int, int]:
         maker = p["maker_size"]
         min_size = p["min_maker_size"]
         quote_thr = p["quote_threshold"]
         signal_boost = p["max_signal_size_boost"]
         trend_guard = p["trend_guard"]
+        # Adaptive pos_gate: scale up when range is high (day 2-like)
         pos_gate = p["signal_pos_gate"]
+        if p.get("adaptive_pos_gate", False):
+            range_thr = p.get("adaptive_pos_gate_range_thr", 60.0)
+            max_gate = p.get("adaptive_pos_gate_max", 18)
+            if cum_range > range_thr:
+                # Linear from pos_gate (at range_thr) to max_gate (at range_thr*1.5)
+                full_thr = range_thr * 1.5
+                if cum_range >= full_thr:
+                    pos_gate = max_gate
+                else:
+                    frac = (cum_range - range_thr) / (full_thr - range_thr)
+                    pos_gate = int(p["signal_pos_gate"] + frac * (max_gate - p["signal_pos_gate"]))
         reduce_per = p["inventory_reduce_per_unit"]
         unwind_per = p["inventory_unwind_per_unit"]
         unwind_boost = p["max_unwind_boost"]
@@ -704,6 +725,10 @@ class HydrogelSmartMMStrategy(BaseStrategy):
             "reversal_take_max": int(p.get("reversal_take_max", 12)),
             "reversal_take_scale_div": float(p.get("reversal_take_scale_div", 4.0)),
             "reversal_cooldown_ts": int(p.get("reversal_cooldown_ts", 1000)),
+            # Adaptive pos_gate (NEW v2)
+            "adaptive_pos_gate": bool(p.get("adaptive_pos_gate", False)),
+            "adaptive_pos_gate_range_thr": float(p.get("adaptive_pos_gate_range_thr", 60.0)),
+            "adaptive_pos_gate_max": int(p.get("adaptive_pos_gate_max", 18)),
             # Léo's session drift bias
             "session_drift_bias": int(p.get("session_drift_bias", 4)),
             "session_bias_strong_until_ts": int(p.get("session_bias_strong_until_ts", 100_000)),
@@ -720,7 +745,10 @@ class HydrogelSmartMMStrategy(BaseStrategy):
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-PRODUCTS = {'HYDROGEL_PACK': {'ema_alpha': 0.008,
+PRODUCTS = {'HYDROGEL_PACK': {'adaptive_pos_gate': False,
+                   'adaptive_pos_gate_max': 18,
+                   'adaptive_pos_gate_range_thr': 60.0,
+                   'ema_alpha': 0.008,
                    'extreme_dev_threshold': 22.0,
                    'fast_ema_alpha': 0.03,
                    'inventory_reduce_per_unit': 0.4,
