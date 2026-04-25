@@ -280,6 +280,51 @@ per-asset en absolu et % capital. Output CSVs in
 This tool was the KEY insight enabler — without per-asset DD analysis, we
 wouldn't have found that VEV_5300/5400 are drag (ratio 0.42/0.30).
 
+### v42/v43 confirmation — drop-drag is the ONLY meaningful unlock
+
+| Variant | PnL | DD | Ratio | Notes |
+|---|---:|---:|---:|---|
+| **v38 (drop 5300+5400)** | **+86,451** | **-45,494** | **1.900** | NEW LEADER |
+| v42 (drop drag + IV gate ALL) | +86,451 | -45,494 | 1.900 | **= v38 IDENTIQUE** |
+| v43 (drop drag + IV gate 5000 only) | +86,451 | -45,494 | 1.900 | **= v38 IDENTIQUE** |
+
+**Conclusion empirique** : le drop des 2 drag strikes est THE ONLY change qui
+matters. IV gate, per-strike z, etc. sont neutres (ne fire pas en pratique sur
+les strikes restants 4500/5000/5100/5200).
+
+### Portfolio greeks diagnostic — `scripts/analyze_portfolio_greeks.py`
+
+Reconstruit per-tick portfolio delta/gamma/vega/theta exposure.
+
+**v38 portfolio greeks** :
+
+| Day | avg_delta | max_abs_delta | avg_gamma | avg_vega   | avg_theta |
+|---|---:|---:|---:|---:|---:|
+| 0 | 310 | 494 | 0.679 | 1,758,508 | -1,496 |
+| 1 | 252 | 626 | 0.274 | 590,025   | -587 |
+| 2 | 352 | 687 | 0.474 | 872,302   | -1,036 |
+
+**Diagnostic** : portfolio est massivement **long-vega** (~1M$/IVpt) et
+**positive gamma** (capture realized > implied via dS² convexity). Theta
+drag ~-1k/jour accepté. Cohérent avec thèse long-vol.
+
+### FINAL — toutes les pistes testées exhaustivement
+
+13 config variants tested, 17 final submissions, all ≤ 100 KB validated.
+
+**v38 = OPTIMAL** : drop drag strikes (5300/5400) suffit pour pousser ratio
+de 1.82 → 1.900. Les autres tweaks (IV gate, per-strike z, size boost)
+n'apportent rien d'additionnel SUR l'optimum drop.
+
+### À TESTER ENCORE (priorité TRÈS basse, marginal expected)
+
+| Idée | Status | Why low priority |
+|---|---|---|
+| option_mm_bs avec SVI fair + enable_takers | not tested | penny-improve override smile-fair quote; v42=v38 already proves smile-related changes are neutral |
+| Greeks split (long ATM + short OTM) | not tested | OTM premium $1-7 trop petit pour theta seller meaningful |
+| Vega-weighted basket | not tested | gamma_scalp ATM cluster déjà implicit vega allocation |
+| Time-of-session adaptive params | not tested | live = 1k ticks only |
+
 ### À TESTER ENCORE (idées non couvertes)
 
 | # | Idée | Why untested | Priority |
