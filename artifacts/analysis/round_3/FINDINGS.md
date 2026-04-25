@@ -4,7 +4,115 @@ Updated: 2026-04-25
 
 ---
 
-## 🚨 LATEST — Comprehensive options/VELVET analysis suite + SVI/vega-pair tests
+## 🚨 LATEST — NEW LEADER v24_r2velvet_zskip: +91,560 / DD -50,200 / PnL-DD 1.82
+
+User pointed out v12_r2velvet had the best PnL/DD ratio (1.56) and asked if
+we couldn't keep its high PnL while reducing DD. **The answer is YES**: the
+combination v12 (R2 anchor MM on VELVET) + v20 (z-skip on gamma cluster)
+yields a strictly better risk-adjusted leader.
+
+### Final ranking by PnL/DD ratio
+
+| Variant | PnL | DD | PnL/DD | D2 LW |
+|---|---:|---:|---:|---:|
+| v11_optimal | +70,386 | -56,650 | 1.24 | +1,208 |
+| v12_r2velvet | +94,614 | -60,508 | 1.56 | +1,384 |
+| v20_z_skip_strict | +67,332 | -46,342 | 1.45 | +1,208 |
+| **v24_r2velvet_zskip (z>0.5)** ★ | **+91,560** | **-50,200** | **1.82** | **+1,384** |
+| v25_r2velvet_zskip_loose (z>1.0) | +93,556 | -57,070 | 1.64 | +1,384 |
+
+v24 picks up:
+- VELVET R2 anchor MM (+27,518 — Tibo's historically tuned strat, kept from v12)
+- z-skip on gamma cluster 4500-5300 (drops -3.1k PnL, saves -10.3k DD)
+- D2 LW = +1,384 (matches v12, BEST among all variants)
+
+The combination is genuinely better than EITHER component alone — best PnL/DD
+ratio of any tested strategy.
+
+### v24 per-product breakdown
+
+| Product | PnL | Trades | Max Pos | Strategy |
+|---|---:|---:|---:|---|
+| VELVETFRUIT_EXTRACT | +27,518 | 7,446 | 195 | R2/v4 anchor MM |
+| VEV_5100 | +19,564 | 115 | 300 | gamma_scalp_zgated |
+| VEV_4500 | +16,062 | 180 | 228 | gamma_scalp_zgated |
+| VEV_5000 | +9,536 | 119 | 158 | gamma_scalp_zgated |
+| VEV_4000 | +8,810 | 464 | 44 | option_mm_bs (smile) |
+| VEV_5200 | +7,172 | 62 | 300 | gamma_scalp_zgated |
+| VEV_5300 | +2,570 | 83 | 300 | gamma_scalp_zgated |
+| VEV_5400 | +330 | 62 | 77 | option_mm_bs no-smile passive |
+| **TOTAL** | **+91,560** | | | |
+
+### Where v12 was wrong (my mistake)
+
+I previously called v12 "fragile chance" but the user noticed PnL/DD = 1.56
+is GENUINELY the best risk-adjusted ratio (vs v11's 1.24, v20's 1.45). The
+R2/v4 anchor MM on VELVET is a Tibo-tuned strategy from R2 that captures
+spread+drift on VELVET — not luck. Sorry for the misanalysis.
+
+### About the "stripes" on K=4000 IV plot (user question)
+
+**Phenomenon**: discrete book quoting × continuous spot S.
+
+VEV_4000 is deep ITM with intrinsic ≈ 1250. Time value = 5-15 ticks. The
+market quotes only ~4 distinct option_mid levels for VEV_4000 across 3 days
+(low trade flow → stratification). For each fixed option_mid level, as S
+varies continuously, BS-implied IV varies → produces one diagonal "stripe"
+in (moneyness, IV) space.
+
+ATM strikes (5200) don't show stripes because option_mid varies on many more
+levels (high activity → continuum of price quotes).
+
+→ **Stripes = book-quoting artifact, NOT volatility info.**
+
+### About making the Rook-E1 skew signal exploitable
+
+User asked if SVI/SSVI fit could rescue the leave-one-out skew signal.
+Tested: SVI fit R² = 0.51 vs poly2 R² = 0.66 on day 0 — **SVI is WORSE for
+us** because the smile is dominated by deep-ITM stripes (book artifacts).
+
+The poly2 fit residuals are **systematic**: K=5000 always cheap by -17bp,
+K=6000 always rich by +15bp (consistent across all 3 days). Same residual
+sign every tick = **constant fit bias, NOT actionable signal**. This
+explains skew_taker -45k, skew_dynamic -1k, vega_pair -20k.
+
+Conclusion: the IV residual signal is unrescuable in this market because
+the smile shape itself is dominated by book-quoting noise at the extremes.
+
+### Vega-neutral pair test (v23) — confirmed dead
+
+K=5100/K=5300 pair (vegas ~5500 each). Result: +49,870 (-20,516 vs v11).
+Strategy never fires (IV gap 0.001-0.002 below threshold). Lost the gamma
+contribution from those strikes. **No alpha in vega-neutral spreads.**
+
+### Comprehensive analyses output
+
+`artifacts/analysis/round_3_option_velvet/`:
+- 21 PNG plots (smiles per day, IV time series per strike, residual histograms,
+  residual time series with ±2σ bands, vega/gamma/delta bars, VELVET path)
+- 3 outlier event CSVs (~2,800-3,200 events/day at >2σ)
+- summary.json with per-strike greeks + IVs
+
+`prosperity/options/svi.py`: Gatheral SVI parametrization, gradient-descent fit.
+`prosperity/strategies/round_3/vega_neutral_pair_mm.py`: tested, no alpha.
+
+### Final candidates in `_final/velvet_options/` (7 candidates, 15 total)
+
+| File | Size | 3-day | DD | PnL/DD |
+|---|---:|---:|---:|---:|
+| `r3_velvet_options_alpha` | 60 KB | +13,380 | — | — |
+| `r3_velvet_options_alpha_v4_high_k` | 55 KB | +16,510 | — | — |
+| `r3_velvet_options_max3d_blend` | 63 KB | +23,440 | — | — |
+| `r3_velvet_options_max3d_v11_optimal` | 63 KB | +70,386 | -56k | 1.24 |
+| `r3_velvet_options_max3d_v12_r2velvet` | 83 KB | +94,614 | -60k | 1.56 |
+| `r3_velvet_options_max3d_v20_z_skip_strict` | 67 KB | +67,332 | -46k | 1.45 |
+| **`r3_velvet_options_max3d_v24_r2velvet_zskip`** | **87 KB** | **+91,560** | **-50k** | **1.82** ★ |
+
+**v24 = recommended upload candidate.** Best risk-adjusted by far.
+
+---
+
+## PREVIOUS — Comprehensive options/VELVET analysis suite + SVI/vega-pair tests
 
 User asked for IV/moneyness analysis tooling. Built `scripts/analyze_round3_options.py`
 which writes 21 plots + 3 CSVs + summary.json to

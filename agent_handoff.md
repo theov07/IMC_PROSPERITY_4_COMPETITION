@@ -1,5 +1,68 @@
 # Agent Handoff — Leo2 branch
 
+## 2026-04-25 22:15 - Claude: NEW LEADER v24_r2velvet_zskip (PnL/DD = 1.82)
+
+User pointed out v12 had the best PnL/DD ratio (1.56) and asked to combine
+with v20's z-gating to get high PnL + lower DD. Built v24 = v12 (R2 anchor
+MM on VELVET) + v20's z-skip (z>0.5) on gamma cluster.
+
+Result: **+91,560 / DD -50,200 / PnL/DD = 1.82** — strictly better than all
+prior leaders.
+
+| Variant | PnL | DD | PnL/DD |
+|---|---:|---:|---:|
+| v11 | +70,386 | -56,650 | 1.24 |
+| v12_r2velvet | +94,614 | -60,508 | 1.56 |
+| v20_z_skip_strict | +67,332 | -46,342 | 1.45 |
+| **v24_r2velvet_zskip ★** | **+91,560** | **-50,200** | **1.82** |
+| v25_r2velvet_zskip_loose | +93,556 | -57,070 | 1.64 |
+
+D2 LW = +1,384 (matches v12, BEST among all variants).
+
+Strategy stack:
+- VELVET = R2/v4 anchor MM (proven Tibo strat, +27.5k)
+- VEV_4000 = option_mm_bs default smile (+8.8k workhorse)
+- VEV_4500/5000/5100/5200/5300 = gamma_scalp_zgated target=300, z>0.5 skip
+- VEV_5400 = option_mm_bs no-smile passive (+330)
+
+Submission: `r3_velvet_options_max3d_v24_r2velvet_zskip_round3_submission.py`
+(raw 120 KB → minified 87 KB), copied to `_final/velvet_options/`.
+15/15 submissions in `_final/` validate under 100 KB.
+
+### About K=4000 IV "stripes" (user question)
+
+Discrete book quoting (option_mid quantized) × continuous spot S. VEV_4000
+has only ~4 distinct option_mid levels in 3 days. For each level, as S
+varies, BS-IV varies → one diagonal stripe per level. ATM strikes have many
+more option_mid levels → no visible stripes. **Not volatility info, just
+market microstructure.**
+
+### About Rook-E1 skew signal (user question)
+
+Tested SVI fit (`prosperity/options/svi.py`) — R² = 0.51 vs poly R² = 0.66.
+SVI is WORSE because deep-ITM stripes pollute the fit. Polynomial residuals
+are SYSTEMATIC (constant sign per strike across all 3 days) = fitting bias,
+not actionable signal. Confirms why all skew-arb variants lose.
+
+### Vega-neutral pair test (v23) — dead
+
+K=5100/K=5300 pair: +49,870 (-20.5k vs v11). Strategy never fires (IV gap
+0.001-0.002 too small). ATM IVs too smooth across strikes for spread arb.
+
+### Analysis tools delivered
+
+- `prosperity/options/svi.py` — SVI parametrization + gradient descent fit
+- `prosperity/strategies/round_3/vega_neutral_pair_mm.py` — tested, no alpha
+- `prosperity/strategies/round_3/gamma_scalp_zgated.py` — z-skip + profit-take
+- `scripts/analyze_round3_options.py` — comprehensive analysis suite
+
+`artifacts/analysis/round_3_option_velvet/` contains 21 plots + 3 outlier
+CSVs + summary.json with per-strike greeks.
+
+### Locked candidate: v24_r2velvet_zskip
+
+This is the recommended upload — best PnL/DD ratio of all tested strategies.
+
 ## 2026-04-25 21:40 - Claude: comprehensive options/VELVET analysis suite + SVI/vega-pair tests
 
 User requested deep analysis tooling on options + VELVET. Built:
