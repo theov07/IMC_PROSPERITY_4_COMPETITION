@@ -1,5 +1,33 @@
 # Agent Handoff — Leo2 branch
 
+## 2026-04-25 13:20 - Codex: HYDRO Guarded Theo
+
+New HYDRO-only strategy: `r3_hydro_guarded_theo`.
+
+Files:
+
+- `prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py`
+- `submissions/r3_hydro_guarded_theo.py`
+- `artifacts/submissions/round_3/r3_hydro_guarded_theo_round3_submission.py`
+- `artifacts/backtests/r3_hydro_guarded_theo_day2.json`
+- `artifacts/backtests/r3_hydro_guarded_theo_3days.json`
+
+Result, realistic backtest:
+
+| Strategy | Day 2 HYDRO | 3-day HYDRO |
+| --- | ---: | ---: |
+| `r3_hydrogel_theo_only` | 4,722 | 28,340 |
+| `r3_hydrogel_theo_drift_only` | 4,722 | 28,262 |
+| `r3_hydro_guarded_theo` | **5,187** | **29,094** |
+
+Key lesson: VELVET/voucher score is useful to inspect in the dashboard, but it
+did not reliably separate good/bad passive fills. Passive quote gates reduced
+PnL. The improvement comes from preserving Theo's maker base and adding a small
+L1-only exhaustion overlay. It trades only `HYDROGEL_PACK`; VELVET and all VEVs
+are disabled in config.
+
+---
+
 Shared coordination file for Léo, Claude, and Codex.
 
 ---

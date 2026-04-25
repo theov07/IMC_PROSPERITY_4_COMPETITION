@@ -1271,3 +1271,48 @@ L1 cutoff PnL marked at timestamp `99900`:
 The full historical day2 backtest shows `153,847` because open positions after
 timestamp `99900` are marked through the rest of the historical day. For a
 leaderboard slice matching `0..99900`, use the cutoff JSON above.
+
+## HYDRO Guarded Theo / Exhaustion Overlay (Codex 2026-04-25)
+
+New HYDRO-only strategy: `r3_hydro_guarded_theo`.
+
+Files:
+
+- `prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py`
+- `submissions/r3_hydro_guarded_theo.py`
+- `artifacts/submissions/round_3/r3_hydro_guarded_theo_round3_submission.py`
+
+Design:
+
+- sends orders only on `HYDROGEL_PACK`;
+- keeps Theo's dual-EMA reversion MM as the maker base;
+- computes a dashboard/debug score from `HYDROGEL`, `VELVETFRUIT`, and
+  `VEV_5200 - VEV_5300`, but passive quote gates are disabled by default;
+- adds a small L1 exhaustion taker when `HYDROGEL` has moved far over
+  `10k/20k` timestamps and recent `1k` momentum is not still cascading;
+- does not trade `VELVETFRUIT` or vouchers.
+
+Important finding: the voucher/cross score did **not** separate good from bad
+Theo passive fills. Blocking passive bids/asks with that score reduced PnL.
+The winning modification is the smaller, more permissive exhaustion overlay on
+top of Theo, not a passive quote gate.
+
+Backtests, realistic execution:
+
+| Strategy | Day 2 HYDRO | 3-day HYDRO | Volume | Maker | Taker |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `r3_hydrogel_theo_only` | 4,722 | 28,340 | 3,978 | 3,771 | 207 |
+| `r3_hydrogel_theo_drift_only` | 4,722 | 28,262 | 3,985 | 3,779 | 206 |
+| `r3_hydro_guarded_theo` | **5,187** | **29,094** | 4,110 | 3,776 | 334 |
+
+Backtest JSONs:
+
+- `artifacts/backtests/r3_hydro_guarded_theo_day2.json`
+- `artifacts/backtests/r3_hydro_guarded_theo_3days.json`
+- baselines: `artifacts/backtests/r3_hydrogel_theo_only_3days.json`,
+  `artifacts/backtests/r3_hydrogel_theo_drift_only_3days.json`
+
+Verdict: current best HYDRO-only backtest base is `r3_hydro_guarded_theo`.
+Expected live risk is higher than pure Theo because taker volume rises from
+`207` to `334` over 3 days, but all takers are L1-only and max position remains
+controlled (`62` in the 3-day backtest).
