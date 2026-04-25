@@ -93,6 +93,9 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     # ── Round 3 ──
     "option_mm_bs": ("prosperity.strategies.round_3.option_mm_bs", "OptionMMBSStrategy"),
     "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
+    "r3_live_defensive_mm": ("prosperity.strategies.round_3.live_defensive_mm", "R3LiveDefensiveMMStrategy"),
+    "r3_guarded_anchor_mm": ("prosperity.strategies.round_3.guarded_anchor_mm", "R3GuardedAnchorMMStrategy"),
+    "r3_hydro_reversion_mm": ("prosperity.strategies.round_3.hydro_reversion_mm", "R3HydroReversionMMStrategy"),
 }
 
 

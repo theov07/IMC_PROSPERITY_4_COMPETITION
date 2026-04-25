@@ -105,7 +105,19 @@
       "Bash(python3 backtest.py --strategy submissions.theo_vrai_strat --round 1 --days -2 -1 0 --match-trades realistic)",
       "Bash(python backtest.py --strategy theo_best_generalized --round 1 --days -2 --match-trades realistic)",
       "Bash(python -c \"from prosperity.tooling.dashboard import build_backtest_figure, build_imc_figure; print\\('OK'\\)\")",
-      "Bash(python -c \"from prosperity.strategies.metal_winner.mm_first_v2 import MMFirstStrategy; print\\('OK'\\)\")"
+      "Bash(python -c \"from prosperity.strategies.metal_winner.mm_first_v2 import MMFirstStrategy; print\\('OK'\\)\")",
+      "Bash(python scripts/export_submission.py --member theo_r3_hydro_v3 --round 3)",
+      "Bash(python -c ' *)",
+      "Bash(python -)",
+      "Bash(python backtest.py --strategy theo_r3_hydro_v4 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python scripts/export_submission.py --member theo_r3_hydro_v5 --round 3)",
+      "Bash(python backtest.py --strategy theo_r3_vol_arb_v2 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python3 -)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy theo_r3_vol_arb_v2 --round 3 --days 0 1 2 --param HYDROGEL_PACK.signal_pos_gate=10,12,15,18,20,24 --param HYDROGEL_PACK.take_size=1,2,3 --execution-rule realistic --top 20 --rank-by pnl)",
+      "Bash(python backtest.py --strategy theo_r3_vol_arb_v3 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy theo_r3_vol_arb_v2 --round 3 --days 0 1 2 --match-trades realistic --param HYDROGEL_PACK.trend_guard=8.0)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy theo_r3_vol_arb_v2 --round 3 --days 0 1 2 --param HYDROGEL_PACK.trend_guard=6.0,8.0 --param HYDROGEL_PACK.take_size=1,2,3 --execution-rule realistic --top 6 --rank-by pnl)",
+      "Bash(python scripts/export_submission.py --member theo_r3_vol_arb_v3 --round 3)"
     ]
   }
 }
