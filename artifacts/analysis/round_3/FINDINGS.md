@@ -4,6 +4,68 @@ Updated: 2026-04-25
 
 ---
 
+## LATEST - Regime switching thesis after guarded live log
+
+Leo's concern is valid: the IMC provisional simulation appears to replay the
+same `day2 0..99900` market slice, so it is not an out-of-sample alpha test.
+It is useful for runtime, validator, quote trace, and live matching checks, but
+it should not be treated as proof that a day2-discovered alpha generalizes.
+
+Historical comparison, HYDRO realistic backtest:
+
+| Strategy | Day 0 | Day 1 | Day 2 | 3-day | Main issue |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `r3_naive_champion` | 18,125 | 37,016 | 28,864 | 84,005 | Huge in backtest, failed live from stale fixed anchor and inventory blow-up |
+| `r3_hydrogel_theo_only` | 9,434 | 14,184 | 4,722 | 28,340 | Stable but leaves lots of historical PnL untapped |
+| `r3_hydro_guarded_theo` | 9,263 | 14,644 | 5,187 | 29,094 | Better backtest, first live showed self-cross issue now fixed |
+| `r3_hydrogel_regime_switch` | 9,390 | 14,184 | 4,722 | 28,296 | Vol-only regime switch did not beat Theo |
+| `r3_hydrogel_ladder_mm` | 6,355 | 9,341 | -486 | 15,210 | Good volume in calm days, fights trend day |
+| `r3_hydrogel_ladder_v2` | 4,472 | 9,563 | 1,227 | 15,262 | Trend guard fixes day2 but sacrifices day0 |
+
+Interpretation:
+
+- The early/osmium-like anchor family is not dead as a source of ideas, but the
+  fixed anchor itself is unsafe.  It wins when the session is stationary around
+  its fair value and fails when the market drifts away.
+- A day-index or timestamp oracle is not robust.  We should not hard-code
+  "day2 behavior"; use day2 overfits only to identify what features existed
+  before profitable moves.
+- A useful regime switch must choose from a small strategy bank using only
+  online state:
+  - stationarity score: price displacement from rolling anchor, EMA trend,
+    realized range, and anchor recapture rate;
+  - toxicity score: recent passive fill markout and whether fills are followed
+    by continuation against us;
+  - exhaustion score: large `10k/20k` displacement plus deceleration over the
+    last `1k`;
+  - cross-asset/context score: HYDRO/VELVET normalized spread and voucher
+    verticals as weak risk filters, not primary alpha.
+
+Recommended architecture:
+
+- regime `ANCHOR_STATIONARY`: allow osmium-like/fixed-fair style wider passive
+  quoting, but cap inventory and disable if rolling anchor error persists;
+- regime `THEO_NEUTRAL`: default to Theo dual-EMA `trend_guard`;
+- regime `TOXIC_TREND`: reduce passive size, quote only unwind/follow side, no
+  blind dip-buying;
+- regime `EXHAUSTION`: allow small L1 taker only after displacement plus
+  deceleration, and suppress opposite passive quote to avoid self-cross.
+
+Validation rule:
+
+- leave-one-day-out over days 0/1/2, not just day2 or IMC sim;
+- live/provisional sim is only an execution/matching check because it appears
+  to be the known day2 slice;
+- prefer low-parameter hysteresis thresholds over a high-dimensional classifier.
+
+Next research should be a selector backtest, not another single all-in strategy:
+replay a small strategy bank (`anchor/tracking`, `theo`, `guarded/exhaustion`,
+`ladder_v2/no-trade`) and let an online regime state choose the active profile
+with cooldown/hysteresis.  If that selector cannot beat Theo in leave-one-day-out,
+the robust answer is to keep Theo/guarded rather than overfit harder.
+
+---
+
 ## LATEST - HYDRO/VELVET normalized-spread skew (Codex)
 
 Implemented `hydro_velvet_spread_skew_mm` after the execution/toxicity review:
@@ -55,7 +117,87 @@ Artifacts:
 
 ---
 
-## 🚨 LATEST — `r3_hydrogel_reversion_v2` (theo_drift live +1077 + dynamic taker)
+## 🚨 LATEST — reversion_v2 LIVE +982 + regime-switch experiment (FAILED)
+
+### reversion_v2 LIVE result (log 406369): **+982 final / +1,943 peak / -1,045 DD**
+
+- vs theo_drift_only LIVE +1,077: **-95 PnL (-9%)**
+- Backtest predicted +1,312 → live came in at +982 (-25% backtest fidelity)
+
+**Diagnosis**: bypass + dynamic taker covers shorts TOO EARLY in live.
+Backtest worked because mid descended to bottom THEN rebounded cleanly. In
+live, the descent had pullbacks where |dev| spiked to 22+ briefly, firing
+takers that covered before the deeper drop. theo_drift_only's tiny taker
+(size=1, no bypass) is more robust because it doesn't react to transient
+|dev| spikes during a move.
+
+### Léo's regime-switching idea — TESTED, doesn't help in 1000-tick live
+
+User asked: detect regime (mean-rev vs trend) and switch strategies?
+
+Built `r3_hydrogel_regime_switch` with rolling realized-vol detector:
+- LOW_VOL (vol<1.8): aggressive mean-rev (+25% size, +50% boost)
+- HIGH_VOL (vol>2.6): defensive (-25% size, -25% boost)
+- NORMAL: theo_drift defaults
+
+**Regime detector doesn't fire** — realized vol too uniform across days:
+
+| Window | Day 0 | Day 1 | Day 2 |
+|---|---|---|---|
+| First 200 ticks vol | 2.16 | 2.13 | 2.25 |
+| First 1000 ticks range | 84 | 66 | 116 |
+
+Vol differs 5%, range differs 50% but range manifests in last half of
+session. Too late to adapt within 1000 ticks.
+
+3-day backtest (live-window):
+
+| Strategy | D0 | D1 | D2 | sum | maxDD |
+|---|---|---|---|---|---|
+| theo_drift_only (LIVE +1,077) | +829 | +984 | +916 | +2,729 | -1,011 |
+| **regime_switch** | +729 | +940 | +916 | +2,585 | -1,011 |
+| reversion_v2+bypass (LIVE +982) | +627 | +1,588 | +1,312 | +3,527 | -347 |
+| theo_only | +624 | +940 | +916 | +2,480 | -1,011 |
+| hydro_guarded_theo (Codex) | +644 | +943 | +1,062 | +2,649 | -1,010 |
+
+Vol thresholds swept (2.0/2.2, 2.1/2.3, etc.) — all stayed near baseline.
+
+### Why regime detection is hard in this market
+
+1. **Days look identical early** — first 200 ticks vol 2.13-2.25, indistinguishable
+2. **Differences emerge in last 50%** — too late to adapt
+3. **Theo's `trend_guard` already handles instant regime** via |fast_ema - slow_ema|
+   — adding more layers introduces noise without signal
+
+### LESSON: simpler is better in short live windows
+
+- theo_drift_only beats reversion_v2 in live (+1,077 vs +982) by being LESS
+  aggressive on overrides
+- regime_switch experiment confirms: adding regime classification in short
+  windows costs more in false positives than it gains
+- "Inverted approach in trend regime" doesn't work because we can't detect
+  trend regime cleanly in time to switch
+
+### About early "mean_rev super PnL day 0/1"
+
+Léo remembered `r3_hydrogel_mean_rev` (z-skew gain=3, window=500) had
++10,523 day 2 BACKTEST. But live PnL was only +385 (4% of backtest) due
+to queue-priority weakness. The signal was real, the live capture wasn't.
+
+theo_drift_only LIVE +1,077 is now 11% of similar backtest (+9,434 day 0
+backtest = ~10x). We're capturing more of the edge.
+
+### FINAL RECOMMENDATION
+
+**Stay with `r3_hydrogel_theo_drift_only`** as primary. Live-validated
++1,077, robust, simple. Regime-detection adds complexity without lift.
+
+For longer sessions (Round 3 final?), regime_switch could shine. Kept on
+bench for that scenario.
+
+---
+
+## 🚨 PREVIOUS — theo_drift LIVE +1077 (when first received)
 
 ### theo_drift_only LIVE result (log 403647) — NEW LEADER
 
@@ -1316,3 +1458,34 @@ Verdict: current best HYDRO-only backtest base is `r3_hydro_guarded_theo`.
 Expected live risk is higher than pure Theo because taker volume rises from
 `207` to `334` over 3 days, but all takers are L1-only and max position remains
 controlled (`62` in the 3-day backtest).
+
+### Live log `406539` / self-cross fix
+
+Official log: `C:\Users\LéoRENAULT\Downloads\guarded_log\406539.json`.
+
+Result:
+
+- total / HYDRO PnL: `+922.453`;
+- own HYDRO trades: `26`;
+- volume: `76`;
+- net position: `-22`;
+- weighted markout: `+4.78` at `+1k`, `+2.51` at `+5k`, `+4.86` at `+10k`.
+
+This is basically Theo HYDRO live behavior, not the expected local guarded
+overlay.  The reason is a live/backtest mismatch in the first implementation:
+the exhaustion overlay could send a taker BUY while still publishing our own
+passive ASK inside the official market.  Example around `ts=78800`: quote trace
+had our ask at `9954`, while the exhaustion BUY wanted to take official ask
+around `9955`.  The local backtester credited this as an aggressive fill, but
+live did not materialize it, likely because the order crossed our own quote.
+
+Fix applied in `hydrogel_guarded_reversion_mm.py`: when an exhaustion BUY is
+armed, suppress the passive ASK for that tick; when an exhaustion SELL is armed,
+suppress the passive BID.  Re-exported:
+
+- `artifacts/submissions/round_3/r3_hydro_guarded_theo_round3_submission.py`
+- `submissions/r3_hydro_guarded_theo.py`
+
+Backtest remains `+5,187` day 2 and `+29,094` over 3 days because the local
+engine did not model the self-cross issue, but the exported strategy should now
+be better aligned with live matching.

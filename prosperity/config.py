@@ -3281,11 +3281,71 @@ MEMBER_OVERRIDES["r3_theo_drift"] = {
 # ──────────────────────────────────────────────────────────────────────────────
 # With Léo's daily-phase bias (lean short in first 100k ts)
 # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL REGIME SWITCH MM — Theo + realized-vol regime adaptation
+# Léo's idea: detect mean-rev vs trend regime live, adapt aggression.
+# - LOW_VOL (vol<1.8):  aggressive mean-rev (+25% size, +50% boost, faster takers)
+# - HIGH_VOL (vol>2.6): defensive (-25% size, -25% boost, slower takers)
+# - NORMAL: theo_drift defaults
+# NO bypass trend_guard (reversion_v2 covered too early in live, -95 vs theo_drift).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_regime_switch"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_regime_switch_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            # Realized-vol regime detector
+            vol_window=200,
+            min_vol_samples=100,
+            vol_baseline=2.15,
+            vol_low_thr=1.8,
+            vol_high_thr=2.6,
+            # Regime multipliers
+            low_vol_maker_mult=1.25,
+            low_vol_signal_mult=1.5,
+            low_vol_take_thr_mult=0.8,
+            low_vol_take_size_mult=1.5,
+            high_vol_maker_mult=0.75,
+            high_vol_signal_mult=0.75,
+            high_vol_take_thr_mult=1.5,
+            high_vol_take_size_mult=1.0,
+            # Léo's session drift bias
+            session_drift_bias=4,
+            session_bias_strong_until_ts=100_000,
+            session_bias_fade_until_ts=300_000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # R3 HYDROGEL REVERSION V2 — Theo's strategy + dynamic taker (exhaustion-style)
 # theo_drift_only LIVE log 403647: +1,077 final / +2,307 peak / -1,230 DD.
 # Lost 1,230 mtm because mid rebounded 9927→9960 at close while we held -27 short.
 # Theo's tiny taker (size=1) too slow to cover. Dynamic-size taker scales with
 # |dev| to lock profit at extremes. base=1, scale=(|dev|-12)/4, max=12.
+# NOTE: live test +982 vs theo_drift +1077 = -95. Bypass covers too early in live.
 # ──────────────────────────────────────────────────────────────────────────────
 MEMBER_OVERRIDES["r3_hydrogel_reversion_v2"] = {
     3: {
