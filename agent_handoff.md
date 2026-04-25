@@ -47,6 +47,92 @@ quote traces before upload.
 
 ---
 
+## 2026-04-25 06:00 — Claude: theo_drift LIVE +1077 + dynamic taker (NEW LEADER)
+
+### theo_drift_only LIVE (log 403647) — best result yet
+
+- Final **+1,077** (vs prev best asym_mm v2 +672 = +60% improvement)
+- Peak +2,307 at ts ~91k (mid hit day's low 9927)
+- DD -1,230 (at end, mid rebounded 9927→9960)
+- End pos -27 short
+
+Backtest predicted +916 → actual +1,077 (+18% better than prediction).
+
+### Problem: lost 1,230 mtm from peak to close
+
+Held short -27 into the rebound. Theo's tiny taker (size=1, cooldown 2000ts)
+couldn't cover fast enough.
+
+### Diagnosis: trend_guard BLOCKS taker at extremes
+
+|dev| distribution day 2 live window:
+- |dev|>12: 476 ticks (47%)
+- |dev|>30: 68 ticks (7%)
+- **|dev|>24 AND |trend|<6: 0 ticks**
+
+When mid moves fast (extreme |dev|), fast EMA diverges from slow EMA more
+than 6 ticks (trend_guard threshold). So Theo's taker is BLOCKED exactly
+when we'd want to fire — at extreme deviations.
+
+### Solution: r3_hydrogel_reversion_v2
+
+Added on top of Theo's R3HydroReversionMM:
+1. Dynamic taker size: 1 base + (|dev|-12)/4, capped at 12
+2. **bypass_trend_guard_dev=22**: at |dev|≥22, fire even if trend high
+3. Extreme cooldown: 500ts (5 ticks) when |dev|≥30 (vs 2000ts normal)
+
+This integrates the GOOD idea from `hydrogel_exhaustion_taker` (aggressive
+contrarian at extremes) with Theo's defensive base (trend_guard for
+normal conditions).
+
+### Backtest live-window result
+
+| Strategy | D0 | D1 | D2 | 3-day | DD |
+|---|---|---|---|---|---|
+| **reversion_v2 + bypass=22** | **+627** | **+1,588** | **+1,312** | **+3,527** | **-347** |
+| theo_drift_only | +829 | +984 | +916 | +2,729 | -1,011 |
+| theo_only | +624 | +940 | +916 | +2,480 | -1,011 |
+
+**+798 PnL gain (+29%) over theo_drift_only with 70% DD reduction.**
+
+### Day 1 and Day 2 finish AT PEAK with reversion_v2
+
+| | theo_drift | reversion_v2 |
+|---|---|---|
+| Day 1 final/peak | +984/+1,205 | **+1,588/+1,588** |
+| Day 2 final/peak | +916/+1,926 | **+1,312/+1,312** |
+
+The dynamic taker covers shorts BEFORE rebounds → 0 mtm bled from peak
+to final.
+
+### Exhaustion lessons answered
+
+User asked: was r3_hydrogel_exhaustion overfit? Any good ideas?
+
+NOT really overfit — the contrarian taker at extreme displacement is a
+real signal. Two flaws:
+1. Pure taker (paid spread cost on every entry)
+2. No regime filter (fired even on small moves where continuation likely)
+
+reversion_v2 extracts the GOOD idea (aggressive taker at extreme |dev|)
+and combines with Theo's defensive base.
+
+### Recommendation: upload reversion_v2 next
+
+Submission: `artifacts/submissions/round_3/r3_hydrogel_reversion_v2_round3_submission.py`
+Expected live: +1,300 to +1,600 with halved drawdown.
+
+### Strategies on bench (HYDRO only)
+
+- ✅ **r3_hydrogel_reversion_v2** ← NEW, upload next
+- 🟢 r3_hydrogel_theo_drift_only (live +1077, validated)
+- 🟢 r3_hydrogel_theo_only (clean Theo baseline)
+- 🟢 r3_hydrogel_asym_mm v2 (live +672, lowest DD safest)
+- 🟡 r3_hydrogel_super_mm (informed-flow gate, failed)
+- 🟡 r3_hydrogel_combo_mm (3-signal ladder, failed)
+
+---
+
 ## 2026-04-25 05:00 — Claude: trade-flow patterns + informed-flow gate test
 
 User asked: are there exploitable patterns in informed traders crossing

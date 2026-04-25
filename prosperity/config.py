@@ -3281,6 +3281,54 @@ MEMBER_OVERRIDES["r3_theo_drift"] = {
 # ──────────────────────────────────────────────────────────────────────────────
 # With Léo's daily-phase bias (lean short in first 100k ts)
 # ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL REVERSION V2 — Theo's strategy + dynamic taker (exhaustion-style)
+# theo_drift_only LIVE log 403647: +1,077 final / +2,307 peak / -1,230 DD.
+# Lost 1,230 mtm because mid rebounded 9927→9960 at close while we held -27 short.
+# Theo's tiny taker (size=1) too slow to cover. Dynamic-size taker scales with
+# |dev| to lock profit at extremes. base=1, scale=(|dev|-12)/4, max=12.
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_reversion_v2"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_reversion_v2",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            # Dynamic taker (NEW)
+            take_threshold=12.0,
+            take_size_base=1,
+            take_size_max=12,
+            take_size_scale_div=4.0,
+            take_cooldown_ts=2000,
+            take_extreme_threshold=30.0,
+            take_extreme_cooldown_ts=500,
+            bypass_trend_guard_dev=22.0,
+            # Léo's session drift bias
+            session_drift_bias=4,
+            session_bias_strong_until_ts=100_000,
+            session_bias_fade_until_ts=300_000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # R3 HYDROGEL SUPER MM — Theo + informed-flow gate + daily bias
 # Adds informed-flow detection: when 2+ aggressive buys in last 1000ts, suppress
 # our ASK (don't sell into rally). Stats: BUY streaks ≥2 have +10.35 markout
@@ -3393,11 +3441,11 @@ MEMBER_OVERRIDES["r3_hydrogel_theo_only"] = {
 
 
 # R3 HYDROGEL GUARDED THEO
-# HYDRO-only.  Reads VELVET/VEV books as toxicity filters, but sends orders
-# only on HYDROGEL_PACK.  Base = Theo reversion MM; overlays:
-#   - block/shrink bids in bearish HYDRO/VELVET/voucher regimes;
-#   - block/shrink asks in bullish regimes;
-#   - tiny L1 exhaustion taker only when the filter agrees.
+# HYDRO-only. Sends orders only on HYDROGEL_PACK.
+# Base = Theo reversion MM; overlay = tiny L1 exhaustion taker.  The
+# VELVET/voucher score is exposed for dashboard analysis and only lightly gates
+# exhaustion entries; passive quote gates are disabled by default because they
+# did not separate good/bad maker fills on the 3-day backtest.
 MEMBER_OVERRIDES["r3_hydro_guarded_theo"] = {
     3: {
         "HYDROGEL_PACK": _override(
@@ -3421,8 +3469,8 @@ MEMBER_OVERRIDES["r3_hydro_guarded_theo"] = {
             wrong_side_unwind_boost=10,
             cross_window=500,
             cross_min_samples=150,
-            soft_score=0.85,
-            hard_score=1.35,
+            soft_score=99.0,
+            hard_score=999.0,
             soft_reduce_mult=0.35,
             gate_boost_max=12,
             gate_boost_per_score=8,
@@ -3446,8 +3494,8 @@ MEMBER_OVERRIDES["r3_hydro_guarded_theo"] = {
             exhaustion_max_position=35,
             exhaustion_cooldown_ts=3000,
             exhaustion_max_recent_against=8.0,
-            exhaustion_buy_min_score=0.15,
-            exhaustion_sell_min_score=0.15,
+            exhaustion_buy_min_score=-0.10,
+            exhaustion_sell_min_score=-0.10,
             quote_trace_enabled=True,
             log_flush_ts=1000,
             ts_increment=100,

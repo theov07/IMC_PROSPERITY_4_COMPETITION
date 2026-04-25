@@ -55,7 +55,119 @@ Artifacts:
 
 ---
 
-## 🚨 LATEST — Trade-flow patterns (Léo's intuition: informed vs naive mix)
+## 🚨 LATEST — `r3_hydrogel_reversion_v2` (theo_drift live +1077 + dynamic taker)
+
+### theo_drift_only LIVE result (log 403647) — NEW LEADER
+
+- Final: **+1,077** (was our prev best asym_mm v2 +672, +60% improvement)
+- Peak: **+2,307** at ts ~91k (mid hit 9927 = day's low)
+- DD: **-1,230** (at ts 99,900 = end)
+- End pos: HYDROGEL -27 short
+
+**Backtest predicted +916, live came in at +1,077** (+18% better). But peak
+was +2,307 and we lost 1,230 of mtm at close because mid rebounded
+9927→9960 while we held -27 short. Theo's tiny taker (size=1, cooldown
+2000ts) was way too slow to cover the rebound.
+
+### Diagnosis: `trend_guard` BLOCKS taker at extremes
+
+Tested |dev| distribution on day 2 live window:
+
+| |dev| threshold | # ticks |
+|---|---|
+| > 12 | 476 |
+| > 18 | 264 |
+| > 30 | 68 |
+| > 40 | 5 |
+
+But the COMBINED condition (Theo's taker requires both):
+| |dev|>X AND |trend|<6 | # ticks |
+|---|---|
+| |dev|>12 AND |trend|<6 | 92 |
+| |dev|>18 AND |trend|<6 | 22 |
+| **|dev|>24 AND |trend|<6** | **0** |
+
+**At extreme |dev|, trend is ALWAYS large** (mid moved fast = fast EMA
+diverged from slow EMA). So `trend_guard=6` blocks the taker exactly
+when we'd want to fire most aggressively.
+
+### Solution: dynamic-size taker + bypass trend_guard at extremes
+
+`hydrogel_reversion_v2` adds:
+
+1. **Dynamic taker size**: scales with |dev|.
+   ```
+   size = base + max(0, (|dev| - threshold) / scale_div)  [capped at max]
+   |dev|=12 → size=1 (Theo's behavior)
+   |dev|=20 → size=3
+   |dev|=30 → size=5 (was 1 with Theo)
+   |dev|=40 → size=8 (was BLOCKED with Theo's trend_guard)
+   ```
+
+2. **Bypass trend_guard when |dev| ≥ bypass_thr=22**: at extreme dev,
+   fire taker even if trend is high. Mean-reversion at 20+ tick deviation
+   is very likely (HYDROGEL ACF analysis confirms).
+
+3. **Faster cooldown when extreme**: 500 ts (5 ticks) when |dev|≥30, vs
+   2000 ts (20 ticks) normally. Lets us fire 4x more often during exhaustion.
+
+### Backtest live-window vs theo_drift_only
+
+| Strategy | D0 | D1 | D2 | 3-day | max DD |
+|---|---|---|---|---|---|
+| **reversion_v2 + bypass=22** | **+627** | **+1,588** | **+1,312** | **+3,527** | **-347** |
+| theo_drift_only | +829 | +984 | +916 | +2,729 | -1,011 |
+| theo_only | +624 | +940 | +916 | +2,480 | -1,011 |
+
+**+798 PnL gain (+29%) with 70% DD reduction**.
+
+### Per-day live-window peak/final analysis
+
+| | theo_drift backtest | reversion_v2 + bypass | Δ |
+|---|---|---|---|
+| Day 1 final | +984 (peak +1,205) | **+1,588 (peak +1,588)** | **+604** |
+| Day 2 final | +916 (peak +1,926) | **+1,312 (peak +1,312)** | **+396** |
+
+**Day 1 and Day 2 finish AT PEAK** with reversion_v2 — the dynamic taker
+covers shorts BEFORE the rebound, locking profit. theo_drift bled mtm
+from peak to close (Day 2: -1,010 from peak to final).
+
+### Day 2 taker activity comparison
+
+| | theo_drift | reversion_v2 + bypass |
+|---|---|---|
+| Takers | 7 | **22** |
+| Sizes | all size 1 | up to 6, mostly 3-6 |
+| Total qty | 7 | **58** |
+
+Bypass unlocked 5x more taker volume IN THE EXTREME ZONE where it matters.
+
+### Exhaustion strategy lessons (Léo's question)
+
+The `r3_hydrogel_exhaustion` strategy was **NOT really overfit** to day 2.
+Its core insight is sound: at extreme displacement, mean-reversion is
+likely. But it had two flaws:
+
+1. **Pure taker** — paid spread cost (~7 ticks) on every entry
+2. **No regime filter** — fired contrarian even on small moves where
+   continuation was more likely than reversion
+
+`reversion_v2` extracts the GOOD idea (aggressive taker at extreme |dev|)
+and combines with Theo's defensive base (trend_guard for normal
+conditions, dynamic scaling, smaller per-trade size). Best of both worlds.
+
+### FINAL RECOMMENDATION
+
+**`r3_hydrogel_reversion_v2`** with `bypass_trend_guard_dev=22`.
+
+Expected live PnL ~+1,300 to +1,600 on a day-2-like session (vs
+theo_drift_only's +1,077 actual). Drawdown should be roughly halved.
+
+Submission: `artifacts/submissions/round_3/r3_hydrogel_reversion_v2_round3_submission.py`
+
+---
+
+## 🚨 PREVIOUS — Trade-flow patterns (Léo's intuition: informed vs naive mix)
 
 User asked: are there patterns in informed traders crossing the book?
 Fixed sizes? Wait times? Mix of informed + neophytes?

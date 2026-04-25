@@ -110,6 +110,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
         "HydrogelGuardedReversionMMStrategy",
     ),
     "hydrogel_super_mm": ("prosperity.strategies.round_3.hydrogel_super_mm", "HydrogelSuperMMStrategy"),
+    "hydrogel_reversion_v2": ("prosperity.strategies.round_3.hydrogel_reversion_v2", "HydrogelReversionV2Strategy"),
     "hydro_velvet_spread_skew_mm": (
         "prosperity.strategies.round_3.hydro_velvet_spread_skew_mm",
         "HydroVelvetSpreadSkewMMStrategy",
