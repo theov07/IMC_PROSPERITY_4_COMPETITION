@@ -380,9 +380,73 @@ Trade vs v38 :
 - `scripts/compare_svi_vs_poly2.py` — SVI vs poly2 fair value tick-by-tick
 - `scripts/compare_all_variants.py` — ranking par ratio + PnL
 
-### Truly nothing left to test
+### Pareto frontier framing (corriger le "best ratio" misleading)
 
-All listed ideas empirically tested. The space is saturated. Ceiling = v46 ratio 1.943.
+User pointed out: ratio alone misleads. Two strats with same PnL but different
+DD → comparison meaningful. v46 reduces DD by 12% but ALSO reduces PnL by 12%
+→ ratio improves but it's a trade, not a strict win.
+
+**Correct framing — Pareto frontier (non-dominée)** :
+
+| PnL level | Pareto winner | DD |
+|---|---|---:|
+| ~77k | v46_vega_weighted | -39,882 |
+| ~86k | **v38_drop_bad** | -45,494 |
+| ~89k | v34_combined | -46,889 |
+| ~92k | v24_r2velvet_zskip | -50,200 |
+| ~93k | v35_per_strike_z_rev | -53,652 |
+| ~95k | v12_r2velvet | -60,508 |
+
+(v33 dominated by v34 ; v45 dominated by v38)
+
+**Question pour la décision** : à quel niveau de PnL veux-tu opérer ?
+- "Lowest DD acceptable" : v46 (-39k DD)
+- "Max PnL with DD < 46k" : v38
+- "Max PnL with DD < 47k" : v34
+- "Max PnL safe" : v24 (-50k DD)
+- "Max PnL stretch" : v12 (-60k DD)
+
+### Truly nothing left to test in backtest
+
+All listed ideas empirically tested. Ceiling reached on the Pareto frontier.
+The frontier IS the answer — pick the level matching your risk tolerance.
+
+### TODO — live IMC alpha exploration (untestable in backtest)
+
+**Pattern observation** : in R1/R2, gap exploit was ONLY visible in live IMC
+data (didn't show up in 3-day backtest). Some alpha sources only manifest
+when you actually run on the IMC server with live participant flow.
+
+For round 3 velvet+options, suspected live-only alpha sources :
+
+1. **Informed vs uninformed trader detection on skew deformation**
+   - When skew suddenly deforms (e.g., one strike becomes rich vs others),
+     it's either:
+     a) Uninformed buyer dumped → mean-revert (sell into the rich)
+     b) Informed buyer accumulating → follow direction (buy more)
+   - Discrimination requires watching FILL flow patterns (which participants,
+     what size, where they cross)
+   - Backtest doesn't have participant identification at sufficient granularity
+
+2. **Gap exploit on options thin levels**
+   - Like R1/R2 HYDROGEL: when L1 option flow is thin (low volume) and L2 has
+     a gap, sweep aggressively at L2-1.
+   - Backtest fill model doesn't fully replicate this — needs live order
+     book + fill behavior to validate
+
+3. **Time-of-session adaptive params**
+   - Live = 1k ticks. First 100 ticks: build position. Last 100: harvest.
+     Different params per phase.
+   - Hard to backtest meaningfully (only one 1k window per day in training)
+
+4. **Participant flow patterns**
+   - Specific traders (Caesar, Penelope, Valentina from R1) had distinctive
+     flow patterns in live data
+   - Backtest treats all flow as anonymous
+
+**Action for IMC live submission** : upload v38 (or chosen Pareto pick) and
+observe live PnL vs backtest projection. If live > backtest by significant
+margin → live-only alpha capturing. If less → backtest was overfit.
 
 ### À TESTER ENCORE (idées non couvertes)
 

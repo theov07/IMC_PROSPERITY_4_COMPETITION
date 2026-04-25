@@ -2,6 +2,32 @@
 
 Priority list for turning this repository from a solid framework into a competition-winning platform.
 
+## Round 3 LIVE alpha exploration (untestable in backtest — to do during live)
+
+Backtest space is saturated (Pareto frontier reached on velvet+options).
+These alpha sources only show in actual live IMC data:
+
+- **Informed vs uninformed trader detection on skew deformation** — when
+  one strike's IV residual jumps, watch participant flow:
+  - If informed trader pattern → follow direction (e.g., gamma_scalp boost)
+  - If uninformed dump → fade (e.g., temporary mean-rev taker)
+  - Discrimination needs participant-level fill data live
+- **Gap exploit on thin option strikes** — like R1/R2 HYDROGEL gap exploit,
+  only visible in live order book where L1 thin + L2 gap → sweep aggressively
+- **Time-of-session adaptive params** — first 100 live ticks build, last 100
+  harvest. Different aggressiveness per phase
+- **Participant flow patterns** — specific traders (Caesar, Penelope etc.)
+  had distinctive flow in R1. Map who's trading which strike when
+- **End-of-session unwind dynamics** — how to exit large positions before
+  session close without crossing wide spreads
+
+**Action plan for LIVE submission**:
+1. Upload `v38_drop_bad` as primary (Pareto winner at 86k PnL level)
+2. Observe live PnL vs backtest +86,451 projection
+3. If live > backtest by >20% → live-only alpha confirmed, build dynamic
+   detector for next iteration
+4. If live < backtest → strategy was overfit, consider v46 (more conservative)
+
 ## Round 3 (current) — Options trading on Velvetfruit
 
 Products: HYDROGEL_PACK (delta-1, limit 200), VELVETFRUIT_EXTRACT (delta-1 underlying, limit 200),
