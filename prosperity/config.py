@@ -5226,6 +5226,85 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v20_z_skip_strict"] = {
 }
 
 
+# v21_z_sell: v20 (skip on z>0.5) + profit-take when z>+1.5 (Tibo asymmetric ASK)
+def _gamma_zgated_with_sell(z_skip: float = 0.5, z_sell: float = 1.5,
+                              sell_pct: float = 0.10,
+                              target_qty: int = 300):
+    return dict(
+        strategy="gamma_scalp_zgated",
+        tte_days_initial=5.0,
+        ticks_per_day=10000,
+        timestamp_units_per_day=1000000,
+        historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+        implied_vol_prior=0.0125,
+        edge_ticks=0.0,
+        target_qty=target_qty,
+        entry_size=30,
+        passive_bid_size=24,
+        unwind_tte_threshold=1.5,
+        min_quote_price=2.0,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        zscore_window=500,
+        zscore_skip_threshold=z_skip,
+        skip_when_expensive=True,
+        boost_when_cheap=False,
+        # Profit-take asymmetric ask
+        sell_when_very_expensive=True,
+        zscore_sell_threshold=z_sell,
+        sell_size_pct=sell_pct,
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v21_z_sell"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_sell(z_skip=0.5, z_sell=1.5, sell_pct=0.10),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v22_z_sell_aggro: lower sell threshold (z>1.0) + bigger sell pct (15%)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v22_z_sell_aggro"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(ROUND_3["VELVETFRUIT_EXTRACT"], **_R3_VELVET_SMALL_MM),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_sell(z_skip=0.5, z_sell=1.0, sell_pct=0.15),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
 # Dynamic skew detector base params
 _R3_SKEW_DYNAMIC_BASE = dict(
     strategy="option_skew_dynamic_mm",

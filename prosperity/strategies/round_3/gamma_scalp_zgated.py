@@ -101,6 +101,23 @@ class GammaScalpZGatedStrategy(BaseStrategy):
             memory["_mode"] = "unwind"
             return orders, 0
 
+        # ── Z-PROFIT-TAKE: actively sell longs when VELVET very expensive ────
+        # Tibo-inspired: lock in directional gains at the peak instead of
+        # waiting for TTE-based unwind. Only fires when |z| above sell threshold.
+        if (p["sell_when_very_expensive"] and z is not None
+                and z > p["zscore_sell_threshold"] and position > 0
+                and sell_cap > 0):
+            ask_px = book.best_ask - 1
+            if ask_px <= book.best_bid:
+                ask_px = book.best_bid + 1
+            sell_qty = max(1, int(round(position * p["sell_size_pct"])))
+            qty = min(sell_qty, sell_cap, position, p["passive_bid_size"])
+            if qty > 0:
+                orders.append(Order(self.product, ask_px, -qty))
+                sell_cap -= qty
+            memory["_mode"] = "z_profit_take"
+            return orders, 0
+
         # ── Z-GATE: skip entries when VELVET expensive ───────────────────────
         skip_entries = False
         if p["skip_when_expensive"] and z is not None and z > p["zscore_skip_threshold"]:
@@ -188,6 +205,10 @@ class GammaScalpZGatedStrategy(BaseStrategy):
             "skip_when_expensive": bool(params.get("skip_when_expensive", True)),
             "boost_when_cheap": bool(params.get("boost_when_cheap", False)),
             "entry_size_boost": float(params.get("entry_size_boost", 1.5)),
+            # Profit-take when very expensive (asymmetric ASK timing à la Tibo)
+            "sell_when_very_expensive": bool(params.get("sell_when_very_expensive", False)),
+            "zscore_sell_threshold": float(params.get("zscore_sell_threshold", 1.5)),
+            "sell_size_pct": float(params.get("sell_size_pct", 0.10)),
         }
 
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
