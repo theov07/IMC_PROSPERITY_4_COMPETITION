@@ -4,7 +4,156 @@ Updated: 2026-04-25
 
 ---
 
-## 🚨 LATEST — HYDRO-only deep dive (Léo's 3 ideas tested rigorously)
+## LATEST - HYDRO/VELVET normalized-spread skew (Codex)
+
+Implemented `hydro_velvet_spread_skew_mm` after the execution/toxicity review:
+
+- signal = dashboard-style `HYDRO_norm - VELVET_norm`;
+- z-score EWMA window 500, skew from `|z| >= 1.5`, one-sided from `|z| >= 2.0`;
+- Theo dual-EMA trend guard kept on HYDRO;
+- conflict mode: if spread and trend disagree, stop building inventory and only
+  allow unwind-side quotes;
+- wrong-side inventory guard: block the side that increases inventory against
+  the current spread/trend direction.
+
+Two configs were added:
+
+- `r3_hydro_velvet_spread_skew`: HYDRO uses spread-skew, VELVET keeps Theo
+  `naive_tight_mm`, VEV keeps Theo option stack.
+- `r3_hydro_velvet_pair_skew`: HYDRO and VELVET both use the normalized-spread
+  skew, with tiny VELVET size/cap, VEV keeps Theo option stack.
+
+Backtest JSONs are in `artifacts/backtests/`:
+
+| Strategy | Day2 realistic | 3-day realistic | HYDRO 3d | VELVET 3d | Max pos HYDRO / VELVET |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `r3_hydro_velvet_spread_skew` | 3,469.5 | 26,376 | 16,569 | -3,070 | 25 / 200 |
+| `r3_hydro_velvet_pair_skew` | 8,720.5 | 35,040 | 16,569 | 5,594 | 25 / 24 |
+
+Approx marked PnL at `ts=99900` from the same backtest equity curves:
+
+| Strategy | Day0 | Day1 | Day2 |
+| --- | ---: | ---: | ---: |
+| `r3_hydro_velvet_spread_skew` | 1,130.5 | 923.5 | 1,543 |
+| `r3_hydro_velvet_pair_skew` | 1,125.5 | 1,271 | 1,388 |
+
+Main takeaway: Leo's visual spread intuition is real as a *market-making skew*.
+The pair-light VELVET leg avoids the huge VELVET inventory of the naive Theo
+leg and improves full-day backtest materially. This is still not a proven live
+upload: the next validation should be a `0..99900` live-slice comparison and a
+dashboard review of quote traces.
+
+Artifacts:
+
+- `prosperity/strategies/round_3/hydro_velvet_spread_skew_mm.py`
+- `artifacts/submissions/round_3/r3_hydro_velvet_spread_skew_round3_submission.py`
+- `artifacts/submissions/round_3/r3_hydro_velvet_pair_skew_round3_submission.py`
+- `artifacts/backtests/r3_hydro_velvet_spread_skew_day2.json`
+- `artifacts/backtests/r3_hydro_velvet_pair_skew_day2.json`
+- `artifacts/backtests/r3_hydro_velvet_spread_skew_3days.json`
+- `artifacts/backtests/r3_hydro_velvet_pair_skew_3days.json`
+
+---
+
+## 🚨 LATEST — Trade-flow patterns (Léo's intuition: informed vs naive mix)
+
+User asked: are there patterns in informed traders crossing the book?
+Fixed sizes? Wait times? Mix of informed + neophytes?
+
+### Trade size distribution (HYDROGEL, 3 days = 1010 trades)
+
+| Size | Count | % |
+|---|---|---|
+| 2 | 193 | 19.1% |
+| 3 | 198 | 19.6% |
+| 4 | 202 | 20.0% |
+| 5 | 212 | 21.0% |
+| 6 | 205 | 20.3% |
+| 7+ | 0 | 0% |
+
+**Trade qty is UNIFORM in [2,6]** — no fixed-size signature. Looks
+algorithmically randomized. No "big block" trades that would signal informed.
+
+### Time gap analysis
+
+Median inter-trade gap: 2,200 ts (≈ 22 ticks).
+Mean: ~3,000 ts. Max: ~26,000 ts (rare quiet periods).
+
+Bursts of 3+ same-size trades within 500ts: only **1 across 3 days**.
+No clustering signature in pure size+timing.
+
+### Markout per trade SIDE (positive = trader profit, ticks)
+
+For each trade, classify side from book: BUY = price ≥ ask, SELL = price ≤ bid.
+
+| Side | n | H=10 | H=100 | H=500 | H=1000 |
+|---|---|---|---|---|---|
+| BUY (hits ASK) | 320 | -8.0 | -8.0 | -4.8 | -3.9 |
+| SELL (hits BID) | 302 | -8.0 | -9.0 | -8.9 | -13.4 |
+
+**Both sides LOSE money on markout** — these are noise traders paying
+the spread (~7 ticks each way) and getting negative continuation on top.
+This confirms: **crossing trades = noise, our passive MM = correct approach**.
+
+### Markout from MID, by streak length (H=1000)
+
+Streak = consecutive same-side trades within 1000ts.
+
+| Side | n_min | count | mean | wr |
+|---|---|---|---|---|
+| BUY | ≥1 | 252 | +5.62 | 59% |
+| **BUY** | **≥2** | **30** | **+10.35** | **63%** |
+| BUY | ≥3 | 6 | -18.67 | 50% |
+| SELL | ≥1 | 236 | -4.05 | 43% |
+| SELL | ≥2 | 25 | -2.34 | 40% |
+
+**KEY: BUY streaks of 2+ within 1000ts are WEAKLY INFORMED** (+10 ticks
+mean, 63% wr at H=1000). SELL streaks are NOT informed (mean-rev hits
+them). Asymmetric signal!
+
+### Built `r3_hydrogel_super_mm` (informed-flow gate) → FAILED
+
+Strategy: when 2+ BUY streaks detected in last 1000ts, suppress passive
+ASK quote (don't get adversely selected short into informed buying).
+
+3-day live-window result:
+
+| Day | super_mm | theo_drift_only | Δ |
+|---|---|---|---|
+| 0 | +133 | +829 | **-696** |
+| 1 | -300 | +984 | **-1,284** |
+| 2 | +916 | +916 | 0 |
+
+**Verdict**: gate is too aggressive. False positives on days 0/1 kill our
+spread capture. The +10 tick markout signal is too weak to compensate
+for the lost spread (~7 ticks per fill avoided).
+
+**Trade-off math**: gating ASK saves us being wrong on +10 ticks markout
+(when we'd be hit short and adverse). But we LOSE the spread we could
+capture on the 95%+ of times the gate fires falsely. Net negative.
+
+### Conclusion
+
+The asymmetric signal (BUY streaks informed) IS real but too noisy to
+trade on directly. The **theo_drift_only** strategy implicitly handles
+this via its mean-rev signal + trend_guard combo.
+
+`r3_hydrogel_super_mm` kept as documented experiment. **Recommendation
+remains: r3_hydrogel_theo_drift_only**.
+
+### Observations for future research
+
+- **No counterparty IDs** in round 3 trades CSV (anonymized) — can't do
+  per-name profitability analysis like round 1
+- Could potentially identify "informed buyers" by tracking who's currently
+  hitting ask repeatedly LIVE via state.market_trades — but signal too
+  weak to trade on alone
+- Possible angle: use BUY streak detection as a SOFT inventory bias
+  (don't quote ASK as wide, not kill) — to test next
+
+---
+
+## 🚨 PREVIOUS — HYDRO-only deep dive (Léo's 3 ideas tested rigorously)
 
 User wants to stay HYDRO-only. Tested all 3 of his ideas combined and individually.
 

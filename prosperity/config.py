@@ -3280,6 +3280,52 @@ MEMBER_OVERRIDES["r3_theo_drift"] = {
 # Useful baseline to measure: how much of Theo's edge comes from HYDRO alone?
 # ──────────────────────────────────────────────────────────────────────────────
 # With Léo's daily-phase bias (lean short in first 100k ts)
+# ──────────────────────────────────────────────────────────────────────────────
+# R3 HYDROGEL SUPER MM — Theo + informed-flow gate + daily bias
+# Adds informed-flow detection: when 2+ aggressive buys in last 1000ts, suppress
+# our ASK (don't sell into rally). Stats: BUY streaks ≥2 have +10.35 markout
+# at H=1000, 63% wr (informed).
+# ──────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["r3_hydrogel_super_mm"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_super_mm",
+            position_limit=200,
+            # Theo's HYDRO params
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            # Informed-flow gate
+            streak_window_ts=1000,            # detect 2+ same-side trades in 10 ticks
+            streak_min_count=2,
+            gate_duration_ts=50000,           # gate active for 500 ticks after trigger
+            # Léo's session drift bias
+            session_drift_bias=4,
+            session_bias_strong_until_ts=100_000,
+            session_bias_fade_until_ts=300_000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_hydrogel_theo_drift_only"] = {
     3: {
         "HYDROGEL_PACK": _override(
@@ -3346,6 +3392,73 @@ MEMBER_OVERRIDES["r3_hydrogel_theo_only"] = {
 }
 
 
+# R3 HYDROGEL GUARDED THEO
+# HYDRO-only.  Reads VELVET/VEV books as toxicity filters, but sends orders
+# only on HYDROGEL_PACK.  Base = Theo reversion MM; overlays:
+#   - block/shrink bids in bearish HYDRO/VELVET/voucher regimes;
+#   - block/shrink asks in bullish regimes;
+#   - tiny L1 exhaustion taker only when the filter agrees.
+MEMBER_OVERRIDES["r3_hydro_guarded_theo"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="hydrogel_guarded_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            tighten_ticks=1,
+            hard_pos_cap=70,
+            wrong_side_pos_gate=18,
+            wrong_side_unwind_boost=10,
+            cross_window=500,
+            cross_min_samples=150,
+            soft_score=0.85,
+            hard_score=1.35,
+            soft_reduce_mult=0.35,
+            gate_boost_max=12,
+            gate_boost_per_score=8,
+            w_vertical=0.35,
+            w_spread=0.20,
+            w_hydro_reversal=0.18,
+            w_hydro_fast=0.05,
+            w_velvet=0.18,
+            hydro_mom_scale=40.0,
+            hydro_fast_mom_scale=18.0,
+            velvet_mom_scale=18.0,
+            enable_theo_taker=True,
+            take_threshold=12.0,
+            take_size=1,
+            take_cooldown_ts=2000,
+            take_contra_score=0.75,
+            enable_exhaustion_taker=True,
+            exhaustion_fast_ticks=42.0,
+            exhaustion_slow_ticks=55.0,
+            exhaustion_size=3,
+            exhaustion_max_position=35,
+            exhaustion_cooldown_ts=3000,
+            exhaustion_max_recent_against=8.0,
+            exhaustion_buy_min_score=0.15,
+            exhaustion_sell_min_score=0.15,
+            quote_trace_enabled=True,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_hydrogel_combo_mm"] = {
     3: {
         "HYDROGEL_PACK": _override(
@@ -3391,6 +3504,144 @@ MEMBER_OVERRIDES["r3_hydrogel_combo_mm"] = {
         ),
         "VELVETFRUIT_EXTRACT": None,
         **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# R3 HYDRO/VELVET SPREAD SKEW
+# Uses the dashboard-style spread HYDRO_norm - VELVET_norm as a toxicity and
+# one-sided quoting overlay.  This is intentionally a MM skew, not an aggressive
+# pair-trade: HYDRO keeps the Theo trend guard, VELVET/VEV keep the proven Theo
+# stack in the default variant.
+_R3_HV_SPREAD_HYDRO_PARAMS = dict(
+    strategy="hydro_velvet_spread_skew_mm",
+    position_limit=200,
+    ema_alpha=0.008,
+    fast_ema_alpha=0.03,
+    quote_threshold=6.0,
+    trend_guard=6.0,
+    trend_follow_threshold=6.0,
+    trend_extreme_block=10.0,
+    enable_trend_follow=True,
+    maker_size=24,
+    min_maker_size=3,
+    counter_quote_size=0,
+    conflict_quote_size=0,
+    max_signal_size_boost=12,
+    signal_boost_per_unit=8,
+    tighten_ticks=1,
+    spread_window=500,
+    spread_min_samples=150,
+    spread_skew_z=1.5,
+    spread_hard_z=2.0,
+    spread_extreme_z=2.7,
+    inventory_reduce_per_unit=0.40,
+    inventory_unwind_per_unit=0.30,
+    max_unwind_boost=20,
+    hard_pos_cap=20,
+    wrong_side_pos_gate=8,
+    wrong_side_unwind_boost=12,
+    enable_wrong_side_taker=False,
+    wrong_side_take_confidence=1.0,
+    wrong_side_take_pos_gate=12,
+    wrong_side_take_size=1,
+    wrong_side_take_cooldown_ts=2000,
+    session_drift_bias=0,
+    quote_trace_enabled=True,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+
+_R3_HV_SPREAD_VELVET_PAIR_PARAMS = dict(
+    strategy="hydro_velvet_spread_skew_mm",
+    position_limit=200,
+    ema_alpha=0.008,
+    fast_ema_alpha=0.03,
+    quote_threshold=4.0,
+    trend_guard=4.0,
+    trend_follow_threshold=5.0,
+    trend_extreme_block=8.0,
+    enable_trend_follow=False,
+    maker_size=8,
+    min_maker_size=2,
+    counter_quote_size=0,
+    conflict_quote_size=0,
+    max_signal_size_boost=6,
+    signal_boost_per_unit=5,
+    tighten_ticks=1,
+    spread_window=500,
+    spread_min_samples=150,
+    spread_skew_z=1.5,
+    spread_hard_z=2.0,
+    spread_extreme_z=2.7,
+    inventory_reduce_per_unit=0.45,
+    inventory_unwind_per_unit=0.35,
+    max_unwind_boost=12,
+    hard_pos_cap=20,
+    wrong_side_pos_gate=8,
+    wrong_side_unwind_boost=8,
+    enable_wrong_side_taker=False,
+    quote_trace_enabled=True,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+
+MEMBER_OVERRIDES["r3_hydro_velvet_spread_skew"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            **_R3_HV_SPREAD_HYDRO_PARAMS,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                strategy="option_mm_bs",
+                position_limit=300,
+                strike=strike,
+                **_THEO_VEV_OPTION_PARAMS,
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200, 5300]
+        },
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_velvet_pair_skew"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            **_R3_HV_SPREAD_HYDRO_PARAMS,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_HV_SPREAD_VELVET_PAIR_PARAMS,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                strategy="option_mm_bs",
+                position_limit=300,
+                strike=strike,
+                **_THEO_VEV_OPTION_PARAMS,
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200, 5300]
+        },
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},
     },
 }
 

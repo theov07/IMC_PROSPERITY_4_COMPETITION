@@ -4,6 +4,120 @@ Shared coordination file for Léo, Claude, and Codex.
 
 ---
 
+## 2026-04-25 05:00 - Codex: HYDRO/VELVET spread-skew implemented
+
+Leo pointed out that the cross-asset visual spread looked mean-reverting. Codex
+tested the dashboard-style spread `HYDRO_norm - VELVET_norm`: the static OLS
+cointegration hedge ratio is unstable, but the normalized spread does mean-
+revert enough to use as a market-making skew.
+
+### Built
+
+- Strategy: `hydro_velvet_spread_skew_mm`
+- Configs:
+  - `r3_hydro_velvet_spread_skew`: HYDRO spread-skew, VELVET Theo naive MM, VEV Theo options.
+  - `r3_hydro_velvet_pair_skew`: HYDRO + tiny VELVET spread-skew, VEV Theo options.
+- Exports:
+  - `artifacts/submissions/round_3/r3_hydro_velvet_spread_skew_round3_submission.py`
+  - `artifacts/submissions/round_3/r3_hydro_velvet_pair_skew_round3_submission.py`
+- Backtest JSONs in `artifacts/backtests/`.
+
+### Results, realistic full-day backtest
+
+| Strategy | Day2 | 3 days | HYDRO 3d | VELVET 3d | Max pos H/V |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `r3_hydro_velvet_spread_skew` | 3,469.5 | 26,376 | 16,569 | -3,070 | 25 / 200 |
+| `r3_hydro_velvet_pair_skew` | 8,720.5 | 35,040 | 16,569 | 5,594 | 25 / 24 |
+
+Approx marked PnL at `ts=99900` from the same equity curves:
+
+| Strategy | Day0 | Day1 | Day2 |
+| --- | ---: | ---: | ---: |
+| `r3_hydro_velvet_spread_skew` | 1,130.5 | 923.5 | 1,543 |
+| `r3_hydro_velvet_pair_skew` | 1,125.5 | 1,271 | 1,388 |
+
+### Interpretation
+
+The spread idea works better as a quote-side/toxicity filter than as a pure
+aggressive pair trade. The pair-light variant is promising because it turns
+VELVET from a large-inventory naive MM leg into a small capped spread leg.
+
+Next validation: run/compare `0..99900` live-slice, then inspect dashboard
+quote traces before upload.
+
+---
+
+## 2026-04-25 05:00 — Claude: trade-flow patterns + informed-flow gate test
+
+User asked: are there exploitable patterns in informed traders crossing
+the book? Fixed sizes? Wait times? Mix of informed + neophytes?
+
+### Pattern findings (HYDROGEL, 1010 trades over 3 days)
+
+1. **Trade qty UNIFORM in [2,6]** — no fixed-size signature. Each size
+   ~20% of trades. No qty above 6 ever. Looks algorithmically randomized.
+
+2. **Median time gap 2,200 ts** (≈ 22 ticks). Mean ~3,000 ts. Only 1
+   "burst" of 3+ same-size trades within 500ts across all 3 days.
+
+3. **Crossing trades LOSE money on markout** (both directions):
+   - BUY hits ASK: -8 to -3.9 ticks markout at H=10 to H=1000
+   - SELL hits BID: -8 to -13.4 ticks markout
+   These are noise traders paying spread + getting mean-rev against them.
+
+4. **BUY streaks of 2+ (within 1000ts) ARE weakly informed**: +10.35
+   ticks markout at H=1000, **63% wr** (n=30 over 3 days).
+
+5. **SELL streaks of 2+ are NOT informed**: -2.34 markout, 40% wr.
+   Asymmetric signal!
+
+### Built `r3_hydrogel_super_mm` (informed-flow gate) → FAILED
+
+Strategy: when 2+ BUY trades detected in last 1000ts, kill ASK quote
+to avoid being adversely selected short into informed buying.
+
+| Day | super_mm | theo_drift_only | Δ |
+|---|---|---|---|
+| 0 | +133 | +829 | **-696** |
+| 1 | -300 | +984 | **-1,284** |
+| 2 | +916 | +916 | 0 |
+
+**Verdict**: gate is too sensitive. False positives on days 0/1 kill
+spread capture. The +10 tick markout signal is too weak to compensate
+for the lost spread (~7 ticks per quote avoided).
+
+### Math behind why this doesn't work
+
+Capturing the BUY streak signal saves us ~10 ticks adverse mtm IF we
+skip our ASK during a true informed BUY. But the gate has many false
+positives — random clustering of BUY trades (median gap 2200ts means
+chance clusters happen often). Each false positive costs us 1 spread
+capture (~7 ticks). Net: negative.
+
+### Future angle (not implemented)
+
+Could potentially:
+- Increase streak_min_count to 3+ (n=6 in our data, too small to test reliably)
+- Use as SOFT inventory bias (reduce ASK size by 30%, not kill)
+- Combine with other features (e.g., gate only when |dev| > X)
+
+### Recommendation unchanged
+
+**`r3_hydrogel_theo_drift_only`** remains the pick. Léo uploading now.
+Theo's `trend_guard=6` already implicitly handles informed-flow regimes
+without needing explicit market_trades parsing.
+
+### Strategies on the bench
+
+- ✅ **r3_hydrogel_theo_drift_only** ← uploading now
+- 🟢 r3_hydrogel_theo_only (clean baseline)
+- 🟡 r3_hydrogel_super_mm (informed-flow gate, failed but documented)
+- 🟡 r3_hydrogel_combo_mm (3-signal ladder, ladder hurt)
+- 🟢 r3_hydrogel_asym_mm v2 (live +672, safest)
+- 🟡 r3_hydrogel_follow_mm (live +610, peak +1481)
+
+---
+
 ## 2026-04-25 04:00 — Claude: HYDRO-only deep dive (Léo's 3 ideas tested)
 
 User asked to combine 3 ideas on HYDROGEL only (no multi-product):

@@ -123,6 +123,15 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "hydrogel_ladder_v2": ("prosperity/strategies/round_3/hydrogel_ladder_v2.py", "HydrogelLadderV2Strategy"),
     "hydrogel_reversion_mm": ("prosperity/strategies/round_3/hydrogel_reversion_mm.py", "HydrogelReversionMMStrategy"),
     "hydrogel_combo_mm": ("prosperity/strategies/round_3/hydrogel_combo_mm.py", "HydrogelComboMMStrategy"),
+    "hydrogel_guarded_reversion_mm": (
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "HydrogelGuardedReversionMMStrategy",
+    ),
+    "hydrogel_super_mm": ("prosperity/strategies/round_3/hydrogel_super_mm.py", "HydrogelSuperMMStrategy"),
+    "hydro_velvet_spread_skew_mm": (
+        "prosperity/strategies/round_3/hydro_velvet_spread_skew_mm.py",
+        "HydroVelvetSpreadSkewMMStrategy",
+    ),
     "hydrogel_exhaustion_taker": (
         "prosperity/strategies/round_3/hydrogel_exhaustion_taker.py",
         "HydrogelExhaustionTakerStrategy",
