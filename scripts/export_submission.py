@@ -109,6 +109,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+    "r3_gamma_scalp_zgated": ("prosperity/strategies/round_3/velvet_option_layers.py", "GammaScalpZGatedStrategy"),
+    "r3_smile_iv_scalper": ("prosperity/strategies/round_3/velvet_option_layers.py", "SmileIVScalperStrategy"),
     "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
     "r3_live_defensive_mm": ("prosperity/strategies/round_3/live_defensive_mm.py", "R3LiveDefensiveMMStrategy"),
     "r3_guarded_anchor_mm": ("prosperity/strategies/round_3/guarded_anchor_mm.py", "R3GuardedAnchorMMStrategy"),
@@ -125,6 +127,18 @@ CORE_MODULES = [
 # Optional per-strategy file deps (paths inlined BEFORE the strategy file).
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "option_mm_bs": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+    "r3_gamma_scalp_zgated": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+    "r3_smile_iv_scalper": [
         "prosperity/options/time.py",
         "prosperity/options/black_scholes.py",
         "prosperity/options/implied_vol.py",
