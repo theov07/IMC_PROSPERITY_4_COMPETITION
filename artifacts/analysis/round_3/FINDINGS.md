@@ -1,10 +1,156 @@
 # Round 3 Findings
 
+## LATEST - HYDRO transfer test from VELVET z-gate (Codex 2026-04-25)
+
+Goal: test whether the VELVET discovery (1-tick mean reversion + z-score
+gating) can improve the HYDRO max-3d anchor.
+
+HYDRO stats confirm the diagnostic:
+
+- `rho_1` on HYDRO returns is negative on all 3 days: day0 `-0.138`,
+  day1 `-0.124`, day2 `-0.125`.
+- Rolling z-score window `500` has contrarian next-tick edge: high z tends to
+  be followed by a negative next return, low z by a positive next return.
+- Artifacts:
+  - `artifacts/analysis/round_3/hydro_autocorr.json`
+  - `artifacts/analysis/round_3/hydro_z_autocorr_scan.json`
+
+Implemented `hydro_anchor_zgate_mm`: R2/v4 HYDRO anchor with an HYDRO z-score
+gate. If HYDRO is expensive, keep only sells; if cheap, keep only buys. Also
+tested an explicit small L1 taker overlay.
+
+Backtest JSONs are in `artifacts/backtest_results/round_3/hydro_research/`.
+
+| Strategy | D0 | D1 | D2 | 3d HYDRO | Max DD | Verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `r3_hydro_anchor_max3d` baseline | +20,158 | +37,306 | +29,374 | **+86,838** | 18,976 | Still best non-oracle HYDRO anchor |
+| `r3_hydro_anchor_zgate_05` | +20,003 | +35,161 | +30,010 | +85,174 | 19,343 | Slightly worse |
+| `r3_hydro_anchor_zgate_10` | +20,501 | +36,067 | +29,216 | +85,784 | 19,234 | Best z-gate, still worse |
+| `r3_hydro_anchor_zgate_taker_15` | +17,067 | +30,102 | +25,205 | +72,374 | 19,968 | Taker overlay hurts |
+| `r3_hydro_anchor_oracle_hybrid` | +20,158 | +37,306 | +49,336 | +106,800 | 28,400 | Overfit/oracle reference only |
+
+Lock-in: clean HYDRO pick copied to
+`artifacts/submissions/round_3/locked/hydro/best_non_overfit/`.
+Pick = `r3_hydro_anchor_max3d`, because it is the best full-session HYDRO
+backtest that does not use a day/timestamp fingerprint. The oracle hybrid was
+moved to `hydro/overfit_reference/` only.
+
+Risk-adjusted note: `r3_hydro_anchor_max3d` is not the best by PnL/DD. It has
+DD `18,976` and PnL/DD `4.58`. The cleaner risk-adjusted HYDRO pick is
+`r3_hydrogel_smart`: PnL `+28,856`, DD `2,652`, PnL/DD `10.88`. It is copied to
+`artifacts/submissions/round_3/locked/hydro/best_risk_adjusted/`.
+
+Verdict: the VELVET mean-reversion fact transfers statistically to HYDRO, but
+not as an incremental strategy edge on top of `r3_hydro_anchor_max3d`. The
+anchor already monetizes most of the micro mean reversion; extra z-gates remove
+too much good passive flow, and explicit takers pay too much execution cost.
+
+The plots in `artifacts/analysis/round_3_option_velvet/` do not reveal a stable
+HYDRO cross-asset alpha:
+
+- `hydrogel_options_link.csv`: HYDRO/V agreement is weak and sign-changing
+  (`ret_corr` about `+0.011`, `+0.012`, `-0.005`; lag signals near zero).
+- `hydrogel_velvet_day_*.png`: visually correlated phases exist, but regime
+  flips make direct pair/spread trading unreliable.
+- Option plots support VELVET/options alpha instead: realized VELVET vol is
+  around `0.34` annualized while ATM IV is around `0.20`, and IV residual ACF is
+  positive, i.e. momentum rather than mean-reverting IV scalping.
+
+Next HYDRO direction if we keep digging: do not add more generic z-gates.
+Search for an execution-conditioned filter that predicts when the anchor's
+passive fills become toxic, using own fill side, recent mid move, spread/depth,
+and post-fill markout. That is closer to the live failure mode than a pure
+price z-score.
+
 Updated: 2026-04-25
 
 ---
 
-## 🚨 LATEST — État des lieux complet (toutes les pistes du video recap)
+## 🚨 LATEST — État des lieux EXHAUSTIF (toutes pistes + nouvelles à tester)
+
+### TESTÉ avec verdict
+
+| # | Idée | Implémentation | Result | Verdict |
+|---|---|---|---:|---|
+| 1 | Vol arb realized > implied | gamma_scalp UNHEDGED | +58k inv_drift in v11/v24 | ✅ CORE |
+| 2 | B&S mispriced arb | option_mm_bs penny-improve | +8.8k VEV_4000 | ✅ workhorse |
+| 3 | R2/v4 anchor MM on VELVET | mm_first_v4_combo | +27.5k v12/v24 | ✅ Tibo's tuning |
+| 4 | Z-gate gamma cluster (Tibo idea 7) | gamma_scalp_zgated z_skip | -3k PnL / -10k DD | ✅ ratio 0.30 |
+| 5 | Mean-rev IV scalping (skew_taker) | option_skew_signal_mm | -45k | ❌ DEAD |
+| 6 | Skew dynamic auto/follow/fade | option_skew_dynamic_mm | -1k each | ❌ marginal loss |
+| 7 | Vega-neutral pair | vega_neutral_pair_mm | -20k | ❌ IV gap trop petit |
+| 8 | Delta hedge every-tick (3 modes) | velvet_delta_hedger | -3.7k à -5.3k | ❌ ratio 6-9 |
+| 9 | Delta hedge low-freq (1000/5000) | min_ticks_between_hedges | -36k vs v24 | ❌ R2 anchor MM domine |
+| 10 | IV momentum aggressive | iv_momentum_mm full ATM | **-71k** | ❌ CATASTROPHE |
+| 11 | IV momentum selective (5300/5400) | iv_momentum_mm | -3.8k vs v24 | ⚠️ ratio +0.07 (marginal) |
+| 12 | VELVET MR taker overlay |z|>2 | velvet_mr_taker_overlay | -25k vs v24 | ❌ R2 domine |
+| 13 | Asymmetric ASK profit-take (v21/v22) | gamma_scalp_zgated sell mode | net 0 | ❌ data bullish |
+| 14 | HYDROGEL ↔ options link | analyze_hydrogel_options_link | corr ~0 | ❌ DEAD |
+| 15 | Pair trading V/H + copule | mid corr varie / ret corr 0 | tested via spread_skew | ❌ DEAD |
+| 16 | SVI calibration (vs poly2) | prosperity/options/svi.py | R²=0.51 vs 0.66 | ⚠️ marginal (poly2 fits better) |
+| 17 | IV residual ρ_1 | analyze_iv_autocorr.py | +0.12 (positive momentum) | statistique mais magnitude trop faible |
+
+### COMPLÉTÉ this turn — IV gate + per-strike z = NEW BEST RATIO
+
+| # | Idée | Variant | PnL | DD | Ratio | Verdict |
+|---|---|---|---:|---:|---:|---|
+| 18 | IV residual GATE (passive momentum) | v32 | +89,350 | -48,311 | 1.85 | ✅ +0.03 ratio |
+| 19 | Per-strike z-skip thresholds | v33 | +90,868 | -48,778 | 1.86 | ✅ +0.04 ratio |
+| 20 | **Combo IV gate + per-strike z** | **v34** ★ | +88,658 | **-46,889** | **1.89** | **NEW BEST RATIO** |
+| 21 | 4500 z>1.0 (looser) | v35 | **+93,442** ★ | -53,652 | 1.74 | BEST PnL absolu |
+| 22 | 4500 z>0.7 + per-strike + IV | v36 | +90,432 | -50,320 | 1.80 | mid combo |
+| 23 | All z=0.5 + 5300 z=0.8 + IV | v37 | +89,466 | -48,641 | 1.84 | sane combo |
+
+**Conclusions empiriques (IMPORTANT — avant éliminé trop vite)** :
+
+1. **IV residual GATE marche** comme PASSIVE momentum (skip when option mid falling). Pas de taker cost. **+0.03 ratio durable**.
+2. **Per-strike z** vraiment utile : 5300 préfère **z>0.8** (looser → +116 PnL). 4500 optimum à z=0.5 (changement loss).
+3. **Combo additif** : ratio passe 1.82 → 1.89 (+0.07). PnL -3k mais DD -3k aussi.
+
+**Final candidates lockés (16 submissions in _final/velvet_options/, all <100 KB)** :
+
+| File | Size | PnL | DD | Ratio | Profile |
+|---|---:|---:|---:|---:|---|
+| v11_optimal | 63 KB | +70,386 | -56,650 | 1.24 | max PnL pure (no R2) |
+| v12_r2velvet | 83 KB | +94,614 | -60,508 | 1.56 | max PnL stretch |
+| **v24_r2velvet_zskip** | 87 KB | **+91,560** | -50,200 | 1.82 | **balanced** |
+| **v34_combined** ★ | **91 KB** | **+88,658** | **-46,889** | **1.89** | **best risk-adjusted** |
+
+### À TESTER ENCORE (priorité basse, marginal expected)
+
+| # | Idée | Status |
+|---|---|---|
+| 24 | option_mm_bs avec SVI fair (enable_takers=True) | low — penny-improve override |
+| 25 | Per-strike full custom strategies (each strike own params) | low — v33/v34 already test |
+| 26 | Multi-strike vega-weighted basket | low — not designed yet |
+| 27 | Time-of-session adaptive params | very low — live = 1k ticks |
+| 28 | call_gamma weight target_qty | very low — IMC limit 300 already hit |
+
+### À TESTER ENCORE (idées non couvertes)
+
+| # | Idée | Why untested | Priority |
+|---|---|---|---|
+| 21 | **option_mm_bs avec SVI fair (penny_improve=False)** | Penny-improve override smile-fair quote. Avec BS-edged on quoterait à SVI fair±maker_edge | medium |
+| 22 | **Per-strike full custom strategies** | Each strike: own params (size, edge, gate). Aujourd'hui 4500-5300 share same params | medium |
+| 23 | **Multi-strike vega-weighted basket gamma_scalp** | Coordinator share to allocate vega budget across strikes proportional to expected paypaid | low |
+| 24 | **Z-skip + IV gate cumulative gating** (v34 in progress) | Already running | testing |
+| 25 | **Time-of-session adaptive params** | First 1000 ticks: aggressive build-up. Mid: harvest. Last: unwind | low (live live=1k ticks only) |
+| 26 | **Use call_gamma directly to weight target_qty** | Currently target_qty=300 same all strikes. Could weight by gamma | low |
+
+### v24 base details (pour rappel)
+
+```
+HYDROGEL_PACK:        None
+VELVETFRUIT_EXTRACT:  R2/v4 anchor MM (Tibo, +27.5k, 7446 trades)
+VEV_4000:             option_mm_bs default smile (+8.8k workhorse)
+VEV_4500/5000-5300:   gamma_scalp_zgated target=300 z>0.5 (+62k cluster)
+VEV_5400:             option_mm_bs no-smile passive (+330)
+TOTAL:                +91,560 / DD -50,200 / Ratio 1.82
+```
+
+---
+
+## PREVIOUS — État des lieux complet (toutes les pistes du video recap)
 
 ### Tableau exhaustif TESTÉ vs À TESTER
 

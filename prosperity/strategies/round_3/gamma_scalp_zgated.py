@@ -38,12 +38,16 @@ from datamodel import Order, OrderDepth, TradingState
 from prosperity.market import BookSnapshot
 from prosperity.options.black_scholes import call_delta, call_gamma, call_price
 from prosperity.options.coordinator import get_spot, publish_position
+from prosperity.options.implied_vol import call_implied_vol
+from prosperity.options.smile import fit_smile_poly, smile_predict
 from prosperity.options.time import (
     resolve_initial_tte_days,
     time_to_expiry_days,
     timestamp_units_per_day_from_params,
 )
 from prosperity.strategies.base.base import BaseStrategy
+
+_DEFAULT_VEV_STRIKES = [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
 
 
 class GammaScalpZGatedStrategy(BaseStrategy):
@@ -101,6 +105,26 @@ class GammaScalpZGatedStrategy(BaseStrategy):
             memory["_mode"] = "unwind"
             return orders, 0
 
+        # ── IV residual gate (NEW v32) — passive momentum exploitation ──────
+        # If iv_residual_gate enabled: compute LOO-smile residual + EWMA delta.
+        # When residual is decreasing rapidly (option getting cheaper momentum),
+        # SKIP entries — same direction as VELVET overbought but for IV signal.
+        # When residual is increasing (rich getting richer), BOOST entry size.
+        if p["iv_residual_gate"]:
+            iv_resid, iv_resid_delta = self._update_iv_residual(state, book, S, p, memory)
+            memory["_iv_resid"] = iv_resid
+            memory["_iv_resid_delta"] = iv_resid_delta
+            if iv_resid is not None and iv_resid_delta is not None:
+                # Skip when residual is cheap AND getting cheaper (price falling momentum)
+                if iv_resid < -p["iv_skip_threshold"] and iv_resid_delta < -p["iv_delta_threshold"]:
+                    memory["_mode"] = "iv_skip_falling"
+                    return [], 0
+                # Boost size when residual is rich AND getting richer (price rising momentum)
+                if iv_resid > p["iv_boost_threshold"] and iv_resid_delta > p["iv_delta_threshold"]:
+                    memory["_iv_boost"] = True
+                else:
+                    memory["_iv_boost"] = False
+
         # ── Z-PROFIT-TAKE: actively sell longs when VELVET very expensive ────
         # Tibo-inspired: lock in directional gains at the peak instead of
         # waiting for TTE-based unwind. Only fires when |z| above sell threshold.
@@ -139,6 +163,10 @@ class GammaScalpZGatedStrategy(BaseStrategy):
         eff_entry_size = max(1, int(round(p["entry_size"] * size_mult)))
         eff_passive_size = max(1, int(round(p["passive_bid_size"] * size_mult)))
 
+        # Apply IV momentum boost (passive, no taker)
+        if memory.get("_iv_boost", False):
+            eff_passive_size = int(round(eff_passive_size * p["iv_passive_boost"]))
+
         # Standard accumulation (taker + passive bid)
         if buy_cap > 0 and position < p["target_qty"]:
             ask = book.best_ask
@@ -160,6 +188,45 @@ class GammaScalpZGatedStrategy(BaseStrategy):
         return orders, 0
 
     # ── Z-score on VELVET spot, per-strike memory ────────────────────────────
+
+    def _update_iv_residual(self, state, book, S, p, memory):
+        """Compute IV residual = own_iv - LOO-smile-predicted iv. Track EWMA delta."""
+        own_mid = 0.5 * (book.best_bid + book.best_ask)
+        own_iv = call_implied_vol(own_mid, S, p["K"], p["T"], sigma_init=p["implied_vol_prior"])
+        if own_iv is None:
+            return None, None
+        # LOO smile fit
+        ks, ivs = [], []
+        for strike in _DEFAULT_VEV_STRIKES:
+            if float(strike) == p["K"]:
+                continue
+            od = state.order_depths.get(f"VEV_{strike}")
+            if not od or not od.buy_orders or not od.sell_orders:
+                continue
+            bid = max(od.buy_orders); ask = min(od.sell_orders)
+            mid = 0.5 * (bid + ask)
+            iv = call_implied_vol(mid, S, float(strike), p["T"], sigma_init=p["implied_vol_prior"])
+            if iv is None or iv < 0.005 or iv > 0.10: continue
+            ks.append(float(strike)); ivs.append(iv)
+        if len(ks) < 3:
+            return None, None
+        coeffs = fit_smile_poly(ks, ivs, S, p["T"], degree=2)
+        if coeffs is None:
+            return None, None
+        loo_iv = smile_predict(p["K"], coeffs, S, p["T"])
+        residual = own_iv - loo_iv
+        # EWMA on residual
+        slow = memory.get("_iv_resid_slow")
+        fast = memory.get("_iv_resid_fast")
+        if slow is None:
+            slow = residual; fast = residual
+        else:
+            slow = (1 - p["iv_ewma_slow_alpha"]) * slow + p["iv_ewma_slow_alpha"] * residual
+            fast = (1 - p["iv_ewma_fast_alpha"]) * fast + p["iv_ewma_fast_alpha"] * residual
+        memory["_iv_resid_slow"] = slow
+        memory["_iv_resid_fast"] = fast
+        delta = fast - slow
+        return residual, delta
 
     def _update_zscore(self, S: float, memory: Dict[str, Any], p: Dict[str, Any]) -> Optional[float]:
         window = p["zscore_window"]
@@ -209,6 +276,14 @@ class GammaScalpZGatedStrategy(BaseStrategy):
             "sell_when_very_expensive": bool(params.get("sell_when_very_expensive", False)),
             "zscore_sell_threshold": float(params.get("zscore_sell_threshold", 1.5)),
             "sell_size_pct": float(params.get("sell_size_pct", 0.10)),
+            # IV residual gate (NEW v32 — passive momentum exploitation)
+            "iv_residual_gate": bool(params.get("iv_residual_gate", False)),
+            "iv_skip_threshold": float(params.get("iv_skip_threshold", 0.0010)),
+            "iv_boost_threshold": float(params.get("iv_boost_threshold", 0.0010)),
+            "iv_delta_threshold": float(params.get("iv_delta_threshold", 0.0003)),
+            "iv_ewma_fast_alpha": float(params.get("iv_ewma_fast_alpha", 0.10)),
+            "iv_ewma_slow_alpha": float(params.get("iv_ewma_slow_alpha", 0.02)),
+            "iv_passive_boost": float(params.get("iv_passive_boost", 1.5)),
         }
 
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:

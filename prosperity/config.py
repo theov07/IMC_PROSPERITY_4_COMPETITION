@@ -5351,6 +5351,235 @@ _R3_VEGA_PAIR_BASE = dict(
     ts_increment=100,
     last_ts_value=999900,
 )
+# v32: v24 + IV residual gate on gamma cluster (passive momentum exploitation).
+# Skip entries when option residual is "cheap getting cheaper" (avoid catching
+# falling option). Boost passive size when "rich getting richer" (load at peak).
+def _gamma_zgated_with_iv_gate(z_skip: float = 0.5, target_qty: int = 300,
+                                 iv_skip: float = 0.0010,
+                                 iv_boost: float = 0.0010,
+                                 iv_delta: float = 0.0003,
+                                 passive_boost: float = 1.5):
+    return dict(
+        strategy="gamma_scalp_zgated",
+        tte_days_initial=5.0,
+        ticks_per_day=10000,
+        timestamp_units_per_day=1000000,
+        historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+        implied_vol_prior=0.0125,
+        edge_ticks=0.0,
+        target_qty=target_qty,
+        entry_size=30,
+        passive_bid_size=24,
+        unwind_tte_threshold=1.5,
+        min_quote_price=2.0,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        zscore_window=500,
+        zscore_skip_threshold=z_skip,
+        skip_when_expensive=True,
+        boost_when_cheap=False,
+        iv_residual_gate=True,
+        iv_skip_threshold=iv_skip,
+        iv_boost_threshold=iv_boost,
+        iv_delta_threshold=iv_delta,
+        iv_ewma_fast_alpha=0.10,
+        iv_ewma_slow_alpha=0.02,
+        iv_passive_boost=passive_boost,
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v32_iv_gate"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v33: per-strike z-skip thresholds (tuned by greeks)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v33_per_strike_z"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # K=4500 (delta~1) → tight z (more reactive to VELVET extremes)
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.3),
+        ),
+        # K=5000-5200 (max vega) → standard
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        # K=5300 (lower vega) → looser
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.8),
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v35: per-strike z REVERSED hypothesis (4500 looser since high delta = wants more)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v35_per_strike_z_rev"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # K=4500 LOOSER (more accumulation OK, near-delta-1 + caps already at 300)
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=1.0),
+        ),
+        # K=5000-5200 STANDARD
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        # K=5300 standard
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v37: BEST OF ALL — IV gate + 5300 z>0.8 (only param tweak that worked) + others stay 0.5
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v37_best_combo"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # All gamma cluster z>0.5 + IV gate (IV gate added to v24)
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        # K=5300 looser (z>0.8) + IV gate
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_with_iv_gate(z_skip=0.8),
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v36: ULTIMATE = v34 + v35's looser 4500 (z>0.7 — middle ground)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v36_ultimate"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # K=4500 LOOSER (z>0.7 — try to keep the +18k full)
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **_gamma_zgated_with_iv_gate(z_skip=0.7),
+        ),
+        # K=5000-5200 standard with IV gate
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        # K=5300 looser standard
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_with_iv_gate(z_skip=0.8),
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v34: combo — v32 (IV gate) + v33 (per-strike z thresholds)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v34_combined"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **_gamma_zgated_with_iv_gate(z_skip=0.3),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_with_iv_gate(z_skip=0.8),
+        ),
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
 # v30: v24 architecture + LOW-FREQUENCY delta hedge (only 1 hedge per 1000 ticks)
 # Tests if rare-but-large hedges have better cost/benefit than every-tick.
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v30_dh_lowfreq_1000"] = {
