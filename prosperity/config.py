@@ -5483,6 +5483,102 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v35_per_strike_z_rev"] = {
 }
 
 
+# v44: v38 + VEV_4000 enable_takers=True (test if smile-aware takers help on best strike)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v44_4000_takers"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{
+                **_R3_VELVET_OPT_OPTION_PARAMS,
+                "maker_size": 40,
+                "enable_takers": True,    # NEW: turn on smile-aware takers
+                "take_edge": 3.0,
+                "take_size": 20,
+            },
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v45: v38 + VEV_5500 short OTM theta seller (greeks split — passive ASK only)
+# Hypothesis: collect spread + theta, exit if delta gets bad
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v45_greeks_split"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        # NEW: VEV_5500 as short-only theta seller (small naive_tight_mm)
+        "VEV_5500": _override(
+            ROUND_3["VEV_5500"],
+            strategy="naive_tight_mm",
+            position_limit=80,
+            maker_size=8,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **{f"VEV_{k}": None for k in [5300, 5400, 6000, 6500]},
+    },
+}
+
+
+# v46: v38 architecture + vega-weighted target_qty
+# (per per-asset analysis: 5200/5300 vega ~5500, 5000/5100 ~3000-4000, 4500 ~110)
+# Target_qty proportional to vega cap=300 max
+# Vega rough: 4500=110, 5000=2135, 5100=4071, 5200=5501
+# Sum = 11817, weights = 0.93%, 18%, 34%, 47%. Cap at 300 → all hit cap
+# Uniform 300 IS already vega-weighted at the top — no improvement expected
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v46_vega_weighted"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # Vega-weighted target_qty (ATM strikes higher target)
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **_gamma_zgated_params(target_qty=100, z_skip_threshold=0.5),  # low vega → small
+        ),
+        "VEV_5000": _override(
+            ROUND_3["VEV_5000"], position_limit=300, strike=5000,
+            **_gamma_zgated_params(target_qty=200, z_skip_threshold=0.5),  # mid vega
+        ),
+        "VEV_5100": _override(
+            ROUND_3["VEV_5100"], position_limit=300, strike=5100,
+            **_gamma_zgated_params(target_qty=280, z_skip_threshold=0.5),  # higher
+        ),
+        "VEV_5200": _override(
+            ROUND_3["VEV_5200"], position_limit=300, strike=5200,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),  # max vega → max
+        ),
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 # v42: OPTIMAL = v38 (drop drag) + IV gate ALL gamma cluster
 # Best of both: drop drag strikes (5300/5400) AND apply IV gate selective to all
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v42_optimal"] = {
