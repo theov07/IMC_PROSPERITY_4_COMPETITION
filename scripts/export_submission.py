@@ -136,6 +136,14 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
         "prosperity/strategies/round_3/hydrogel_day2_selector_mm.py",
         "HydrogelDay2SelectorMMStrategy",
     ),
+    "hydrogel_day2_oracle_anchor": (
+        "prosperity/strategies/round_3/hydrogel_day2_oracle_anchor.py",
+        "HydrogelDay2OracleAnchorStrategy",
+    ),
+    "hydrogel_day2_oracle_guarded": (
+        "prosperity/strategies/round_3/hydrogel_day2_oracle_guarded.py",
+        "HydrogelDay2OracleGuardedStrategy",
+    ),
     "hydro_velvet_spread_skew_mm": (
         "prosperity/strategies/round_3/hydro_velvet_spread_skew_mm.py",
         "HydroVelvetSpreadSkewMMStrategy",
@@ -192,7 +200,15 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "hydrogel_day2_selector_mm": [
         "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
         "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
-        "prosperity/strategies/round_3/oracle_day2_l1_replay.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+    ],
+    "hydrogel_day2_oracle_anchor": [
+        "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+    ],
+    "hydrogel_day2_oracle_guarded": [
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
     ],
     "gamma_scalp":        _R3_OPTIONS_DEPS,
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,

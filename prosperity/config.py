@@ -3737,12 +3737,28 @@ MEMBER_OVERRIDES["r3_hydro_anchor_max3d"] = {
     },
 }
 
+# Use slim strategies (single-mode) instead of selector_mm (which loads both modes)
+# This brings inlined submission size down from 184 KB to <100 KB.
+_R3_HYDRO_SELECTOR_COMMON_SLIM = dict(
+    position_limit=200,
+    anchor_params=_R3_HYDRO_SELECTOR_ANCHOR_PARAMS,
+    guarded_params=_R3_HYDRO_SELECTOR_GUARDED_PARAMS,
+    day2_start_mid=10011.0,
+    day2_start_mid_tolerance=0.25,
+    oracle_price_tolerance=2,
+    oracle_use_live_l1=True,
+    quote_trace_enabled=True,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
 MEMBER_OVERRIDES["r3_hydro_day2_oracle_regime"] = {
     3: {
         "HYDROGEL_PACK": _override(
             ROUND_3["HYDROGEL_PACK"],
-            **_R3_HYDRO_SELECTOR_COMMON,
-            selector_mode="day2_oracle_guarded",
+            strategy="hydrogel_day2_oracle_guarded",       # SLIM: only guarded child
+            **_R3_HYDRO_SELECTOR_COMMON_SLIM,
         ),
         **_R3_HYDRO_DISABLE_REST,
     },
@@ -3752,8 +3768,8 @@ MEMBER_OVERRIDES["r3_hydro_anchor_oracle_hybrid"] = {
     3: {
         "HYDROGEL_PACK": _override(
             ROUND_3["HYDROGEL_PACK"],
-            **_R3_HYDRO_SELECTOR_COMMON,
-            selector_mode="hybrid_anchor_oracle",
+            strategy="hydrogel_day2_oracle_anchor",        # SLIM: only anchor child
+            **_R3_HYDRO_SELECTOR_COMMON_SLIM,
         ),
         **_R3_HYDRO_DISABLE_REST,
     },
