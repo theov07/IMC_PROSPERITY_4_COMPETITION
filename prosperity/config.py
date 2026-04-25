@@ -3318,8 +3318,8 @@ MEMBER_OVERRIDES["r3_hydrogel_smart"] = {
             take_size=1,
             take_cooldown_ts=2000,
             # Confirmed-reversal taker (NEW)
-            extreme_dev_threshold=20.0,        # |dev| must be >= 20 to consider firing
-            reversal_persist_ticks=3,          # mid must reverse for 3 consecutive ticks
+            extreme_dev_threshold=25.0,        # |dev| must be >= 20 to consider firing
+            reversal_persist_ticks=4,          # mid must reverse for 3 consecutive ticks
             min_pos_for_reversal_take=10,      # position must be >= 10 for cover to matter
             reversal_take_base=3,              # base size when |dev|=20
             reversal_take_max=12,              # cap
