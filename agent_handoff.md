@@ -1,5 +1,58 @@
 # Agent Handoff — Leo2 branch
 
+## 2026-04-25 22:55 - Claude: video-recap ideas tested, v24 confirmed leader
+
+User shared last year's competition video recap. Tested every claim:
+
+### Hedge cost vs DD reduction (last year's team rejected at ratio 2.5)
+
+| Variant | Hedge cost/day | DD reduction/day | Ratio |
+|---|---:|---:|---:|
+| v12_dh_passive | $1,246 | $196 | **6.34** ❌ |
+| v13_dh_lowfreq | $1,326 | $196 | **6.75** ❌ |
+| v14_dh_default | $1,767 | $196 | **9.00** ❌ |
+| **z-gate (v20)** | **$1,018** | **$3,436** | **0.30** ✅ |
+
+Z-gate is the working risk control, NOT delta hedge. Confirmed by data.
+
+### IV residual autocorrelation (last year's IV scalping was based on this)
+
+ρ_1 across all strikes = +0.06 to +0.20 (mean +0.12). **POSITIVE = momentum,
+opposite of last year's negative**. IV scalping based on mean-reversion would
+fail here. Validates why all skew-arb variants lost (-45k skew_taker etc.).
+
+### VELVET return autocorrelation (validates underlying mean-rev z-score)
+
+ρ_1 = -0.16 (strong mean-reversion in 1-tick returns). When z>1, next return
+-0.08bp; z<-1, +0.06 to +0.12bp.
+
+R2/v4 anchor MM (in v12/v24) already exploits this via passive spread MM.
+
+### Tested v26_velvet_mr_taker (explicit |z|>2 taker overlay)
+
+Result: +65,920 / DD -36,598 / Ratio 1.80. R2 anchor MM dominates because it
+captures every micro-reversion via high-freq spread. Custom overlay only fires
+on rare extremes.
+
+### Tools added
+
+- `prosperity/strategies/round_3/velvet_mr_taker_overlay.py` (registered)
+- `scripts/analyze_hedge_cost_benefit.py`
+- `scripts/analyze_iv_autocorr.py`
+- `scripts/analyze_velvet_autocorr.py`
+
+### Final candidates (unchanged)
+
+| Variant | PnL | DD | PnL/DD |
+|---|---:|---:|---:|
+| **v24_r2velvet_zskip** ★ | **+91,560** | **-50,200** | **1.82** |
+| v12_r2velvet | +94,614 | -60,508 | 1.56 |
+| v25 | +93,556 | -57,070 | 1.64 |
+| v11_optimal | +70,386 | -56,650 | 1.24 |
+| v20_z_skip_strict | +67,332 | -46,342 | 1.45 |
+
+v24 confirmed upload candidate.
+
 ## 2026-04-25 22:15 - Claude: NEW LEADER v24_r2velvet_zskip (PnL/DD = 1.82)
 
 User pointed out v12 had the best PnL/DD ratio (1.56) and asked to combine

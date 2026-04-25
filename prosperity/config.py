@@ -5325,6 +5325,50 @@ _R3_VEGA_PAIR_BASE = dict(
 )
 # v24_r2velvet_zskip: v12 (R2 anchor MM on VELVET) + v20's z-skip on gamma cluster
 # Goal: keep VELVET +27k drift gain + reduce DD via z-gated gamma entries
+# v26: v24 architecture but VELVET = mr_taker_overlay (z-score taker on |z|>2)
+# Tests if explicit mean-reversion taker (validated by ρ_1 = -0.16) beats R2 MM
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v26_velvet_mr_taker"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="velvet_mr_taker_overlay",
+            position_limit=200,
+            zscore_window=500,
+            zscore_taker_threshold=2.0,
+            taker_size=8,
+            taker_cooldown_ticks=200,
+            maker_size_base_pct=0.30,
+            pct_kept_for_takers=0.15,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200, 5300]
+        },
+        "VEV_5400": _override(
+            ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v27: v24 + VELVET MR taker layered ON TOP of R2 anchor MM (need a different design)
+# For now, simpler test: v24 baseline + tighter zscore_taker_threshold to test
+# if combination of R2 + extra taker activity adds anything. SKIP for now (would
+# need running 2 strategies on same product, not supported).
+
+
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v24_r2velvet_zskip"] = {
     3: {
         "HYDROGEL_PACK": None,

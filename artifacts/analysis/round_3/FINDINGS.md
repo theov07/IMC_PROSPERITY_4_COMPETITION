@@ -4,7 +4,133 @@ Updated: 2026-04-25
 
 ---
 
-## 🚨 LATEST — NEW LEADER v24_r2velvet_zskip: +91,560 / DD -50,200 / PnL-DD 1.82
+## 🚨 LATEST — Last year's video recap ideas tested empirically — v24 confirmed
+
+User shared last year's competition video recap with several strategies/checks.
+Ran systematic analysis to validate or invalidate each on round 3 data.
+
+### Hedge cost vs. risk (last year's team rejected hedging at 40k/16k = 2.5)
+
+Computed empirically for our 3 hedge variants:
+
+| Variant | Hedge cost/day | DD reduction/day | Ratio |
+|---|---:|---:|---:|
+| v12_dh_passive (no taker) | $1,246 | $196 | **6.34** ❌ |
+| v13_dh_lowfreq (rare taker) | $1,326 | $196 | **6.75** ❌ |
+| v14_dh_default (full hedger) | $1,767 | $196 | **9.00** ❌ |
+
+**Our hedge ratio is 6-9 vs last year's 2.5. Hedging is even MORE prohibitively
+expensive in our market.** The DD reduction is tiny (only $196/day) because
+the option DD originates in option drawdowns, NOT in delta exposure. Hedging
+just converts option DD to VELVET losses.
+
+**The z-gate (v20/v24) is the WORKING risk-control mechanism**:
+- Z-gate cost: $1,018/day (PnL lost from skipping entries when VELVET overbought)
+- Z-gate benefit: $3,436/day (DD reduction)
+- Cost/benefit ratio: **0.30** = excellent trade
+
+→ Use z-gate, NOT delta hedge.
+
+### IV residual autocorrelation (validate IV scalping?)
+
+Last year's team validated IV scalping with NEGATIVE 1-lag autocorrelation in
+IV residuals (= mean-reverting). Tested for round 3:
+
+| K | ρ_1 (mean across 3 days) | Verdict |
+|---|---:|---|
+| 4000 | +0.0978 | weak momentum |
+| 4500 | +0.1053 | STRONG momentum |
+| 5000 | +0.1180 | STRONG momentum |
+| 5100 | +0.1366 | STRONG momentum |
+| 5200 | +0.1450 | STRONG momentum |
+| 5300 | +0.1085 | STRONG momentum |
+| 5400 | +0.1375 | STRONG momentum |
+| 5500 | +0.0748 | weak momentum |
+| 6000 | +0.1431 | STRONG momentum |
+| 6500 | +0.0618 | weak momentum |
+
+**ALL strikes show POSITIVE autocorrelation (momentum), opposite of last
+year**. IV scalping based on mean-reversion would NOT work.
+
+This validates why our skew-arb variants (skew_taker -45k, skew_dynamic -1k,
+vega_pair -20k) all lost: they bet on mean-reversion when residuals actually
+trend. Combined with the systematic fit-bias issue (residuals constant sign
+per strike), there's no IV-residual alpha to extract.
+
+### VELVET return autocorrelation (validate z-score trading?)
+
+Last year's "z-score on underlying with fast EMA" worked because underlying
+mean-reverted. Tested for round 3 VELVET:
+
+| Day | ρ_1 (1-tick returns) | Path return |
+|---|---:|---:|
+| 0 | -0.151 | -0.114% |
+| 1 | -0.169 | +0.391% |
+| 2 | -0.155 | +0.532% |
+| **avg** | **-0.158** | — |
+
+**STRONG mean-reversion in VELVET 1-tick returns** (ρ_1 ≈ -0.16). When VELVET
+is at z>1, next return is -0.08 bp; when z<-1, +0.06 to +0.12 bp.
+
+**This validates the R2/v4 anchor MM approach** (Tibo's Tibo strategy in v12/v24
+captures this via passive spread MM around fair). Our v24 already exploits
+this signal.
+
+### Tested: v26_velvet_mr_taker (explicit |z|>2 taker overlay)
+
+Built a custom VELVET strategy combining penny-improve MM + explicit z-score
+taker on |z|>2. Result: **+65,920 / DD -36,598 / Ratio 1.80** — close ratio to
+v24 but PnL much lower (-25k).
+
+Why: my overlay does 1,302 trades vs R2 anchor's 7,446. The R2 strategy
+captures the mean-reversion through HIGH-FREQUENCY passive spread capture
+(every micro-reversion), not through extreme-event takers. **The R2 anchor
+MM dominates.** v24 stays leader.
+
+### IV-scalping strategy NOT built
+
+Given autocorrelation findings, IV scalping mean-reversion is dead before we
+build it. The momentum signal magnitude (~0.14 × residual ≈ 0.14 bp expected
+gain per tick) is too small to overcome spread costs.
+
+### Hybrid VEV_4000 leveraged VELVET — NOT built
+
+The user mentioned "deep ITM call as leveraged mean-reversion". VEV_4000 has
+delta ≈ 0.999, so it IS pure delta exposure on VELVET. But VELVET trended
+UP all 3 days (+0.4% to +0.5% on D1/D2), so a leveraged VEV_4000 long would
+just amplify the drift gain — same as gamma_scalp on 4500-5300 already does.
+Adding VEV_4000 leverage on top of v24 would increase both PnL and DD
+proportionally; doesn't change the ratio. Skipped.
+
+### Final ranked candidates
+
+| Variant | PnL | DD | PnL/DD | D2 LW | Profile |
+|---|---:|---:|---:|---:|---|
+| v12_r2velvet | +94,614 | -60,508 | 1.56 | +1,384 | max PnL stretch |
+| **v24_r2velvet_zskip** ★ | **+91,560** | **-50,200** | **1.82** | **+1,384** | best risk-adjusted |
+| v25 (z>1.0) | +93,556 | -57,070 | 1.64 | +1,384 | tradeoff intermediate |
+| v11_optimal | +70,386 | -56,650 | 1.24 | +1,208 | max PnL pure (no R2) |
+| v20_z_skip_strict | +67,332 | -46,342 | 1.45 | +1,208 | gamma + z-gate (no R2) |
+| v26_velvet_mr_taker | +65,920 | -36,598 | 1.80 | +1,336 | smallest DD, lower PnL |
+
+**v24 confirmed as the upload candidate.** All "video recap" ideas tested,
+no improvement over v24's combination.
+
+### New analysis tools delivered
+
+- `scripts/analyze_hedge_cost_benefit.py` — quantifies hedge cost vs DD reduction
+- `scripts/analyze_iv_autocorr.py` — IV residual ACF per strike
+- `scripts/analyze_velvet_autocorr.py` — VELVET return ACF + z-score test
+- `prosperity/strategies/round_3/velvet_mr_taker_overlay.py` — z-score taker MM (tested, R2 wins)
+
+Output in `artifacts/analysis/round_3_option_velvet/`:
+- `hedge_cost_benefit.csv`
+- `iv_residual_autocorr.csv` + ACF plots
+- `velvet_autocorr.csv` + path/z-score plots
+
+---
+
+## PREVIOUS — NEW LEADER v24_r2velvet_zskip: +91,560 / DD -50,200 / PnL-DD 1.82
 
 User pointed out v12_r2velvet had the best PnL/DD ratio (1.56) and asked if
 we couldn't keep its high PnL while reducing DD. **The answer is YES**: the
