@@ -52,14 +52,45 @@ Updated: 2026-04-25
 
 → **Aucun signal HYDROGEL → VELVET ni HYDROGEL → vol regime.** Mid correlation varie mais c'est juste la covariance des marches aléatoires. Pas de prédictivité pour trade.
 
-### IV momentum test (ρ_1=+0.14 → on tente)
+### IV momentum test (ρ_1=+0.14 → user requested "essayons momentum")
 
-User explicit ask: "ρ_1 POSITIF = momentum, on tente". Built `iv_momentum_mm.py`:
-- BUY when residual > +threshold AND not reverting → option mid will keep rising
-- SELL when residual < -threshold AND not reverting → option mid will keep dropping
+Built `iv_momentum_mm.py`:
+- BUY when residual > +threshold AND not reverting (rich + persisting)
+- SELL when residual < -threshold AND not reverting (cheap + persisting)
 - Exit when residual returns near 0
 
-Tested as v28 (5300/5400 only) and v29 (full ATM cluster aggressive). Results below.
+Tested as v28 (5300/5400) and v29 (full ATM cluster aggressive):
+
+| Variant | PnL | DD | Ratio | D2 LW | Verdict |
+|---|---:|---:|---:|---:|---|
+| **v24_r2velvet_zskip** | **+91,560** | -50,200 | 1.82 | +1,384 | leader |
+| v28 iv_momentum (5300/5400) | +87,740 | -46,503 | **1.89** | +1,388 | -3.8k absolute, +0.07 ratio |
+| v29 iv_momentum_aggro (full ATM) | **-71,024** ❌ | -74,964 | -0.95 | -3,183 | CATASTROPHE |
+
+v29 detail: take_edge = **-222,088** (4-5k aggressive crosses on ATM), spread
+totally consumed the +136k inventory_drift. Confirms signal magnitude
+(1.4bp expected gain × ρ_1 × residual_std) **too weak** to overcome ~1-tick
+spread cost.
+
+v28 (selective on 5300/5400): VEV_5300 gamma alpha +3,262 LOST when replaced
+with iv_momentum (0 trades), VEV_5400 -920 (worse than passive +330).
+Net -3,820 vs v24 absolute, ratio +0.07 better.
+
+**Final verdict on IV residual signal**: 4 angles tested, all fail:
+
+| Mode | Result |
+|---|---:|
+| Mean-rev passive (skew_signal) | +12k (no fills) |
+| Mean-rev taker (skew_taker) | -45k |
+| Dynamic auto/follow/fade | -858 to -1,076 each |
+| Momentum aggressive (v29) | **-71,024** |
+| Momentum selective (v28) | -3,820 vs v24 |
+
+The ρ_1=+0.14 signal exists but magnitude × residual_std × vega is ~1.4bp ×
+$5500 vega = $7.7/tick gain, vs ~$5-15 spread cost per cross. **Not
+economically tradeable.**
+
+→ v24_r2velvet_zskip remains leader. **No more video-recap ideas to test.**
 
 ---
 
