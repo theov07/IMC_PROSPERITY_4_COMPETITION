@@ -97,6 +97,8 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "gamma_scalp_zgated": ("prosperity.strategies.round_3.gamma_scalp_zgated", "GammaScalpZGatedStrategy"),
     "vega_neutral_pair_mm": ("prosperity.strategies.round_3.vega_neutral_pair_mm", "VegaNeutralPairMMStrategy"),
     "velvet_mr_taker_overlay": ("prosperity.strategies.round_3.velvet_mr_taker_overlay", "VelvetMRTakerOverlayStrategy"),
+    "iv_momentum_mm": ("prosperity.strategies.round_3.iv_momentum_mm", "IVMomentumMMStrategy"),
+    "velvet_r2_exhaustion_mm": ("prosperity.strategies.round_3.velvet_r2_exhaustion_mm", "VelvetR2ExhaustionMMStrategy"),
     "velvet_delta_hedger": ("prosperity.strategies.round_3.velvet_delta_hedger", "VelvetDeltaHedgerStrategy"),
     "vol_harvest": ("prosperity.strategies.round_3.vol_harvest", "VolHarvestStrategy"),
     "anchor_adaptive": ("prosperity.strategies.round_3.anchor_adaptive", "AnchorAdaptiveStrategy"),

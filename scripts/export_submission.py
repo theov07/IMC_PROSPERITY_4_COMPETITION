@@ -115,6 +115,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "gamma_scalp_zgated":  ("prosperity/strategies/round_3/gamma_scalp_zgated.py", "GammaScalpZGatedStrategy"),
     "vega_neutral_pair_mm": ("prosperity/strategies/round_3/vega_neutral_pair_mm.py", "VegaNeutralPairMMStrategy"),
     "velvet_mr_taker_overlay": ("prosperity/strategies/round_3/velvet_mr_taker_overlay.py", "VelvetMRTakerOverlayStrategy"),
+    "iv_momentum_mm": ("prosperity/strategies/round_3/iv_momentum_mm.py", "IVMomentumMMStrategy"),
+    "velvet_r2_exhaustion_mm": ("prosperity/strategies/round_3/velvet_r2_exhaustion_mm.py", "VelvetR2ExhaustionMMStrategy"),
     "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
     "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
     "anchor_adaptive":    ("prosperity/strategies/round_3/anchor_adaptive.py", "AnchorAdaptiveStrategy"),
@@ -226,6 +228,9 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
         "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
     ],
     "gamma_scalp":        _R3_OPTIONS_DEPS,
+    "gamma_scalp_zgated": _R3_OPTIONS_DEPS,
+    "iv_momentum_mm": _R3_OPTIONS_DEPS,
+    "velvet_r2_exhaustion_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
 }
 

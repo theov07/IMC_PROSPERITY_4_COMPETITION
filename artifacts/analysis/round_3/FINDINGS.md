@@ -4,7 +4,66 @@ Updated: 2026-04-25
 
 ---
 
-## 🚨 LATEST — Last year's video recap ideas tested empirically — v24 confirmed
+## 🚨 LATEST — État des lieux complet (toutes les pistes du video recap)
+
+### Tableau exhaustif TESTÉ vs À TESTER
+
+| # | Idée du recap | Implémenté | Tested | Verdict |
+|---|---|---|---|---|
+| **MAIN STRATEGY (recap)** | | | | |
+| 1 | Fair IV from smile fit | option_mm_bs + smile_predict | ✅ v11 / v24 | works for VEV_4000 |
+| 2 | MM aggressively around BS(IV) | option_mm_bs penny-improve | ✅ baseline | +8.8k VEV_4000 |
+| 3a | Delta hedge each tick | velvet_delta_hedger | ✅ v12-v14 | -3.7k à -5.3k (DEAD) |
+| 3b | **Different hedge frequencies** | param `hedge_taker_edge` | ✅ v13 lowfreq | 1326$/jour cost vs 196$/jour benefit (DEAD) |
+| 4 | Cost vs risk comparison | analyze_hedge_cost_benefit.py | ✅ DONE | ratio 6-9 vs threshold 2.5 → DEAD |
+| **OTHER TEAM STRATS (recap)** | | | | |
+| 5 | IV scalping (smile deviations) | option_skew_signal_mm | ✅ skew_taker/signal/dyn | -45k taker, +12k passive, -1k dyn |
+| 6 | **IV scalping validated by ρ_1<0** | analyze_iv_autocorr.py | ✅ DONE | **ρ_1=+0.12 (POSITIF) → mean-rev DEAD** |
+| 7 | Z-score on underlying (fast EMA) | velvet_mr_taker_overlay | ✅ v26 explicit | -25k vs v24, R2 anchor MM domine |
+| 8 | Hybrid IV scalping + z-score | (combo not built) | ⚠️ logical-DEAD | both individually fail |
+| 9 | Deep ITM as leveraged mean-rev | (idea: VEV_4000 long) | ⚠️ partial | implicit in option_mm_bs(4000), no explicit hybrid |
+| **DERIVED FROM RECAP** | | | | |
+| 10 | **IV momentum (ρ_1>0 → follow)** | iv_momentum_mm.py | ⏳ v28/v29 running | TBD |
+| **NOUVEAU SESSION** | | | | |
+| 11 | Z-gate sur gamma cluster | gamma_scalp_zgated | ✅ v20/v24 | THE working risk control (-3k PnL/-10k DD = ratio 0.30 ✅) |
+| 12 | R2/v4 anchor MM on VELVET | mm_first_v4_combo | ✅ v12/v24 | +27.5k VELVET (Tibo's tuning) |
+| 13 | Vega-neutral pair | vega_neutral_pair_mm | ✅ v23 | -20k (IV gap inter-ATM trop petit) |
+| 14 | SVI calibration | prosperity/options/svi.py | ✅ DONE | R²=0.51 vs poly 0.66 (marginal) |
+| 15 | Asymmetric ASK profit-take | gamma_scalp_zgated sell mode | ✅ v21/v22 | identique à v20 sur 3 jours bullish |
+| 16 | HYDROGEL ↔ options link | analyze_hydrogel_options_link.py | ✅ DONE | tous corr ~0 (DEAD) |
+
+### Image smile : ✅ Générée
+
+`artifacts/analysis/round_3_option_velvet/smiles/`:
+- `smile_day_0/1/2.png` (per-day, T en jours, poly2+SVI overlay)
+- `smile_3day_combined.png` (3 jours combinés, T en années → moneyness style image utilisateur, R² affiché)
+- `smile_3day_strikes_le_5500.png` (filtré aux strikes ≤5500 — match exact image utilisateur)
+
+### Réponse explicite : "as-tu testé HYDROGEL ↔ options ?"
+
+✅ Oui, `analyze_hydrogel_options_link.py` tourne sur les 3 jours :
+
+| Day | mid corr | ret corr | HYDRO_z(t-1)→VELVET_ret(t) | HYDRO_z→ATM_IV_z |
+|---|---:|---:|---:|---:|
+| 0 | +0.500 | +0.011 | +0.005 | +0.025 |
+| 1 | +0.184 | +0.012 | +0.003 | -0.010 |
+| 2 | -0.222 | -0.005 | -0.005 | -0.043 |
+| **avg** | **+0.154** | **+0.006** | **+0.0008** | **-0.009** |
+
+→ **Aucun signal HYDROGEL → VELVET ni HYDROGEL → vol regime.** Mid correlation varie mais c'est juste la covariance des marches aléatoires. Pas de prédictivité pour trade.
+
+### IV momentum test (ρ_1=+0.14 → on tente)
+
+User explicit ask: "ρ_1 POSITIF = momentum, on tente". Built `iv_momentum_mm.py`:
+- BUY when residual > +threshold AND not reverting → option mid will keep rising
+- SELL when residual < -threshold AND not reverting → option mid will keep dropping
+- Exit when residual returns near 0
+
+Tested as v28 (5300/5400 only) and v29 (full ATM cluster aggressive). Results below.
+
+---
+
+## PREVIOUS — Last year's video recap ideas tested empirically — v24 confirmed
 
 User shared last year's competition video recap with several strategies/checks.
 Ran systematic analysis to validate or invalidate each on round 3 data.

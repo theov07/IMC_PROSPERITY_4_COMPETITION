@@ -5323,6 +5323,90 @@ _R3_VEGA_PAIR_BASE = dict(
     ts_increment=100,
     last_ts_value=999900,
 )
+# v28_iv_momentum: v24 base + iv_momentum_mm on VEV_5300/5400 (replaces gamma+passive).
+# Tests: ρ_1=+0.14 IV residual momentum → BUY rich + SELL cheap (follow direction).
+_R3_IV_MOMENTUM_BASE = dict(
+    strategy="iv_momentum_mm",
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    strike_prefix="VEV_",
+    smile_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500],
+    prior_vol=0.0125,
+    sigma_floor=0.005,
+    sigma_cap=0.10,
+    signal_threshold=0.0015,    # 15bp residual to enter
+    delta_threshold=0.0003,     # 3bp delta_resid permissive (allow flat momentum)
+    ewma_fast_alpha=0.10,
+    ewma_slow_alpha=0.02,
+    maker_size=20,
+    exit_size=15,
+    max_long=120,
+    max_short=80,
+    enable_takers=True,
+    take_size=10,
+    take_threshold_mult=1.5,
+    tte_days_initial=5.0,
+    timestamp_units_per_day=1000000,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v28_iv_momentum"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,   # R2 anchor
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # gamma cluster z-gated on 4500-5200 (kept)
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        # IV momentum on VEV_5300/5400 (replaces gamma/passive)
+        "VEV_5300": _override(ROUND_3["VEV_5300"], position_limit=300, strike=5300, **_R3_IV_MOMENTUM_BASE),
+        "VEV_5400": _override(ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_IV_MOMENTUM_BASE),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v29_iv_momentum_aggro: lower threshold + bigger sizes, all 5 ATM strikes
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v29_iv_momentum_aggro"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVETFRUIT_V4_F5,
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+        ),
+        # IV momentum on entire ATM cluster 5000-5400 (REPLACES gamma)
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **{
+                    **_R3_IV_MOMENTUM_BASE,
+                    "signal_threshold": 0.001,   # 10bp - more aggressive
+                    "max_long": 150, "max_short": 100,
+                    "maker_size": 25,
+                    "take_size": 15,
+                },
+            )
+            for strike in [5000, 5100, 5200, 5300, 5400]
+        },
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"], position_limit=300, strike=4500,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
 # v24_r2velvet_zskip: v12 (R2 anchor MM on VELVET) + v20's z-skip on gamma cluster
 # Goal: keep VELVET +27k drift gain + reduce DD via z-gated gamma entries
 # v26: v24 architecture but VELVET = mr_taker_overlay (z-score taker on |z|>2)
@@ -5416,6 +5500,99 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v25_r2velvet_zskip_loose"] = {
         **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
     },
 }
+
+
+def _velvet_r2_exhaustion_params(
+    *,
+    z_threshold: float,
+    displacement_threshold: float,
+    taker_size: int,
+    cooldown_ts: int,
+    cascade_threshold: float,
+) -> Dict[str, Any]:
+    return {
+        **_R3_VELVETFRUIT_PARAMS,
+        "overlay_z_threshold": z_threshold,
+        "overlay_displacement_threshold": displacement_threshold,
+        "overlay_taker_size": taker_size,
+        "overlay_cooldown_ts": cooldown_ts,
+        "overlay_cascade_threshold": cascade_threshold,
+        "overlay_zscore_window": 500,
+        "overlay_lookback_ts": 10000,
+        "overlay_short_lookback_ts": 1000,
+    }
+
+
+def _v24_with_velvet(product_config: ProductConfig) -> Dict[int, Dict[str, ProductConfig | None]]:
+    return {
+        3: {
+            "HYDROGEL_PACK": None,
+            "VELVETFRUIT_EXTRACT": product_config,
+            "VEV_4000": _override(
+                ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+                **{**_R3_VELVET_OPT_OPTION_PARAMS, "maker_size": 40},
+            ),
+            **{
+                f"VEV_{strike}": _override(
+                    ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                    **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+                )
+                for strike in [4500, 5000, 5100, 5200, 5300]
+            },
+            "VEV_5400": _override(
+                ROUND_3["VEV_5400"], position_limit=300, strike=5400, **_R3_VELVET_OPT_HIGH_K,
+            ),
+            **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+        },
+    }
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v28_r2exh_mid"] = _v24_with_velvet(
+    _override(
+        ROUND_3["VELVETFRUIT_EXTRACT"],
+        strategy="velvet_r2_exhaustion_mm",
+        position_limit=200,
+        **_velvet_r2_exhaustion_params(
+            z_threshold=2.0,
+            displacement_threshold=30.0,
+            taker_size=6,
+            cooldown_ts=1000,
+            cascade_threshold=8.0,
+        ),
+    )
+)
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v29_r2exh_conservative"] = _v24_with_velvet(
+    _override(
+        ROUND_3["VELVETFRUIT_EXTRACT"],
+        strategy="velvet_r2_exhaustion_mm",
+        position_limit=200,
+        **_velvet_r2_exhaustion_params(
+            z_threshold=2.5,
+            displacement_threshold=40.0,
+            taker_size=5,
+            cooldown_ts=2000,
+            cascade_threshold=10.0,
+        ),
+    )
+)
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v30_r2exh_aggressive"] = _v24_with_velvet(
+    _override(
+        ROUND_3["VELVETFRUIT_EXTRACT"],
+        strategy="velvet_r2_exhaustion_mm",
+        position_limit=200,
+        **_velvet_r2_exhaustion_params(
+            z_threshold=1.5,
+            displacement_threshold=22.0,
+            taker_size=10,
+            cooldown_ts=500,
+            cascade_threshold=6.0,
+        ),
+    )
+)
 
 
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v23_vega_pair"] = {
