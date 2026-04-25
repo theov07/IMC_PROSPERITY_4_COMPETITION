@@ -218,11 +218,67 @@ déployé (max_pos × avg_price).
 - v33/v34 z>0.3 sur VEV_4500 : -2k PnL pour -4k DD = ratio swap +0.52 → z=0.5 reste optimal
 - v35 z>1.0 sur VEV_4500 : +5.5k PnL pour +9.8k DD = ratio swap 0.57 worse
 
-**Tests follow-up running** :
-- v38: drop VEV_5300 + VEV_5400 (drop both drag strikes)
-- v39: drop VEV_5400 only (keep 5300 with looser z + IV gate)
+**Tests follow-up RÉSULTATS (4 variants)** :
 
-Si v38 garde +85k+ PnL avec DD significativement réduit, c'est le nouveau leader.
+| Variant | PnL | DD | Ratio | D2 LW | Notes |
+|---|---:|---:|---:|---:|---|
+| **v38 (drop 5300+5400)** ★ | **+86,451** | **-45,493** | **1.900** | +1,366 | NEW BEST RATIO |
+| v39 (drop 5400 only) | +89,137 | -48,076 | 1.854 | +1,368 | OK but v38 wins |
+| v40 (VEV_4000 size 80) | +91,560 | -50,200 | 1.824 | +1,384 | identique v24 (ceiling) |
+| v41 (combo best) | +89,137 | -48,076 | 1.854 | +1,368 | identique v39 (boost useless) |
+
+**Insights** :
+- **v38 wins ratio 1.900** — drop des 2 drag strikes (5300+5400) confirmed
+- **v40 = v24 EXACTEMENT** : VEV_4000 size 40→80 = identique. Le `realistic` fill mode cap au qty market trades. 464 fills déjà = max → aucune nouvelle marge.
+- **v41 = v39 EXACTEMENT** : boost VEV_4000 dans le combo aussi inutile.
+
+### FINAL RANKING — 13 variants tested
+
+**Par ratio (risk-adjusted) — best comparison** :
+
+| # | Variant | PnL | DD | Ratio | Strikes |
+|---|---|---:|---:|---:|---:|
+| 🥇 | **v38_drop_bad** | +86,451 | -45,493 | **1.900** | 5 |
+| 🥈 | v34_combined | +88,658 | -46,889 | 1.891 | 7 |
+| 🥉 | v33_per_strike_z | +90,868 | -48,778 | 1.863 | 7 |
+| 4 | v39 / v41 | +89,137 | -48,076 | 1.854 | 6 |
+| 5 | v32_iv_gate | +89,350 | -48,311 | 1.849 | 7 |
+| 6 | v37_best_combo | +89,466 | -48,641 | 1.839 | 7 |
+| 7 | v24 / v40 | +91,560 | -50,200 | 1.824 | 7 |
+| 8 | v36_ultimate | +90,432 | -50,320 | 1.797 | 7 |
+| 9 | v35 (4500 z=1.0) | +93,442 | -53,652 | 1.742 | 7 |
+
+**Par PnL absolu** :
+
+| # | Variant | PnL | DD | Ratio |
+|---|---|---:|---:|---:|
+| 🥇 | v35 | +93,442 | -53,652 | 1.742 |
+| 🥈 | v24 / v40 | +91,560 | -50,200 | 1.824 |
+| 🥉 | v33_per_strike_z | +90,868 | -48,778 | 1.863 |
+| 4 | v36 | +90,432 | -50,320 | 1.797 |
+| 5 | v37 | +89,466 | -48,641 | 1.839 |
+| 6 | v32 | +89,350 | -48,311 | 1.849 |
+| 7 | v39 / v41 | +89,137 | -48,076 | 1.854 |
+| 8 | v34 | +88,658 | -46,889 | 1.891 |
+| 9 | **v38** | +86,451 | -45,493 | **1.900** |
+
+### LOCKED CANDIDATES dans `_final/velvet_options/` (17 total)
+
+| File | Size | PnL | DD | Ratio | Profile |
+|---|---:|---:|---:|---:|---|
+| **v38_drop_bad** ★ | 89 KB | +86,451 | -45,493 | **1.900** | best risk-adjusted |
+| v34_combined | 91 KB | +88,658 | -46,889 | 1.891 | best ratio with 7 strikes |
+| v24_r2velvet_zskip | 87 KB | +91,560 | -50,200 | 1.824 | max PnL safe |
+| v12_r2velvet | 83 KB | +94,614 | -60,508 | 1.56 | max PnL stretch |
+
+### Per-asset DD analysis tool — `scripts/analyze_per_asset_dd.py`
+
+Reconstruct equity curve par produit depuis fills + price data, calcule DD
+per-asset en absolu et % capital. Output CSVs in
+`artifacts/analysis/round_3_option_velvet/per_asset_dd_*.csv`.
+
+This tool was the KEY insight enabler — without per-asset DD analysis, we
+wouldn't have found that VEV_5300/5400 are drag (ratio 0.42/0.30).
 
 ### À TESTER ENCORE (idées non couvertes)
 
