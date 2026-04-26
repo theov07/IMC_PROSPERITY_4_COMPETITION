@@ -5595,6 +5595,130 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v52_theo_minimal"] = {
 }
 
 
+# === Theo v6 velvettuned integration ====================================
+# Theo's v6 adds toxic flow detection on VELVET (toxic_threshold=0.6,
+# toxic_window=8, toxic_size_frac=0.68). When market trades show >60%
+# directional imbalance over last 8 trades, shrink the wrong-side quote
+# to 68% — protects against informed flow.
+# Also: pct_kept_for_takers 0.05 → 0.005 (more aggressive takers),
+# adds maker_size_base_pct=0.4. Theo claims +2k PnL vs v5.
+_R3_THEO_V6_GUARDED_VELVET_PARAMS = dict(
+    _R3_THEO_GUARDED_VELVET_PARAMS,
+    # Toxic flow protection (NEW in v6)
+    toxic_threshold=0.6,
+    toxic_window=8,
+    toxic_size_frac=0.68,
+    # More aggressive taker reserve
+    pct_kept_for_takers=0.005,
+    # Explicit base sizing
+    maker_size_base_pct=0.4,
+)
+
+
+# v53: v52 + Theo v6 toxic flow on VELVET (4 strikes only — minimal scope)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v53_v6_minimal"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V6_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v54: v53 + Theo v6 per-strike zscore_skip_threshold (his actual tuning)
+# Theo's per-strike z thresholds (4000-5500): 1.5, 2.0, 1.0, 0.5, 2.0, 2.0, 1.0, 0.5
+# But we drop 5300/5400/5500 like v52
+_THEO_V6_Z_SKIP = {
+    4000: 1.5,
+    4500: 2.0,
+    5000: 1.0,
+    5100: 0.5,
+    5200: 2.0,
+    5300: 2.0,
+    5400: 1.0,
+    5500: 0.5,
+}
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v54_v6_per_strike_z"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V6_GUARDED_VELVET_PARAMS,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=_THEO_V6_Z_SKIP[strike]),
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v55: v54 + full strikes 4500-5500 like Theo v6 (max scope)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v55_v6_full"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V6_GUARDED_VELVET_PARAMS,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=_THEO_V6_Z_SKIP[strike]),
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500]
+        },
+        **{f"VEV_{k}": None for k in [6000, 6500]},
+    },
+}
+
+
+# v56: v53 + add VEV_5300 with iv_gate (Pareto stretch — like v50 with v6 toxic flow)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v56_v6_with_5300"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V6_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_with_iv_gate(z_skip=0.8),
+        ),
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},
+    },
+}
+
+
 # v44: v38 + VEV_4000 enable_takers=True (test if smile-aware takers help on best strike)
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v44_4000_takers"] = {
     3: {
@@ -6938,6 +7062,8 @@ _R3_LIVE_PROBE_OPTION_BASE = dict(
     last_ts_value=999900,
 )
 
+_R3_LIVE_PROBE_OPTION_STRIKES = [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+
 
 def _r3_option_live_probe(strike: int, **extra: Any) -> ProductConfig:
     return _override(
@@ -6946,6 +7072,118 @@ def _r3_option_live_probe(strike: int, **extra: Any) -> ProductConfig:
         strike=strike,
         **{**_R3_LIVE_PROBE_OPTION_BASE, **extra},
     )
+
+
+def _r3_delta_live_probe(symbol: str, *, anchor_price: float, **extra: Any) -> ProductConfig:
+    return _override(
+        ROUND_3[symbol],
+        strategy="mm_first_v4_combo",
+        position_limit=60,
+        **{
+            **_R3_LIVE_PROBE_VELVET_BASE,
+            "anchor_price": anchor_price,
+            **extra,
+        },
+    )
+
+
+MEMBER_OVERRIDES["r3_live_probe_all_far_quotes"] = {
+    3: {
+        "HYDROGEL_PACK": _r3_delta_live_probe(
+            "HYDROGEL_PACK",
+            anchor_price=10000.0,
+            gap_trigger_min=0,
+            probe_distance=80,
+            probe_qty=1,
+            probe_interval_ticks=150,
+            probe_t0_distances=[30, 60, 100, 150],
+            probe_t0_qty=1,
+            probe_t0_max_ts=1000,
+        ),
+        "VELVETFRUIT_EXTRACT": _r3_delta_live_probe(
+            "VELVETFRUIT_EXTRACT",
+            anchor_price=5250.0,
+            gap_trigger_min=0,
+            probe_distance=80,
+            probe_qty=1,
+            probe_interval_ticks=150,
+            probe_t0_distances=[30, 60, 100, 150],
+            probe_t0_qty=1,
+            probe_t0_max_ts=1000,
+        ),
+        **{
+            f"VEV_{strike}": _r3_option_live_probe(
+                strike,
+                far_probe_distances=[25, 50, 100],
+                far_probe_qty=1,
+                far_probe_interval_ticks=150,
+            )
+            for strike in _R3_LIVE_PROBE_OPTION_STRIKES
+        },
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_live_probe_all_gap_flow_follow"] = {
+    3: {
+        "HYDROGEL_PACK": _r3_delta_live_probe(
+            "HYDROGEL_PACK",
+            anchor_price=10000.0,
+            gap_trigger_min=10,
+            gap_trigger_max_vol_pct=0.05,
+            gap_trigger_confirm_ticks=1,
+            OB_cleared_shift=60,
+            momentum_window=30,
+            momentum_threshold=0.75,
+            momentum_qty=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _r3_delta_live_probe(
+            "VELVETFRUIT_EXTRACT",
+            anchor_price=5250.0,
+            gap_trigger_min=10,
+            gap_trigger_max_vol_pct=0.05,
+            gap_trigger_confirm_ticks=1,
+            OB_cleared_shift=60,
+            momentum_window=30,
+            momentum_threshold=0.75,
+            momentum_qty=1,
+        ),
+        **{
+            f"VEV_{strike}": _r3_option_live_probe(
+                strike,
+                gap_sweep_min=3,
+                gap_sweep_max_l1_qty=8,
+                gap_sweep_confirm_ticks=1,
+                gap_sweep_size=1,
+                flow_mode="follow",
+                flow_window=30,
+                flow_threshold=0.75,
+                flow_interval_ticks=20,
+                flow_size=1,
+            )
+            for strike in _R3_LIVE_PROBE_OPTION_STRIKES
+        },
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_live_probe_options_flow_fade_all_strikes"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": None,
+        **{
+            f"VEV_{strike}": _r3_option_live_probe(
+                strike,
+                flow_mode="fade",
+                flow_window=30,
+                flow_threshold=0.75,
+                flow_interval_ticks=20,
+                flow_size=1,
+            )
+            for strike in _R3_LIVE_PROBE_OPTION_STRIKES
+        },
+    },
+}
 
 
 MEMBER_OVERRIDES["r3_live_probe_velvet_far_quotes"] = {

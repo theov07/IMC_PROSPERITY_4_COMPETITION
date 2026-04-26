@@ -1,5 +1,81 @@
 # Round 3 Findings
 
+## LATEST — Theo v6 toxic flow integrated → +1,897 PnL on VELVET (Leo2 2026-04-26)
+
+**Trigger**: Theo shared `r3_velvet_options_v6_velvettuned` (his next iteration after v5).
+He claimed +2k PnL vs v5 (which was 150,946 → his v6 = 152,843 verified).
+
+**Diff vs v5**: His v6 strategy classes (R3GuardedAnchorMMStrategy, GammaScalpZGatedStrategy)
+are **identical** to ours — only PARAMS changed:
+
+1. **Toxic flow detection on VELVET** (the headline new idea):
+   - `toxic_threshold=0.6`, `toxic_window=8`, `toxic_size_frac=0.68`
+   - Tracks last 8 signed market trades. If 60%+ are aggressive on one side, shrinks
+     wrong-side quote to 68% — protects against being adversely picked.
+   - Our `MMFirstV4ComboStrategy` already had `_apply_toxic_flow()` — just needed enabling.
+
+2. **Lower taker reserve**: `pct_kept_for_takers` 0.05 → 0.005 (10× more aggressive)
+
+3. **Per-strike `zscore_skip_threshold`** (his option tuning):
+   - VEV_4000=1.5, VEV_4500=2.0, VEV_5000=1.0, VEV_5100=0.5, VEV_5200=2.0
+   - VEV_5300=2.0, VEV_5400=1.0, VEV_5500=0.5
+   - These are LESS aggressive at skipping than our IV-gate setup → more PnL but more DD.
+
+4. **HYDROGEL** uses new `r3_hydro_reversion_mm` (not relevant for our velvet+options scope)
+
+**Backtest results** (3-day, realistic fill, velvet+options only — no HYDROGEL):
+
+| Variant | PnL | DD | Ratio | Notes |
+|---|---:|---:|---:|---|
+| v52_theo_minimal (PRIOR TOP1) | 147,679 | 59,356 | 2.488 | baseline |
+| **v53_v6_minimal (toxic flow only)** ★ | **149,576** | **59,970** | **2.494** | **NEW TOP1** — +1,897 PnL, +614 DD, +0.006 ratio |
+| v54_v6_per_strike_z | 156,358 | 74,220 | 2.107 | per-strike z, no IV gate, 4000-5200 only |
+| v55_v6_full (per_strike_z + all 8 strikes) | 159,245 | 80,494 | 1.978 | max PnL, dominated by v54 in ratio |
+| v56_v6_with_5300 | 152,262 | 62,415 | 2.440 | toxic flow + VEV_5300 (DOMINATES v51!) |
+| v50 | 150,365 | 61,800 | 2.433 | toxic-flow-less version of v56 |
+| v51 (REMOVED) | 152,214 | 66,716 | 2.282 | dominated by v56 |
+| Theo v6 full (HYDRO+VELVET+opts) | 152,843 | 44,054 | **3.469** | HYDROGEL contributes +29,460 |
+
+**Key findings**:
+
+1. **Toxic flow on VELVET is a Pareto win**: +1,897 PnL / +614 DD = pure ratio improvement.
+   VELVET PnL: 76,016 → 78,238 (+2,222), DD: 15,929 → 17,130 (+1,201), ratio: 4.77 → 4.57.
+   Matches Theo's "+2k PnL" claim exactly.
+
+2. **Per-strike z thresholds are PnL up, ratio down**: +6,782 PnL but +14,250 DD vs v53.
+   Best for max PnL chase, worse for risk-adjusted.
+
+3. **Theo's v6 options config is WEAKER than ours on most strikes**: His v6 with
+   per-strike z=2.0 on 4500 means he skips many entries. We get VEV_5100 19,564 PnL,
+   he gets 0 (he skips at z>0.5 there). Our IV-gate version captures more on cheap
+   strikes.
+
+4. **HYDROGEL is Theo's diversifier**: His full v6 = 152,843 / DD 44k / Ratio 3.47.
+   HYDROGEL +29,460 PnL plus DD reduction (uncorrelated). Our velvet+options scope
+   can't match that ratio — we'd need to add HYDROGEL ourselves.
+
+5. **Per-asset DD analysis on v53** confirms no drag asset:
+   - VELVET: 78,238 / 17,130 / **4.57** ratio (0.9% DD/cap)
+   - VEV_4000: 45,355 / 60,833 / 0.75 (workhorse)
+   - VEV_4500-5200: ratio 0.71-0.74 (consistent)
+
+**Final candidates locked**:
+
+```
+00_FINAL_CANDIDATES/
+├── TOP0_LOWEST_DD__v52_theo_minimal       (148k / 59k / 2.488)
+├── TOP1_BEST_RATIO__v53_v6_toxic_flow ★    (150k / 60k / 2.494) ← DEFAULT
+├── TOP2_BALANCED__v50_theo_integrated     (150k / 62k / 2.433)
+├── TOP2_BALANCED__v56_v6_with_5300        (152k / 62k / 2.440)
+├── TOP3_MAX_PNL_SAFE__v54_v6_per_strike_z (156k / 74k / 2.107)
+└── TOP4_MAX_PNL_STRETCH__v55_v6_full      (159k / 80k / 1.978)
+```
+
+**Removed**: v51_theo_full (dominated by v56 on both PnL+DD).
+
+**Net improvement vs prior session**: TOP1 went from 147,679 → 149,576 (+1,897). New
+PnL-stretching candidates v54/v55 give 156-159k for PnL chase at lower ratio.
+
 ## LATEST — Theo R3GuardedAnchorMM integrated → +50-70k PnL (claude/keen-tharp 2026-04-25)
 
 **Trigger**: Theo shared `r3_velvet_options_v5_guardedtuned` (HYDRO+VELVET+options full backtest:

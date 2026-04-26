@@ -1,88 +1,107 @@
 # Round 3 — Velvet+Options Final Candidates
 
-8 Pareto-efficient candidates locked, ordered by risk profile (low → high).
+11 Pareto-efficient candidates locked, ordered by risk profile (low → high).
 Pick at last moment based on confidence in live IMC session.
 
-## NEW: Theo-integrated TOP candidates (R3GuardedAnchorMM + gamma_scalp_zgated VEV_4000)
+## TIER 1 — Theo v6 integrated (toxic flow + R3GuardedAnchor + gamma_scalp)
 
-These BEAT all earlier candidates by +50-70k PnL. Use these as primary picks.
+NEW after Theo shared his v6 (`r3_velvet_options_v5_guardedtuned` v6_velvettuned).
+Theo claimed +2k PnL vs v5: VERIFIED at +1,897 PnL with toxic flow on VELVET.
+These BEAT all earlier candidates. Use as primary picks.
 
 | File | PnL (3d) | DD | Ratio | Pick if... |
 |---|---:|---:|---:|---|
-| **TOP1_BEST_RATIO** v52_theo_minimal ★ | +147,679 | -59,356 | **2.49** | **DEFAULT** — best ratio + safest, drops 5300/5400/5500 drag |
-| **TOP2_BALANCED** v50_theo_integrated | +150,365 | -61,800 | 2.43 | Slight PnL boost over v52 (+2,686) at +2,444 DD cost — adds 5300 |
-| **TOP3_MAX_PNL** v51_theo_full | +152,214 | -66,716 | 2.28 | Max PnL stretch — adds 5400/5500 (drag, ratio 0.06/0.12) |
+| **TOP0_LOWEST_DD** v52_theo_minimal | +147,679 | -59,356 | 2.488 | Lowest DD in TIER 1 (no toxic flow) |
+| **TOP1_BEST_RATIO** v53_v6_toxic_flow ★ | +149,576 | -59,970 | **2.494** | **DEFAULT** — best ratio (toxic flow on VELVET +1.9k PnL) |
+| **TOP2_BALANCED** v50_theo_integrated | +150,365 | -61,800 | 2.433 | + VEV_5300 strike (no toxic flow) |
+| **TOP2_BALANCED** v56_v6_with_5300 | +152,262 | -62,415 | 2.440 | + VEV_5300 + toxic flow (slight upgrade over v50) |
+| **TOP3_MAX_PNL_SAFE** v54_v6_per_strike_z | +156,358 | -74,220 | 2.107 | Per-strike z thresholds (Theo's tuning) — max PnL with ratio > 2.0 |
+| **TOP4_MAX_PNL_STRETCH** v55_v6_full | +159,245 | -80,494 | 1.978 | All 8 strikes (4000-5500), per-strike z — absolute max PnL |
 
-### Why these are vastly better
-- **Theo's R3GuardedAnchorMM** on VELVET: guards anchor pull when wrong-way (only use when reverting OR near-anchor AND not loaded wrong-way). Result: **VELVET PnL 27.5k → 76k (+48.5k), DD 19.9k → 15.9k, ratio 1.58 → 4.77**.
-- **gamma_scalp_zgated on VEV_4000** with target=300 (vs option_mm_bs passive): VEV_4000 PnL 9.1k → 45.4k (+36k). DD also rose (1.9k → 60.8k) but absolute gain is huge.
-- All other strikes (4500-5200) keep their existing gamma_scalp_zgated configuration.
-
-### Comparison vs Theo's full strategy and our previous best
+### Theo's full strategy (HYDROGEL + VELVET + options) reference
 
 | Strategy | PnL | DD | Ratio | Notes |
 |---|---:|---:|---:|---|
-| Theo full (with HYDROGEL) | 150,946 | 43,440 | 3.475 | HYDROGEL diversifies → lower DD |
-| Theo velvet+options only | ~121,486 | n/a | n/a | Estimated |
-| **TOP1 v52 (us, velvet+options)** | **147,679** | **59,356** | **2.49** | Beats Theo's velvet+options portion by **+26,193** |
-| TOP3 v51 (us, all strikes) | 152,214 | 66,716 | 2.28 | Beats Theo full (+1,268), but worse DD |
-| (old) v34 combo | 88,658 | 46,889 | 1.89 | Pre-Theo integration |
-| (old) v46 vega-weighted | 77,492 | 39,882 | 1.94 | Pre-Theo integration |
+| Theo v6 full (with HYDROGEL) | 152,843 | 44,054 | **3.469** | HYDROGEL diversifies → 30k contribution + DD reduction |
+| **Our TOP1 v53 (velvet+options only)** | **149,576** | **59,970** | **2.494** | **Beats Theo v6 velvet+options (~123,383) by +26,193** |
 
-## Earlier candidates (pre-Theo integration, kept for reference)
+### What's in v53 (TOP1) — the toxic flow win
 
-| File | PnL (3d) | DD | Ratio | Pick if... |
-|---|---:|---:|---:|---|
-| 01_LOWEST_DD v46_vega_weighted | +77,492 | -39,882 | 1.94 | Want lowest DD without R3 guard logic |
-| 02_PARETO_BALANCED v38_drop_bad | +86,451 | -45,494 | 1.90 | Pareto-balanced (pre-Theo) |
-| 03_FULL_OPTIONS v34_combined | +88,658 | -46,889 | 1.89 | (Pre-Theo, lower PnL) |
-| 04_MAX_PNL_SAFE v24_r2velvet_zskip | +91,560 | -50,200 | 1.82 | (Pre-Theo, lower PnL) |
-| 05_MAX_PNL_STRETCH v12_r2velvet | +94,614 | -60,508 | 1.56 | (Pre-Theo, dominated by TOP3) |
+VELVET now has 3 layers of protection:
+1. **R3GuardedAnchorMM**: only use anchor pull when reverting AND not wrong-way
+2. **Toxic flow detection (NEW v6)**: track signed market trades over 8 ticks, shrink wrong-side quote to 68% when |flow| > 60% imbalance
+3. **Inventory aversion + take edges**: from MMFirstV4ComboStrategy
 
-## Decision rules
+VELVET PnL went from 27,518 (pre-Theo) → 76,016 (R3 guard) → **78,238 (+toxic flow)**.
 
-**If unsure** → pick `TOP1_BEST_RATIO__v52` (best Pareto: highest ratio AND lowest DD among new tops)
-
-**If you want max PnL with controlled DD** → `TOP2_BALANCED__v50`
-
-**If you trust the live distribution matches backtest** → `TOP3_MAX_PNL__v51` (highest PnL but VEV_5400/5500 are noisy)
-
-**If you doubt R3GuardedAnchorMM guards generalize** → fall back to `02_PARETO_BALANCED__v38` (proven, no guard logic)
-
-## Architecture differences (TOP candidates)
-
-```
-                 VELVET                       VEV_4000              VEV_4500-5200    VEV_5300         VEV_5400-5500
-TOP1 v52         R3GuardedAnchor (NEW)        gamma_scalp t=300     gamma t=300      drop             drop
-TOP2 v50         R3GuardedAnchor (NEW)        gamma_scalp t=300     gamma t=300      gamma z=0.8      drop
-TOP3 v51         R3GuardedAnchor (NEW)        gamma_scalp t=300     gamma t=300      gamma z=0.8      gamma t=100 + passive
-```
-
-## Per-asset risk profile (TOP1 v52)
+### Per-asset breakdown (TOP1 v53)
 
 | Asset | PnL | DD | Ratio | DD%cap |
 |---|---:|---:|---:|---:|
-| VELVETFRUIT_EXTRACT | 76,016 | 15,929 | **4.77** | **0.9%** |
+| VELVETFRUIT_EXTRACT | 78,238 | 17,130 | **4.57** | 0.9% |
 | VEV_4000 | 45,355 | 60,833 | 0.75 | 5.7% |
 | VEV_4500 | 32,416 | 43,714 | 0.74 | 9.1% |
 | VEV_5100 | 28,489 | 40,052 | 0.71 | 37.2% |
 | VEV_5000 | 15,364 | 21,612 | 0.71 | 26.5% |
 | VEV_5200 | 14,667 | 20,246 | 0.72 | 45.9% |
 
-All ratios ≥ 0.70 → no drag asset. VELVET is now the diamond (4.77 ratio), VEV_4000 the workhorse (45k PnL).
+All ratios ≥ 0.70 → no drag asset.
 
-## Validation status (all 8 files)
+## TIER 0 — Pre-Theo candidates (kept for fallback)
 
+| File | PnL (3d) | DD | Ratio | Pick if... |
+|---|---:|---:|---:|---|
+| 01_LOWEST_DD v46_vega_weighted | +77,492 | -39,882 | 1.94 | Want lowest absolute DD without R3 guard logic |
+| 02_PARETO_BALANCED v38_drop_bad | +86,451 | -45,494 | 1.90 | Pre-Theo Pareto-balanced |
+| 03_FULL_OPTIONS v34_combined | +88,658 | -46,889 | 1.89 | Pre-Theo |
+| 04_MAX_PNL_SAFE v24_r2velvet_zskip | +91,560 | -50,200 | 1.82 | Pre-Theo (proven) |
+| 05_MAX_PNL_STRETCH v12_r2velvet | +94,614 | -60,508 | 1.56 | Pre-Theo |
+
+## Decision rules
+
+**If unsure** → pick `TOP1_BEST_RATIO__v53_v6_toxic_flow` (best ratio + verified +2k vs v52)
+
+**Want max PnL** → pick `TOP4_MAX_PNL_STRETCH__v55_v6_full` (159k PnL, 80k DD)
+
+**Want max PnL with reasonable ratio** → pick `TOP3_MAX_PNL_SAFE__v54_v6_per_strike_z` (156k, 74k DD, 2.11 ratio)
+
+**Want middle ground** → `TOP2_BALANCED__v56_v6_with_5300` (152k, 62k DD, 2.44 ratio)
+
+**Want lowest possible DD** → `TOP0_LOWEST_DD__v52_theo_minimal` (148k, 59k DD)
+
+**If R3 guard logic seems overfit** → fall back to `02_PARETO_BALANCED__v38` (86k, no guard)
+
+## Architecture differences (TIER 1 candidates)
+
+```
+Variant       VELVET                    VEV_4000-5200       VEV_5300       VEV_5400/5500   Toxic
+TOP0 v52      R3GuardedAnchor          gamma+iv_gate       drop           drop            no
+TOP1 v53      R3GuardedAnchor + TOXIC  gamma+iv_gate       drop           drop            YES
+TOP2 v50      R3GuardedAnchor          gamma+iv_gate       gamma+iv_gate  drop            no
+TOP2 v56      R3GuardedAnchor + TOXIC  gamma+iv_gate       gamma+iv_gate  drop            YES
+TOP3 v54      R3GuardedAnchor + TOXIC  gamma+per_strike_z  drop           drop            YES
+TOP4 v55      R3GuardedAnchor + TOXIC  gamma+per_strike_z  gamma+ps_z     gamma+ps_z      YES
+```
+
+Per-strike z thresholds (Theo v6): 4000=1.5, 4500=2.0, 5000=1.0, 5100=0.5, 5200=2.0, 5300=2.0, 5400=1.0, 5500=0.5
+
+These thresholds are LESS aggressive at skipping than our IV-gate setup → more PnL but more DD.
+
+## Validation status
+
+All 11 files validated via export_submission.py:
 - ✅ Syntax valid
 - ✅ No banned imports (IMC sandbox compatible)
 - ✅ Trader.__init__() succeeds
 - ✅ run() returns orders
-- ✅ p99 latency < 60ms (under 900ms limit)
+- ✅ p99 latency < 60ms
 - ✅ Size < 110,000 bytes
 
 ## Generated by
 
-Claude (claude/keen-tharp branch). Theo-integrated variants v50/v51/v52 added after Theo
-shared `r3_velvet_options_v5_guardedtuned`. R3GuardedAnchorMM extracted from his approach
-and ported to MMFirstV4ComboStrategy base class. Per-asset DD analysis on all 3 days confirms
-no asset has ratio < 0.70 in TOP1.
+Claude (Leo2 branch). Theo v6 integration after Theo shared `r3_velvet_options_v6_velvettuned`.
+**Key new finding**: toxic flow detection on VELVET adds +1,897 PnL with +614 DD (matches
+Theo's claim). Per-strike z thresholds (4000=1.5, 4500=2.0, etc.) trade ratio for PnL.
+HYDROGEL is what gives Theo's full strategy 3.47 ratio (we don't have it in velvet+options scope).
+
+**Removed**: v51_theo_full (dominated by v56 — both 152k PnL but v56 has lower DD).
