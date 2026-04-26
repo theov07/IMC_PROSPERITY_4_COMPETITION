@@ -42,3 +42,16 @@ artifacts/analysis/round_3/backtest_*.json
 # Large backtest JSON dumps (>50MB, blocks GitHub push)
 artifacts/backtests/*.json
 artifacts/backtests/**/*.json
+artifacts/analysis/round_3/*.json
+artifacts/analysis/round_3/**/*.json
+artifacts/backtest_results/round_3/*.json
+artifacts/backtest_results/round_3/**/*.json
+artifacts/backtest_results/**/*.json
+
+# Round 3 final delivery — keep submission .py only, drop massive logs
+artifacts/submissions/round_3/_FINAL_DELIVERY/*.json
+artifacts/submissions/round_3/_FINAL_DELIVERY/*.log
+
+# Logs (heavy IMC live logs)
+logs/round_3/*.log
+logs/round_3/*.json
