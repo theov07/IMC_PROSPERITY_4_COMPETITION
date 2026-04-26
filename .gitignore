@@ -39,6 +39,7 @@ logs/round_2/theo
 # R3 analysis: keep PNG plots, ignore large backtest JSON dumps
 artifacts/analysis/round_3/backtest_*.json
 
+logs/round_3
 # Large backtest JSON dumps (>50MB, blocks GitHub push)
 artifacts/backtests/*.json
 artifacts/backtests/**/*.json
