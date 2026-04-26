@@ -117,7 +117,8 @@
       "Bash(python backtest.py --strategy theo_r3_vol_arb_v3 --round 3 --days 0 1 2 --match-trades realistic)",
       "Bash(python backtest.py --strategy theo_r3_vol_arb_v2 --round 3 --days 0 1 2 --match-trades realistic --param HYDROGEL_PACK.trend_guard=8.0)",
       "Bash(python -m prosperity.tooling.grid_search --strategy theo_r3_vol_arb_v2 --round 3 --days 0 1 2 --param HYDROGEL_PACK.trend_guard=6.0,8.0 --param HYDROGEL_PACK.take_size=1,2,3 --execution-rule realistic --top 6 --rank-by pnl)",
-      "Bash(python scripts/export_submission.py --member theo_r3_vol_arb_v3 --round 3)"
+      "Bash(python scripts/export_submission.py --member theo_r3_vol_arb_v3 --round 3)",
+      "Bash(pip3 install *)"
     ]
   }
 }

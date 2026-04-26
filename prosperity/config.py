@@ -2563,6 +2563,107 @@ MEMBER_OVERRIDES["r3_velvet_options_v6_velvettuned"] = {
 }
 
 
+MEMBER_OVERRIDES["r3_velvet_options_v7_passiveunwind"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.6,
+            take_edge_hi=1.2,
+            maker_size_base_pct=0.4,
+            pct_kept_for_takers=0.005,
+            toxic_threshold=0.6,
+            toxic_window=8,
+            toxic_size_frac=0.68,
+            inventory_aversion_gamma=0.0010,
+            passive_unwind_skew_ticks=1,
+            passive_unwind_trigger=0.38,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v8_lightermaker"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.6,
+            take_edge_hi=1.2,
+            maker_size_base_pct=0.31,
+            pct_kept_for_takers=0.005,
+            toxic_threshold=0.6,
+            toxic_window=8,
+            toxic_size_frac=0.68,
+            inventory_aversion_gamma=0.0010,
+            passive_unwind_skew_ticks=1,
+            passive_unwind_trigger=0.38,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v9_globalretuned"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDRO_ALPHA_V4,
+            ema_alpha=0.006,
+            fast_ema_alpha=0.025,
+            maker_size=22,
+            inventory_unwind_per_unit=0.20,
+            take_threshold=13.0,
+            take_size=2,
+        ),
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.5,
+            take_edge_hi=1.2,
+            maker_size_base_pct=0.31,
+            pct_kept_for_takers=0.003,
+            toxic_threshold=0.65,
+            toxic_window=8,
+            toxic_size_frac=0.6,
+            inventory_aversion_gamma=0.0008,
+            passive_unwind_skew_ticks=1,
+            passive_unwind_trigger=0.38,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.5),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
 # Same signal stack as v1, but caps VELVET exposure lower. The new live log
 # showed v1 can finish near the 200 limit; this version gives up some full
 # backtest PnL for a much cleaner inventory profile.
