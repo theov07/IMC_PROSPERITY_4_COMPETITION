@@ -173,7 +173,10 @@
       "Bash(python scripts/export_submission.py --member tibo_v100_full --round 3)",
       "Bash(awk '{print $5, $9}')",
       "Bash(python backtest.py --strategy hydro_v100 --round 3 --days 0 1 2 --match-trades realistic --product HYDROGEL_PACK)",
-      "Bash(python backtest.py --strategy hydro_v200 --round 3 --days 0 1 2 --match-trades realistic)"
+      "Bash(python backtest.py --strategy hydro_v200 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python3 -m prosperity.tooling.counterparties_analysis --prices data/round_4/prices_round_4_day_1.csv --trades data/round_4/trades_round_4_day_1.csv --out artifacts/analysis/round_4/counterparties_day1.html)",
+      "Bash(python3 -m prosperity.tooling.counterparties_analysis --prices data/round_4/prices_round_4_day_1.csv data/round_4/prices_round_4_day_2.csv data/round_4/prices_round_4_day_3.csv --trades data/round_4/trades_round_4_day_1.csv data/round_4/trades_round_4_day_2.csv data/round_4/trades_round_4_day_3.csv --out artifacts/analysis/round_4/counterparties_all.html)",
+      "Bash(python3 -m prosperity.tooling.counterparties_analysis --prices data/round_4/prices_round_4_day_1.csv --trades data/round_4/trades_round_4_day_1.csv --product VELVETFRUIT_EXTRACT --out artifacts/analysis/round_4/counterparties_velvet.html)"
     ]
   }
 }
