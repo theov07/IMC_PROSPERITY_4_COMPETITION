@@ -110,6 +110,14 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+<<<<<<< HEAD
+    "r3_gamma_scalp_zgated": ("prosperity/strategies/round_3/velvet_option_layers.py", "GammaScalpZGatedStrategy"),
+    "r3_smile_iv_scalper": ("prosperity/strategies/round_3/velvet_option_layers.py", "SmileIVScalperStrategy"),
+    "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
+    "r3_live_defensive_mm": ("prosperity/strategies/round_3/live_defensive_mm.py", "R3LiveDefensiveMMStrategy"),
+    "r3_guarded_anchor_mm": ("prosperity/strategies/round_3/guarded_anchor_mm.py", "R3GuardedAnchorMMStrategy"),
+    "r3_hydro_reversion_mm": ("prosperity/strategies/round_3/hydro_reversion_mm.py", "R3HydroReversionMMStrategy"),
+=======
     "option_skew_signal_mm": ("prosperity/strategies/round_3/option_skew_signal_mm.py", "OptionSkewSignalMMStrategy"),
     "option_skew_dynamic_mm": ("prosperity/strategies/round_3/option_skew_dynamic_mm.py", "OptionSkewDynamicMMStrategy"),
     "option_live_probe_mm": ("prosperity/strategies/round_3/option_live_probe_mm.py", "OptionLiveProbeMMStrategy"),
@@ -221,6 +229,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "velvet_strat_v3":     ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetStratV3"),
     "velvet_strat_v3_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetMMV3"),
     "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
+>>>>>>> origin/main
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -270,9 +279,29 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
         "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
         "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
     ],
+<<<<<<< HEAD
+    "r3_gamma_scalp_zgated": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+    "r3_smile_iv_scalper": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+    "theo_r3_vol_arb_v1": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+=======
     "hydrogel_day2_oracle_anchor": [
         "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
         "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+>>>>>>> origin/main
     ],
     "hydrogel_day2_oracle_guarded": [
         "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
@@ -343,6 +372,9 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_generalized": ["round1_regression_mm_v5"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
+<<<<<<< HEAD
+    "r3_guarded_anchor_mm": ["mm_first_v4_combo"],
+=======
     "ms_regime_delta": ["option_mm_bs"],
     "ms_regime_option": ["option_mm_bs"],
     "velvet_strat_v25_mm":  ["velvet_strat_v3_mm", "gamma_scalp_zgated"],
@@ -432,6 +464,7 @@ STRATEGY_DEPS: dict[str, list[str]] = {
                                           "mm_first_v4_combo", "r3_guarded_anchor_mm",
                                           "theo_v7_velvet_mm", "theo_v7_gamma_scalp",
                                           "velvet_strat_v28_mm", "gamma_scalp_with_ask_v40"],
+>>>>>>> origin/main
 }
 
 # Params useful for local analysis/backtests but pointless in the live upload.
@@ -494,6 +527,40 @@ def _extract(source: str) -> tuple[list[str], str]:
     body_lines = [line for i, line in enumerate(src_lines, 1) if i not in skip]
     body_text = "".join(body_lines).strip()
     return external, body_text
+
+
+def _strip_docstrings_and_comment_lines(source: str) -> str:
+    """Strip docstrings/comment-only lines from a complete exported submission."""
+    tree = ast.parse(source)
+    docstring_lines: set[int] = set()
+
+    def collect_docstring_lines(node: ast.AST) -> None:
+        body = getattr(node, "body", None)
+        if not body:
+            return
+        first = body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            for line_no in range(first.lineno, first.end_lineno + 1):
+                docstring_lines.add(line_no)
+
+    collect_docstring_lines(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            collect_docstring_lines(node)
+
+    out: list[str] = []
+    for line_no, line in enumerate(source.splitlines(), 1):
+        stripped = line.strip()
+        if line_no in docstring_lines or stripped.startswith("#") or stripped == "":
+            continue
+        out.append(line.rstrip())
+    minified = "\n".join(out) + "\n"
+    ast.parse(minified)
+    return minified
 
 
 # ── Trader template (thin dispatch layer — not a strategy implementation) ──
@@ -778,6 +845,16 @@ def main() -> int:
         _TRADER_CLASS,
     ]
     output = "\n".join(parts)
+    before_minify = len(output.encode("utf-8"))
+    if before_minify > 100_000:
+        output = _strip_docstrings_and_comment_lines(output)
+        after_minify = len(output.encode("utf-8"))
+        print(f"Minified export: {before_minify:,} -> {after_minify:,} bytes")
+        if after_minify > 100_000:
+            print(
+                "WARNING: exported file is still above 100KB after minification",
+                file=sys.stderr,
+            )
 
     if args.output:
         output_path = Path(args.output)

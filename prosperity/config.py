@@ -2210,6 +2210,215 @@ MEMBER_OVERRIDES["naive_base_round_3"] = {
 }
 
 
+_R3_VELVET_IVSCALP_UNDERLYING = _override(
+    ROUND_3["VELVETFRUIT_EXTRACT"],
+    strategy="mm_first_v4_combo",
+    position_limit=200,
+    anchor_price=5250.0,
+    anchor_alpha=0.02,
+    anchor_drift_bound=2.0,
+    ar_gain=0.3,
+    ar_shift_source="mid_smooth",
+    full_capacity_on_empty=True,
+    inventory_aversion_gamma=0.0015,
+    maker_size=30,
+    pct_kept_for_takers=0.05,
+    take_edge_lo=0.3,
+    take_edge_hi=0.8,
+    unwind_take_edge=3.0,
+    tighten_ticks=1,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+
+def _r3_v24_gamma_option(strike: int) -> ProductConfig:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        strategy="r3_gamma_scalp_zgated",
+        position_limit=300,
+        strike=strike,
+        tte_days_initial=5.0,
+        historical_tte_by_day=None,
+        timestamp_units_per_day=1000000,
+        implied_vol_prior=0.0125,
+        prior_vol=0.0125,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        min_quote_price=2.0,
+        edge_ticks=0.0,
+        target_qty=300,
+        entry_size=30,
+        passive_bid_size=24,
+        unwind_tte_threshold=1.5,
+        zscore_window=500,
+        zscore_skip_threshold=0.5,
+        zscore_boost_threshold=1.0,
+        skip_when_expensive=True,
+        boost_when_cheap=False,
+        entry_size_boost=1.5,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+def _r3_v24_gamma_option_zskip(strike: int, zscore_skip_threshold: float) -> ProductConfig:
+    return _override(
+        _r3_v24_gamma_option(strike),
+        zscore_skip_threshold=zscore_skip_threshold,
+    )
+
+
+def _r3_v24_passive_option(strike: int, *, maker_size: int, maker_edge: int, min_quote_price: float, use_smile: bool) -> ProductConfig:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        strategy="option_mm_bs",
+        position_limit=300,
+        strike=strike,
+        tte_days_initial=5.0,
+        historical_tte_by_day=None,
+        timestamp_units_per_day=1000000,
+        prior_vol=0.0125,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        maker_edge=maker_edge,
+        maker_size=maker_size,
+        take_edge=3.0,
+        take_size=40,
+        enable_takers=False,
+        penny_improve_around_mkt=True,
+        min_quote_price=min_quote_price,
+        inv_bias_per_unit=0.02,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        use_smile=use_smile,
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+def _r3_smile_iv_scalper_option(strike: int) -> ProductConfig:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        strategy="r3_smile_iv_scalper",
+        position_limit=300,
+        strike=strike,
+        tte_days_initial=5.0,
+        historical_tte_by_day=None,
+        timestamp_units_per_day=1000000,
+        prior_vol=0.0125,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        smile_degree=2,
+        smile_min_points=4,
+        active_reference_spot=5250.0,
+        active_base_count=5,
+        active_expand_every=120.0,
+        active_max_extra_count=2,
+        resid_ewma_alpha=0.03,
+        resid_std_init=0.0015,
+        resid_std_floor=0.0005,
+        resid_warmup_ticks=60,
+        take_price_edge=3.0,
+        reduce_price_edge=1.0,
+        take_zscore=1.4,
+        reduce_zscore=0.4,
+        cheap_reset_z=0.25,
+        take_size=4,
+        maker_size=0,
+        maker_edge=1.5,
+        maker_join_best=True,
+        soft_position_limit=24,
+        entry_position_cap=0,
+        take_cooldown_ts=3000,
+        inventory_skew=4.0,
+        inactive_unwind_bias=1,
+        min_quote_price=1.0,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+MEMBER_OVERRIDES["r3_velvet_options_ivscalp_v1"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _R3_VELVET_IVSCALP_UNDERLYING,
+        "VEV_4000": _r3_v24_passive_option(4000, maker_size=40, maker_edge=2, min_quote_price=2.0, use_smile=True),
+        "VEV_4500": _r3_v24_gamma_option(4500),
+        "VEV_5000": _r3_v24_gamma_option(5000),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option(5200),
+        "VEV_5300": _r3_v24_gamma_option(5300),
+        "VEV_5400": _r3_v24_passive_option(5400, maker_size=10, maker_edge=1, min_quote_price=1.0, use_smile=False),
+        "VEV_5500": _r3_smile_iv_scalper_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+_R3_HYDRO_ALPHA_V4 = _override(
+    ROUND_3["HYDROGEL_PACK"],
+    strategy="r3_hydro_reversion_mm",
+    position_limit=200,
+    ema_alpha=0.008,
+    fast_ema_alpha=0.03,
+    trend_guard=8.0,
+    signal_pos_gate=12,
+    tighten_ticks=1,
+    maker_size=24,
+    min_maker_size=3,
+    quote_threshold=6.0,
+    max_signal_size_boost=12,
+    inventory_reduce_per_unit=0.40,
+    inventory_unwind_per_unit=0.30,
+    max_unwind_boost=20,
+    take_threshold=12.0,
+    take_cooldown_ts=2000,
+    take_size=1,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v2_hydro_v4"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _R3_VELVET_IVSCALP_UNDERLYING,
+        "VEV_4000": _r3_v24_passive_option(4000, maker_size=40, maker_edge=2, min_quote_price=2.0, use_smile=True),
+        "VEV_4500": _r3_v24_gamma_option(4500),
+        "VEV_5000": _r3_v24_gamma_option(5000),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option(5200),
+        "VEV_5300": _r3_v24_gamma_option(5300),
+        "VEV_5400": _r3_v24_passive_option(5400, maker_size=10, maker_edge=1, min_quote_price=1.0, use_smile=False),
+        "VEV_5500": None,
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v3_hydro_optionblend"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _R3_VELVET_IVSCALP_UNDERLYING,
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": None,
+        "VEV_6000": None,
+        "VEV_6500": None,
 
 # ── CHAMPION FINAL v7 : OSM full_capacity + IPR v7_continuous ──
 MEMBER_OVERRIDES["champion_final_v7"] = {
@@ -2566,11 +2775,14 @@ MEMBER_OVERRIDES["champion_osm_v4only"] = {
 }
 
 
+<<<<<<< HEAD
+=======
 # ──────────────────────────────────────────────────────────────────────────────
 # R3 HEDGED CHAMPION — naive_tight_mm on HYDROGEL + velvet_delta_hedger on
 # VELVETFRUIT (reads option positions from coordinator to offset delta) +
 # option_mm_bs on vouchers (default ROUND_3 config).
 # ──────────────────────────────────────────────────────────────────────────────
+>>>>>>> origin/main
 _THEO_R3_ACTIVE_OPTION_STRIKES = (5400, 5500)
 
 _THEO_R3_UNDERLYING = _override(
@@ -2651,6 +2863,16 @@ MEMBER_OVERRIDES["theo_r3_vol_arb_v1"] = {
 }
 
 
+_R3_LIVE_DEFENSIVE_PARAMS = dict(
+    maker_size=30,
+    min_maker_size=4,
+    tighten_ticks=1,
+    trend_alpha=0.05,
+    trend_threshold=2.0,
+    hard_trend_threshold=7.0,
+    inventory_reduce_ratio=0.35,
+    inventory_stop_ratio=0.62,
+    unwind_boost=1.45,
 MEMBER_OVERRIDES["r3_hedged_champion"] = {
     3: {
         "HYDROGEL_PACK": _override(
@@ -5273,6 +5495,26 @@ _R3_VELVET_DH_BASE = dict(
 )
 
 
+# R3 live-defensive candidate:
+# - no fixed anchor on the delta-1 products
+# - throttle bids into downtrends / asks into uptrends
+# - aggressively favor the side that reduces inventory
+# - keep vouchers on the passive BS option MM that has been stable live
+MEMBER_OVERRIDES["r3_live_defensive_v1"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_live_defensive_mm",
+            position_limit=200,
+            **_R3_LIVE_DEFENSIVE_PARAMS,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="r3_live_defensive_mm",
+            position_limit=200,
+            **_R3_LIVE_DEFENSIVE_PARAMS,
+        ),
+        # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
 # v12: passive-only hedger (taker_edge huge → never fires), small size skew
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v12_dh_passive"] = {
     3: {
@@ -5291,6 +5533,11 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v12_dh_passive"] = {
 }
 
 
+# Hybrid candidate after ablation:
+# HYDROGEL historically likes the pure book-following naive MM, while VELVET
+# benefits from defensive trend/inventory throttling. Options remain the stable
+# passive BS MM.
+MEMBER_OVERRIDES["r3_live_hybrid_v1"] = {
 # v13: low-freq hedger — taker only on huge imbalance + bigger passive bias
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v13_dh_lowfreq"] = {
     3: {
@@ -7460,6 +7707,11 @@ MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
         ),
         "VELVETFRUIT_EXTRACT": _override(
             ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="r3_live_defensive_mm",
+            position_limit=200,
+            **_R3_LIVE_DEFENSIVE_PARAMS,
+        ),
+        # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
             strategy="velvet_delta_hedger",
             position_limit=200,
             underlying_symbol="VELVETFRUIT_EXTRACT",
@@ -7513,6 +7765,22 @@ MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
 }
 
 
+# Guarded-anchor candidate:
+# HYDROGEL stays on the live-stable book-following MM. VELVET keeps the old
+# anchor alpha only when short-term flow is reverting toward 5250; otherwise it
+# falls back to passive book-following and blocks anchor takers.
+_R3_GUARDED_VELVET_PARAMS = {
+    **_V4_F5_PARAMS,
+    "anchor_price": 5250.0,
+    "anchor_alpha": 0.02,
+    "anchor_drift_bound": 2.0,
+    "full_capacity_on_empty": True,
+    "guard_near_band": 0.0,
+    "guard_trend_alpha": 0.3,
+    "guard_min_dist": 0.0,
+    "guard_max_dist": 80.0,
+    "guard_reversion_threshold": 0.0,
+    "guard_inventory_dist": 40.0,
 # Live-only alpha probes. These intentionally use event/flow/book-state rules,
 # not day/timestamp fingerprints. They are meant for IMC live discovery runs.
 _R3_LIVE_PROBE_VELVET_BASE = {
@@ -7531,6 +7799,778 @@ _R3_LIVE_PROBE_VELVET_BASE = {
     "last_ts_value": 999900,
 }
 
+
+def _r3_guarded_velvet_underlying(**extra) -> ProductConfig:
+    return _override(
+        ROUND_3["VELVETFRUIT_EXTRACT"],
+        strategy="r3_guarded_anchor_mm",
+        position_limit=200,
+        **{**_R3_GUARDED_VELVET_PARAMS, **extra},
+    )
+
+
+MEMBER_OVERRIDES["r3_guarded_hybrid_v1"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(),
+        # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v4_guardedblend"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": None,
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v5_guardedtuned"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.6,
+            take_edge_hi=1.2,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v6_velvettuned"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.6,
+            take_edge_hi=1.2,
+            maker_size_base_pct=0.4,
+            pct_kept_for_takers=0.005,
+            toxic_threshold=0.6,
+            toxic_window=8,
+            toxic_size_frac=0.68,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v7_passiveunwind"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.6,
+            take_edge_hi=1.2,
+            maker_size_base_pct=0.4,
+            pct_kept_for_takers=0.005,
+            toxic_threshold=0.6,
+            toxic_window=8,
+            toxic_size_frac=0.68,
+            inventory_aversion_gamma=0.0010,
+            passive_unwind_skew_ticks=1,
+            passive_unwind_trigger=0.38,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v8_lightermaker"] = {
+    3: {
+        "HYDROGEL_PACK": _R3_HYDRO_ALPHA_V4,
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.6,
+            take_edge_hi=1.2,
+            maker_size_base_pct=0.31,
+            pct_kept_for_takers=0.005,
+            toxic_threshold=0.6,
+            toxic_window=8,
+            toxic_size_frac=0.68,
+            inventory_aversion_gamma=0.0010,
+            passive_unwind_skew_ticks=1,
+            passive_unwind_trigger=0.38,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.0),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_velvet_options_v9_globalretuned"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDRO_ALPHA_V4,
+            ema_alpha=0.006,
+            fast_ema_alpha=0.025,
+            maker_size=22,
+            inventory_unwind_per_unit=0.20,
+            take_threshold=13.0,
+            take_size=2,
+        ),
+        "VELVETFRUIT_EXTRACT": _r3_guarded_velvet_underlying(
+            guard_reversion_threshold=7.5,
+            guard_trend_alpha=0.45,
+            take_edge_lo=0.5,
+            take_edge_hi=1.2,
+            maker_size_base_pct=0.31,
+            pct_kept_for_takers=0.003,
+            toxic_threshold=0.65,
+            toxic_window=8,
+            toxic_size_frac=0.6,
+            inventory_aversion_gamma=0.0008,
+            passive_unwind_skew_ticks=1,
+            passive_unwind_trigger=0.38,
+        ),
+        "VEV_4000": _r3_v24_gamma_option_zskip(4000, 1.5),
+        "VEV_4500": _r3_v24_gamma_option_zskip(4500, 2.0),
+        "VEV_5000": _r3_v24_gamma_option_zskip(5000, 1.0),
+        "VEV_5100": _r3_v24_gamma_option(5100),
+        "VEV_5200": _r3_v24_gamma_option_zskip(5200, 2.0),
+        "VEV_5300": _r3_v24_gamma_option_zskip(5300, 2.5),
+        "VEV_5400": _r3_v24_gamma_option_zskip(5400, 1.0),
+        "VEV_5500": _r3_v24_gamma_option(5500),
+        "VEV_6000": None,
+        "VEV_6500": None,
+    },
+}
+
+
+# Same signal stack as v1, but caps VELVET exposure lower. The new live log
+# showed v1 can finish near the 200 limit; this version gives up some full
+# backtest PnL for a much cleaner inventory profile.
+MEMBER_OVERRIDES["r3_guarded_hybrid_v2"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="r3_guarded_anchor_mm",
+            position_limit=150,
+            **_R3_GUARDED_VELVET_PARAMS,
+        ),
+        # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
+    },
+}
+
+
+_R3_HYDRO_PASSIVE_PRODUCTS_OFF = {
+    "VELVETFRUIT_EXTRACT": None,
+    **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_passive_v1"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_live_defensive_mm",
+            position_limit=200,
+            maker_size=30,
+            min_maker_size=4,
+            tighten_ticks=1,
+            trend_alpha=0.05,
+            trend_threshold=99.0,
+            hard_trend_threshold=999.0,
+            inventory_reduce_ratio=0.60,
+            inventory_stop_ratio=0.80,
+            unwind_boost=0.80,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_passive_v2"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_live_defensive_mm",
+            position_limit=200,
+            maker_size=30,
+            min_maker_size=4,
+            tighten_ticks=1,
+            trend_alpha=0.05,
+            trend_threshold=99.0,
+            hard_trend_threshold=999.0,
+            inventory_reduce_ratio=0.60,
+            inventory_stop_ratio=0.70,
+            unwind_boost=0.80,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_only_v6"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,
+            signal_pos_gate=28,
+            tighten_ticks=1,
+            maker_size=20,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=8.0,
+            take_cooldown_ts=3000,
+            take_size=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_only_v7"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,
+            signal_pos_gate=28,
+            tighten_ticks=1,
+            maker_size=20,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=8.0,
+            take_cooldown_ts=3000,
+            take_size=1,
+            eod_start_ts=85000,
+            eod_end_ts=99900,
+            eod_start_pos_limit=28,
+            eod_end_pos_limit=0,
+            eod_unwind_size_bonus=12,
+            eod_take_size=1,
+            eod_take_cooldown_ts=500,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_only_v8"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,
+            signal_pos_gate=28,
+            tighten_ticks=1,
+            maker_size=20,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=8.0,
+            take_cooldown_ts=3000,
+            take_size=1,
+            eod_start_ts=85000,
+            eod_end_ts=99900,
+            eod_start_pos_limit=28,
+            eod_end_pos_limit=0,
+            eod_unwind_size_bonus=12,
+            eod_take_size=1,
+            eod_take_cooldown_ts=500,
+            risk_abs_position_threshold=18,
+            risk_target_position=10,
+            risk_realized_progress_threshold=8.0,
+            risk_realized_stall_ts=4000,
+            risk_unrealized_peak_min=150.0,
+            risk_unrealized_giveback_threshold=180.0,
+            risk_giveback_window_ts=15000,
+            risk_adverse_trend_threshold=2.0,
+            risk_trend_turn_threshold=1.2,
+            risk_force_giveback_threshold=300.0,
+            risk_hold_ts=6000,
+            risk_unwind_size_bonus=14,
+            risk_take_size=2,
+            risk_take_cooldown_ts=800,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_only_v9"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,
+            signal_pos_gate=28,
+            tighten_ticks=1,
+            maker_size=20,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=8.0,
+            take_cooldown_ts=3000,
+            take_size=1,
+            eod_start_ts=85000,
+            eod_end_ts=99900,
+            eod_start_pos_limit=28,
+            eod_end_pos_limit=0,
+            eod_unwind_size_bonus=12,
+            eod_take_size=1,
+            eod_take_cooldown_ts=500,
+            risk_abs_position_threshold=20,
+            risk_target_position=14,
+            risk_realized_progress_threshold=10.0,
+            risk_realized_stall_ts=5000,
+            risk_unrealized_peak_min=180.0,
+            risk_unrealized_giveback_threshold=220.0,
+            risk_giveback_window_ts=18000,
+            risk_adverse_trend_threshold=3.0,
+            risk_trend_turn_threshold=1.6,
+            risk_force_giveback_threshold=420.0,
+            risk_hold_ts=4000,
+            risk_unwind_size_bonus=8,
+            risk_unwind_tighten_ticks=4,
+            risk_unwind_leave_gap_ticks=1,
+            risk_take_size=0,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_only_v10"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,
+            signal_pos_gate=28,
+            tighten_ticks=1,
+            maker_size=20,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=8.0,
+            take_cooldown_ts=3000,
+            take_size=1,
+            eod_start_ts=85000,
+            eod_end_ts=99900,
+            eod_start_pos_limit=28,
+            eod_end_pos_limit=0,
+            eod_unwind_size_bonus=12,
+            eod_take_size=1,
+            eod_take_cooldown_ts=500,
+            midcap_activation_position=18,
+            midcap_base_position_cap=28,
+            midcap_min_position_cap=12,
+            midcap_capture_ticks_threshold=20.0,
+            midcap_rebound_start_ticks=10.0,
+            midcap_rebound_full_ticks=24.0,
+            midcap_rebound_window_ts=16000,
+            midcap_realized_floor=100.0,
+            midcap_unrealized_floor=120.0,
+            midcap_unwind_size_bonus=8,
+            midcap_unwind_tighten_ticks=3,
+            midcap_unwind_leave_gap_ticks=1,
+            midcap_same_side_size_cap=2,
+            midcap_take_size=1,
+            midcap_take_cooldown_ts=1200,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_only_v11"] = MEMBER_OVERRIDES["r3_hydro_only_v10"]
+
+
+MEMBER_OVERRIDES["r3_hydro_only_v12"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            use_target_inventory_model=True,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            target_max_short=32,
+            target_trend_entry=2.5,
+            target_trend_full=10.0,
+            target_regime_reset_trend=1.0,
+            target_oversold_start=8.0,
+            target_oversold_full=22.0,
+            target_rebound_start=18.0,
+            target_rebound_full=35.0,
+            target_turn_start=0.7,
+            target_turn_full=2.4,
+            target_oversold_relief_weight=0.70,
+            target_rebound_relief_weight=0.40,
+            target_turn_relief_weight=0.85,
+            target_min_active_position=4,
+            target_hold_band=2,
+            target_neutral_maker_size=4,
+            target_same_side_size=0,
+            target_max_quote_size=18,
+            target_size_gain_per_unit=0.75,
+            target_base_tighten_ticks=2,
+            target_gap_per_tighten_step=6,
+            target_max_tighten_ticks=5,
+            target_leave_gap_ticks=1,
+            target_cover_take_size=1,
+            target_cover_take_gap_threshold=10,
+            target_cover_take_rebound_threshold=20.0,
+            target_cover_take_cooldown_ts=900,
+            target_entry_take_size=2,
+            target_entry_take_gap_threshold=8,
+            target_entry_take_trend_threshold=6.0,
+            target_entry_take_short_signal_threshold=0.72,
+            target_entry_take_relief_cap=0.35,
+            target_entry_take_cooldown_ts=1600,
+            eod_start_ts=85000,
+            eod_end_ts=99900,
+            eod_start_pos_limit=28,
+            eod_end_pos_limit=0,
+            eod_take_size=1,
+            eod_take_cooldown_ts=500,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["r3_hydro_only_v13"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,
+            signal_pos_gate=28,
+            tighten_ticks=1,
+            maker_size=20,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=8.0,
+            take_cooldown_ts=3000,
+            take_size=1,
+            trailcap_activation_position=22,
+            trailcap_base_position_cap=28,
+            trailcap_min_position_cap=8,
+            trailcap_capture_start=20.0,
+            trailcap_rebound_start=10.0,
+            trailcap_rebound_full=22.0,
+            trailcap_stale_start_ts=3000,
+            trailcap_stale_full_ts=12000,
+            trailcap_turn_start=0.8,
+            trailcap_turn_full=2.0,
+            trailcap_stale_weight=0.7,
+            trailcap_turn_weight=0.8,
+            trailcap_unwind_size_bonus=10,
+            trailcap_unwind_tighten_ticks=3,
+            trailcap_unwind_leave_gap_ticks=1,
+            trailcap_same_side_size_cap=0,
+            trailcap_take_size=1,
+            trailcap_take_cooldown_ts=1200,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        **_R3_HYDRO_PASSIVE_PRODUCTS_OFF,
+    },
+}
+
+
+MEMBER_OVERRIDES["theo_r3_hydro_v4"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=8.0,
+            signal_pos_gate=12,
+            tighten_ticks=1,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=12.0,
+            take_cooldown_ts=2000,
+            take_size=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": _THEO_R3_UNDERLYING,
+        **{f"VEV_{strike}": _theo_r3_option_override(strike) for strike in _THEO_R3_ACTIVE_OPTION_STRIKES},
+    },
+}
+
+
+# v5: symmetric trend guard (|trend| < tg suppresses signal in both directions).
+# Fixes V-shape recovery drawdown seen in log 382946: during bounce, fast EMA trends
+# toward 0 but passes through the tg boundary, re-activating sell signal on a still-short
+# position. Tighter tg=6 prevents that. pos_gate=12 caps directional inventory from signal.
+MEMBER_OVERRIDES["theo_r3_hydro_v5"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            tighten_ticks=1,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=12.0,
+            take_cooldown_ts=2000,
+            take_size=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": _THEO_R3_UNDERLYING,
+        **{f"VEV_{strike}": _theo_r3_option_override(strike) for strike in _THEO_R3_ACTIVE_OPTION_STRIKES},
+    },
+}
+
+
+MEMBER_OVERRIDES["theo_r3_hydro_v3"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            tighten_ticks=1,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=12.0,
+            take_cooldown_ts=2000,
+            take_size=1,
+            soft_position_limit=60,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": _THEO_R3_UNDERLYING,
+        **{f"VEV_{strike}": _theo_r3_option_override(strike) for strike in _THEO_R3_ACTIVE_OPTION_STRIKES},
+    },
+}
+
+
+# Vol-arb v2: active strikes moved to (5200, 5300) where vega is maximal and fills exist;
+# takers enabled; realized vol anchor raised to actually express the long-vol thesis.
+_THEO_R3_ACTIVE_OPTION_STRIKES_V2 = (5200, 5300)
+
+
+def _theo_r3_option_override_v2(strike: int) -> ProductConfig:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        strategy="theo_r3_vol_arb_v1",
+        position_limit=300,
+        role="option",
+        strike=strike,
+        trade_enabled=True,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        tte_days_initial=5.0,
+        ticks_per_day=10000,
+        timestamp_units_per_day=1000000,
+        historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+        prior_vol=0.0125,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        realized_vol_default=0.0215,
+        realized_var_alpha=0.06,
+        realized_vol_floor=0.0100,
+        realized_vol_cap=0.0500,
+        realized_anchor_weight=0.55,   # was 0.18 — express vol edge properly
+        take_edge=10.0,                # was 12.0 — fire when edge >= 10 ticks
+        reduce_edge=3.0,               # keep position unless bid significantly > fair
+        take_size=6,                   # was 3 — accumulate faster
+        maker_size=4,
+        maker_edge=2.0,
+        enable_takers=True,            # was False — core change: actually buy underpriced options
+        soft_position_limit=40,        # was 16 — allow meaningful vol position
+        hedge_abs_position_limit=140,
+        inventory_skew=0,              # don't skew quotes by position — hold the vol
+        min_quote_price=5.0,
+    )
+
+
+MEMBER_OVERRIDES["theo_r3_vol_arb_v2"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=6.0,
+            signal_pos_gate=12,
+            tighten_ticks=1,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=12.0,
+            take_cooldown_ts=2000,
+            take_size=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        # naive_tight_mm for VELVETFRUIT: drops the delta-hedge overhead that was
+        # bleeding -870 PnL over 3 days. Just follow the book and capture spread.
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
+        ),
+        # Options: no override → inherits ROUND_3 default option_mm_bs on all 10 strikes.
+        # VEV_5400/5500 vol_arb layer dropped (was getting 0 fills in live + backtest).
 _R3_LIVE_PROBE_OPTION_BASE = dict(
     strategy="option_live_probe_mm",
     quote_trace_enabled=True,
@@ -7601,6 +8641,37 @@ MEMBER_OVERRIDES["r3_live_probe_all_far_quotes"] = {
 }
 
 
+MEMBER_OVERRIDES["theo_r3_vol_arb_v3"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            strategy="r3_hydro_reversion_mm",
+            position_limit=200,
+            ema_alpha=0.008,
+            fast_ema_alpha=0.03,
+            trend_guard=8.0,        # was 6.0 — +1,120 backtest; must pair with take_size=1
+            signal_pos_gate=12,
+            tighten_ticks=1,
+            maker_size=24,
+            min_maker_size=3,
+            quote_threshold=6.0,
+            max_signal_size_boost=12,
+            inventory_reduce_per_unit=0.40,
+            inventory_unwind_per_unit=0.30,
+            max_unwind_boost=20,
+            take_threshold=12.0,
+            take_cooldown_ts=2000,
+            take_size=1,            # keep at 1 — take_size=3 with tg=8 destroys the edge
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            strategy="naive_tight_mm",
+            position_limit=200,
+            maker_size=30,
+            tighten_ticks=1,
 MEMBER_OVERRIDES["r3_live_probe_all_gap_flow_follow"] = {
     3: {
         "HYDROGEL_PACK": _r3_delta_live_probe(
