@@ -3779,6 +3779,28 @@ MEMBER_OVERRIDES["tibo_velvet_v28_dyn_medium"]  = _make_v28_dyn(0.0002)
 MEMBER_OVERRIDES["tibo_velvet_v28_dyn_fast"]    = _make_v28_dyn(0.0008)
 
 
+# ── tibo_velvet_v29: v28 + Leo's IV residual gate on VEV_5300 ──────────────────
+
+_V29_IV_GATE_BASE = dict(
+    iv_residual_gate=True,
+    iv_skip_threshold=0.0010,
+    iv_boost_threshold=0.0010,
+    iv_delta_threshold=0.0003,
+    iv_ewma_fast_alpha=0.10,
+    iv_ewma_slow_alpha=0.02,
+    iv_passive_boost=1.5,
+)
+
+_tibo_velvet_v29 = dict(MEMBER_OVERRIDES["tibo_velvet_v28"][3])
+_tibo_velvet_v29["VEV_5300"] = ProductConfig(
+    symbol="VEV_5300",
+    strategy="gamma_scalp_v28",
+    position_limit=300,
+    params={**_THEO_V7_VEV_BASE, **_V29_IV_GATE_BASE, "strike": 5300, "skip_when_expensive": False},
+)
+MEMBER_OVERRIDES["tibo_velvet_v29"] = {3: _tibo_velvet_v29}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))

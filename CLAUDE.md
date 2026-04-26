@@ -50,12 +50,137 @@ market prices ≠ fair prices on options → **Black-Scholes + smile fitting edg
 - `prosperity/strategies/round_3/option_mm_bs.py` — `OptionMMBSStrategy` (naive BS-aware MM)
 - `prosperity/config.py` — `ROUND_3` dict + `r3_naive_champion` member (HYDROGEL+VELVETFRUIT v4_F5 MM + options BS-MM)
 
-**Current baseline**: `r3_naive_champion` — **+123,526 PnL on 3-day backtest realistic**.
-- HYDROGEL MM: ~18k/day
-- VELVETFRUIT MM: ~15k/day
-- Vouchers: near-neutral (penny-improve MM around market, no aggressive takers)
+**Current best**: `tibo_velvet_v28` — **+173,002 PnL on 3-day backtest realistic** (VELVETFRUIT + VEV options only, HYDROGEL excluded).
 
 **Units convention for options**: time T in DAYS, sigma in daily vol, r=0. `call_price(S, K, T, sigma)`.
+
+---
+
+## Round 3 — Active Development Focus
+
+**IMPORTANT: Only work on VELVETFRUIT_EXTRACT and VEV options (VEV_4000 through VEV_5500). Always set `"HYDROGEL_PACK": None` in any config. HYDROGEL is Theo's domain — do not touch it.**
+
+**Active strategies** live in `prosperity/strategies/round_3/tibo/`. Key files:
+
+| File | Purpose |
+|------|---------|
+| `velvet_strat_v3.py` | Original v3: VelvetMMV3 (passive MM) + VEVOptionMMV3 (passive bid-heavy) |
+| `velvet_strat_v25.py` | v25: Added GammaScalpV25 for 4500/5000/5100 |
+| `velvet_strat_v26.py` | v26: Ablation improvements over v25 |
+| `mm_first_v4_combo.py` | Theo's MMFirstV4ComboStrategy + R3GuardedAnchorMMStrategy + DynamicAnchorMMStrategy |
+| `velvet_strat_theo_v7.py` | Thin wrappers: TheoV7VelvetMM, TheoV7GammaScalp |
+| `smile_iv_scalper.py` | _VelvetOptionMixin, GammaScalpZGatedMixinStrategy, SmileIVScalerStrategy |
+| `velvet_strat_v28.py` | **Current best**: TheoV7VelvetMMV28, TheoV7GammaScalpV28, VEVOptionMMV28 |
+
+**Current best config**: `tibo_velvet_v28` → export with `python scripts/export_submission.py --member tibo_velvet_v28 --round 3`
+
+---
+
+## Round 3 — Strategy Evolution History
+
+### v3 → +48,922 PnL
+**VELVETFRUIT**: `VelvetMMV3` — simple passive penny-improve MM, inventory-adaptive sizing.  
+**VEV options**: `VEVOptionMMV3` — passive bid-heavy (bid size 20, ask size 5). The ask is posted 9 ticks above market (`best_ask + 9`) so it almost never fills. No BS fair value — purely market-relative quoting. Strikes covered: 4000, 5200, 5300, 5400 only.  
+**No fair value model for options, no active takers.**
+
+### v25 → +94,083 PnL (+45k over v3)
+Added `GammaScalpZGatedStrategy` for VEV_4500/5000/5100 — these strikes were absent in v3.  
+GammaScalp uses **Black-Scholes fair value** (`call_price(S, K, T, sigma=0.0125)`) for taker decisions: buys at ask if `ask ≤ BS_fair`. Also posts passive penny-improve bid. Z-score gate: skip accumulation when VELVETFRUIT is expensive (z > threshold).  
+**Key lesson**: v24 (Theo's original) had two problems fixed in v25:
+1. `MMFirstV4ComboStrategy` AR signal on VELVETFRUIT built a -185 short when price trended up on Day 2 → -6.5k. Fix: revert to passive VelvetMMV3.
+2. `skip_when_expensive=True` with threshold=0.5 silenced VEV_5200/5300 accumulation whenever VELVETFRUIT trended up (which is exactly when you want to sell those strikes). Fix: use VEVOptionMMV3 (never skips bids).
+
+### v26 → +98,325 PnL (+4.2k over v25, ablation-confirmed)
+Ablation study on each feature in isolation:
+- `skip_when_expensive=False` for VEV_4500: **+2,326** (delta≈1, accumulating when expensive is fine)
+- `skip_when_expensive=False` for VEV_5000: **+2,265** (benefit from extra fills > directional risk)
+- Keep `skip_when_expensive=True` for VEV_5100: **saving -2,410** (closest to ATM, most delta-sensitive)
+- Remove `zscore_exec_mode` (VEV_5200/5300/5400): **0 impact** — dead code, removed for clarity
+- Remove `use_delta_hedge` (VELVETFRUIT): **0 impact** — delta too small relative to MM swings
+
+### tibo_theo_v7 → +165,634 PnL (+67k over v26)
+Ported Theo's `velvettuned_v7.py` as modular classes.  
+**VELVETFRUIT**: `R3GuardedAnchorMMStrategy` — the massive gain (+62k). This is `MMFirstV4ComboStrategy` (full-featured MM with AR signal, takers, toxic flow detection, gap exploit) wrapped by a **guard** that disables AR + takers when price is trending *away* from anchor=5250 (prevents shorting a rally). When guard is OFF: pure passive MM. When guard ON: full strategy fires.  
+**VEV options**: Same `GammaScalpZGatedMixinStrategy` (uses `_VelvetOptionMixin` for shared spot caching). All 8 strikes (4000-5500) use this. Skip thresholds differ per strike. VEV_4000 gains +12k from active taker fills vs v26's passive-only.  
+**Key infrastructure**: `_VelvetOptionMixin` (in `smile_iv_scalper.py`) — computes VELVETFRUIT spot once per tick via `_shared` dict, builds full IV chain snapshot, supports LOO smile fitting.
+
+### v28 → +173,002 PnL (+7.4k over tibo_theo_v7) ← **CURRENT BEST**
+Best-of-both merge: v7 wins on VELVETFRUIT/VEV_4000/4500/5100/5500, v26 ablation wins on VEV_5000/5200/5300/5400.
+
+| Product | Strategy | Why |
+|---------|---------|-----|
+| VELVETFRUIT | R3GuardedAnchorMM (v7) | +62k vs passive MM |
+| VEV_4000 | GammaScalp skip=True thresh=1.5 | Active takers +12k vs v26 passive |
+| VEV_4500 | GammaScalp skip=True thresh=2.0 | Near-equiv to skip=False (thresh rarely fires) |
+| VEV_5000 | GammaScalp **skip=False** | Ablation +2,265 over skip=True thresh=1.0 |
+| VEV_5100 | GammaScalp skip=True thresh=0.5 | Keep: removing costs -2,410 |
+| VEV_5200 | VEVOptionMMV28 (passive bid-heavy) | +4,346 vs v7's GammaScalp for OTM |
+| VEV_5300 | VEVOptionMMV28 (passive bid-heavy) | +1,274 vs v7 |
+| VEV_5400 | VEVOptionMMV28 (passive bid-heavy) | +616 vs v7 |
+| VEV_5500 | GammaScalp skip=True thresh=0.5 | Minimal but non-negative |
+
+---
+
+## Round 3 — What Didn't Work
+
+### v27 (SmileIVScalerStrategy) → -877,082 PnL (catastrophic failure)
+Attempted to use Theo's `SmileIVScalerStrategy` for VEV_5100/5200/5300/5400: LOO polynomial smile fit as fair IV, EWMA residual baseline, z-score entry signal.  
+**Why it failed**: The strategy accumulated 50,000-200,000 units (position limit is 300) per strike, which is nonsensical. Root cause: the `active_base_count=6` and `_active_rank` logic marked all strikes as active, the `entry_position_cap=60` gate was being bypassed due to the `resid_z` signal constantly firing (warmup period produced near-zero baseline std → any residual looks like z >> 0.9). The strategy never sold because `reduce_zscore` condition never triggered during warmup.  
+**Lesson**: `SmileIVScalerStrategy` needs careful tuning of `resid_warmup_ticks`, `resid_std_init`, and `entry_position_cap`. The idea (LOO smile as fair value, residual mean-reversion entry) is theoretically sound but dangerous without proper guard rails.
+
+### Dynamic anchor (v28_dyn_*) → 155k-162k PnL (-11k to -17k vs v28)
+Replaced fixed `anchor_price=5250` with a slow EWMA of mid price (half-lives: 1.4d, 0.35d, 0.09d).  
+**Why it failed**: VELVETFRUIT genuinely mean-reverts to 5250 on the historical data. The fixed anchor IS the correct fair value for this asset. A dynamic anchor weakens the AR mean-reversion signal because the anchor chases price — fewer taker opportunities are identified. Faster anchor = worse result.  
+**Lesson**: Keep `anchor_price=5250` as fixed. The guard + AR combination is specifically exploiting the 5250 mean-reversion property.
+
+---
+
+## Round 3 — How the Option Strategies Actually Work
+
+### GammaScalpZGatedMixinStrategy (VEV_4000/4500/5000/5100/5500)
+**NOT true market making** — one-sided long accumulation:
+1. Computes BS fair value: `call_price(S, K, T, sigma=0.0125)` — fixed sigma, no adaption
+2. **Taker buy**: if `ask ≤ BS_fair + edge_ticks` (edge_ticks=0), buy aggressively
+3. **Passive bid**: always posts `best_bid + 1` (penny-improve), size 24
+4. **No ask** during accumulation. Only sells during **unwind** (TTE < 1.5 days)
+5. **Skip gate**: if `skip_when_expensive=True` and VELVETFRUIT z-score > threshold → skip entire tick
+6. Position target: accumulate up to `target_qty=300`, then switch to unwind mode
+
+**Known limitation**: sigma is frozen at 0.0125/day. Realized vol is ~2.15%/day → realized > implied by ~70%. There may be edge in dynamically estimating IV from the smile rather than using a fixed prior.
+
+### VEVOptionMMV28 / VEVOptionMMV3 (VEV_5200/5300/5400)
+**Closer to market making but heavily skewed**:
+1. **Passive bid**: `best_bid + 1`, size 20 — posted every tick, no conditions
+2. **Ask**: `best_ask + 9` (formula: `best_ask - 1 + ask_offset_neutral=10`) — so wide it almost never fills
+3. **No fair value model** — purely market-relative quoting
+4. No z-score gate: accumulates on every tick regardless of VELVETFRUIT level
+5. `prevent_crossing=True` on VEV_5400 (1-tick spread → unintentional taker risk)
+
+**Why passive is better than GammaScalp for 5200/5300/5400**: These are OTM options with small fair values. The GammaScalp's `ask ≤ BS_fair` taker condition almost never fires at these strikes (market prices them near intrinsic). The z-score skip gate also silences accumulation. The passive approach simply captures the bid-ask spread on every tick without any gating.
+
+### R3GuardedAnchorMMStrategy (VELVETFRUIT_EXTRACT)
+Full-featured MM with 3 modes controlled by the guard:
+- **Guard ON** (price near 5250 or reverting toward it): AR signal active (`ar_gain=0.3` shifts fair value toward anchor), takers fire when price deviates, gap exploit, toxic flow detection
+- **Guard OFF** (price trending away from 5250): AR disabled, takers disabled → pure passive penny-improve only
+- **Guard condition**: `reverting = (0 ≤ |dist| ≤ 80) AND (dist × trend_EMA ≤ -7.5)` where `dist = mid - 5250`
+- Also: `passive_unwind_skew_ticks=1` skews ask down when long to unwind faster; `toxic_threshold=0.6` reduces size when order flow is one-sided
+
+---
+
+## Round 3 — TTE Mapping (Critical for Backtest Accuracy)
+
+The final competition uses `tte_days_initial=5.0` (5 days to expiry at the start). But historical data was collected at different TTEs:
+- Historical day 0 → TTE=8d
+- Historical day 1 → TTE=7d  
+- Historical day 2 → TTE=6d
+
+**Always include in option strategy configs** (otherwise BS fair values are wrong for ITM options):
+```python
+historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+tte_days_initial=5.0,
+timestamp_units_per_day=1_000_000,
+```
+`resolve_initial_tte_days()` reads `_backtest.day` from `traderData` (injected by backtest engine) to pick the right TTE. In production/live, `traderData` has no `_backtest` key, so it always returns `tte_days_initial=5.0` — correct for live submission.
 
 ---
 
@@ -253,7 +378,18 @@ The exporter:
 
 ## Current Strategies in Use
 
-### Tibo — `tibo_mm_first` (primary, Round 1)
+### Tibo — Round 3 (`tibo_velvet_v28`) ← PRIMARY
+
+**Config**: `prosperity/config.py` → `MEMBER_OVERRIDES["tibo_velvet_v28"]`  
+**Export**: `python scripts/export_submission.py --member tibo_velvet_v28 --round 3`  
+**Submission**: `artifacts/submissions/round_3/tibo/tibo_velvet_v28_round3_submission.py`  
+**3-day backtest (realistic)**: **+173,002 PnL**
+
+See the "Round 3 — Active Development Focus" section above for the full strategy breakdown. Do not modify `HYDROGEL_PACK` — always set it to `None` in v28-onwards configs.
+
+---
+
+### Tibo — Round 1 (`tibo_mm_first`)
 
 **File**: `prosperity/strategies/mm_first.py`
 
