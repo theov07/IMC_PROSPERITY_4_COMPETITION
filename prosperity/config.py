@@ -3737,6 +3737,64 @@ MEMBER_OVERRIDES["r3_hydro_anchor_max3d"] = {
     },
 }
 
+
+# r3_hydro_anchor_max3d_v7 — same as max3d but with Theo v7 enhancements applied:
+# 1) Toxic flow detection (toxic_threshold=0.6, window=8, frac=0.68)
+# 2) Passive unwind (skew=1, trigger=0.38)
+# 3) inventory_aversion_gamma=0.001 (was 0.0015)
+# These are PURE microstructure additions (no regime tuning), should generalize.
+MEMBER_OVERRIDES["r3_hydro_anchor_max3d_v7"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDROGEL_V4_F5,
+            quote_trace_enabled=True,
+            # Toxic flow protection
+            toxic_threshold=0.6,
+            toxic_window=8,
+            toxic_size_frac=0.68,
+            # Passive unwind (asymmetric skew toward mid when |pos|>38%)
+            passive_unwind_skew_ticks=1,
+            passive_unwind_trigger=0.38,
+            # Looser fair-value shift (since unwind handles inventory)
+            inventory_aversion_gamma=0.001,
+            # Match Theo v7 taker reserve
+            pct_kept_for_takers=0.005,
+        ),
+        **_R3_HYDRO_DISABLE_REST,
+    },
+}
+
+
+# r3_hydro_guarded_v7 — apply R3GuardedAnchorMM to HYDROGEL (regime-aware anchor)
+# Tests if guard logic (skip anchor pull when wrong-way + drifting away) helps HYDRO.
+# HYDRO anchor=10000 might benefit from guarding when price drifts >40 ticks away.
+MEMBER_OVERRIDES["r3_hydro_guarded_v7"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDROGEL_V4_F5,
+            strategy="r3_guarded_anchor_mm",
+            quote_trace_enabled=True,
+            # Theo v7 layers
+            toxic_threshold=0.6,
+            toxic_window=8,
+            toxic_size_frac=0.68,
+            passive_unwind_skew_ticks=1,
+            passive_unwind_trigger=0.38,
+            inventory_aversion_gamma=0.001,
+            pct_kept_for_takers=0.005,
+            # Guard params — adapt to HYDRO scale (anchor 10000, range ~9928-10071)
+            # range = 143, so dist 40 is reasonable; max_dist 80 ~half range
+            guard_trend_alpha=0.45,
+            guard_reversion_threshold=7.5,
+            guard_inventory_dist=40.0,
+            guard_min_dist=0.0,
+            guard_max_dist=80.0,
+            guard_near_band=0.0,
+        ),
+        **_R3_HYDRO_DISABLE_REST,
+    },
+}
+
 def _hydro_anchor_zgate_config(name: str, *, skip: float, taker: bool = False, take: float = 1.5) -> None:
     params = {
         **_R3_HYDROGEL_PARAMS,
