@@ -3269,6 +3269,7 @@ Submissions exported:
 ---
 
 ## 🚨 PREVIOUS — hydrogel_follow_mm (trend-follow + aggressive unwind)
+## 🚨 LATEST — hydrogel_follow_mm (trend-follow + aggressive unwind)
 
 **Motivation** (from v2 asym_mm live log `384749`):
 v2 asym_mm landed +672 live (peak +763, DD -201) — DD fix successful vs v1's
