@@ -1,5 +1,69 @@
 # Round 3 Findings
 
+## LATEST — Live alpha discovery + diagnostic probe 17 (Leo2 2026-04-26)
+
+After Codex built 16 diagnostic probes (`a_tester_sur_imc_live/live_alpha_probes/`),
+3 were uploaded to IMC live: 00A baseline far quotes, 00B gap+flow follow,
+00C option flow fade. Logs (442469, 443876, 444010) show:
+
+| Probe | PnL | What it tested |
+|---|---:|---|
+| 00A baseline far quotes | **+760** | Off-market passive fills |
+| 00B gap + flow follow | **-3,275** | Gap exploit + informed flow |
+| 00C option flow fade | -587 | Uninformed/OA flow |
+
+### Adverse selection analysis (5-tick post-fill mid move per product)
+
+Reconstructed from `tradeHistory` × per-product mid timeline:
+
+| Product | 00A baseline | 00B follow | 00C fade | Read |
+|---|---:|---:|---:|---|
+| **HYDROGEL_PACK** | **+5.78** | +5.78 | n/a | ✅ Anchor wins in live too |
+| VELVET | +0.50 | **-2.24** | n/a | Baseline OK, flow-follow toxic |
+| **VEV_4000** | n/a | **-9.52** (95%) | **-11.43** (100%!) | ❌ TOXIC IN BOTH DIRECTIONS |
+| VEV_5300-5500 | n/a | -0.6 to -1.2 | -0.5 to -1.0 | Far OTM lose half-spread |
+| VEV_6000/6500 | -0.50 | -0.50 | -0.50 | Pay full spread, mid=0.5 |
+
+**The smoking gun**: VEV_4000 has **95-100% adverse selection rate** in both
+follow AND fade modes in live. Backtest gives us +45k PnL on VEV_4000. Live
+appears to have a different microstructure where any aggressive option order
+on 4000 gets adversely selected. Either:
+  - The fill matches in our backtest are too generous (queue-position assumption)
+  - There's an informed VEV_4000 trader live that backtest doesn't model
+  - Live spread is wider than we account for
+
+**HYDROGEL works in live** (+5.78 avg signed_mtm) — confirms we should add
+HYDROGEL to our default portfolio, not stay velvet+options-only.
+
+**No named participants** appeared in any of the 3 logs (all `buyer`/`seller`
+fields are `""` or `"SUBMISSION"`). G1 (named participant tracking) didn't
+fire, but probe 17 keeps the hook in case live exposes them later.
+
+### Probe 17 — Diagnostic for participant + adverse selection
+
+Built `prosperity/strategies/round_3/diagnostic_probe_mm.py`:
+- `_track_participants()`: logs every market_trade with non-empty buyer/seller
+- `_track_adverse_selection()`: for each of OUR fills, records (price, side, ts);
+  after 5 ticks, computes `signed_mtm = side * (current_mid - fill_price)`.
+  Negative = adverse to us. Aggregates `adverse_rate` and `avg_signed_mtm`
+  per product.
+- Trades minimally (1 lot every 200 ticks far from mid) so PnL ≈ 0; max signal density.
+
+Logged features per quote snapshot:
+  - `fills_tracked`, `adverse_count`, `adverse_rate`
+  - `avg_signed_mtm` (negative → product is toxic for us)
+  - `last_buyer_hash`, `last_seller_hash` (G1 hooks)
+  - `session_phase` (0=early, 1=mid, 2=late — for time-of-session alpha)
+
+Member: `r3_live_probe_diagnostic_all` (12 products, position_limit=30 each).
+Submission file: `live_alpha_probes/17_DIAGNOSTIC_PARTICIPANT_AND_ADVERSE.py` (38 KB).
+
+**Action items from live data**:
+1. **Add HYDROGEL to portfolio** — Theo's `r3_hydro_reversion_mm` or our `r3_hydro_anchor_max3d` (+86k BT, +5.78 avg live MTM)
+2. **Disable VEV_4000 gamma_scalp** in any aggressive variant — backtest 45k PnL but 95% adverse live
+3. **Drop far OTM strikes** (5300-6500) for any taker mode — lose 0.5-spread per fill
+4. **Stay defensive** until probe 17 confirms which products are safe live
+
 ## LATEST — Theo v6 toxic flow integrated → +1,897 PnL on VELVET (Leo2 2026-04-26)
 
 **Trigger**: Theo shared `r3_velvet_options_v6_velvettuned` (his next iteration after v5).

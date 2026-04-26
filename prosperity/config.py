@@ -7330,6 +7330,66 @@ MEMBER_OVERRIDES["r3_live_probe_option_flow_fade"] = {
 }
 
 
+# ─── Probe 17: diagnostic (G1 named participants + G5 adverse selection) ───
+# Designed after analyzing 00A/00B/00C live logs which revealed:
+#  - VEV_4000 has 95-100% adverse-selection rate in BOTH follow and fade modes
+#    (different live market structure vs backtest)
+#  - HYDROGEL_PACK has consistent +5.78 avg signed_mtm (good)
+#  - No named participants appeared in current live data, but probe logs them
+#    in case they show up
+#
+# Trades minimally (1 lot every 200 ticks far from mid) → low PnL but max
+# data on adverse selection per product.
+
+_R3_DIAGNOSTIC_PROBE_BASE = dict(
+    strategy="diagnostic_probe_mm",
+    quote_trace_enabled=True,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+    far_probe_distances=[25, 50, 100],
+    far_probe_interval_ticks=200,
+    far_probe_qty=1,
+    adverse_horizon_ticks=5,
+    adverse_max_window=50,
+    participant_log_max=30,
+)
+
+
+def _r3_diagnostic_probe(symbol: str, **extra: Any) -> ProductConfig:
+    base = ROUND_3.get(symbol)
+    if base is None:
+        # Construct minimal ProductConfig for products not in ROUND_3 base
+        from copy import deepcopy
+        base = deepcopy(ROUND_3.get("VEV_4000"))
+    return _override(
+        base,
+        position_limit=30,
+        **{**_R3_DIAGNOSTIC_PROBE_BASE, **extra},
+    )
+
+
+# All 12 products on diagnostic probe — broad coverage in one upload
+MEMBER_OVERRIDES["r3_live_probe_diagnostic_all"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            ROUND_3["HYDROGEL_PACK"],
+            position_limit=30,
+            **_R3_DIAGNOSTIC_PROBE_BASE,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            position_limit=30,
+            **_R3_DIAGNOSTIC_PROBE_BASE,
+        ),
+        **{
+            f"VEV_{strike}": _r3_diagnostic_probe(f"VEV_{strike}", strike=strike)
+            for strike in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+        },
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))

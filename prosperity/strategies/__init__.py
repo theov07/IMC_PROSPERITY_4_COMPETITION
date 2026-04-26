@@ -95,6 +95,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "option_skew_signal_mm": ("prosperity.strategies.round_3.option_skew_signal_mm", "OptionSkewSignalMMStrategy"),
     "option_skew_dynamic_mm": ("prosperity.strategies.round_3.option_skew_dynamic_mm", "OptionSkewDynamicMMStrategy"),
     "option_live_probe_mm": ("prosperity.strategies.round_3.option_live_probe_mm", "OptionLiveProbeMMStrategy"),
+    "diagnostic_probe_mm": ("prosperity.strategies.round_3.diagnostic_probe_mm", "DiagnosticProbeMMStrategy"),
     "gamma_scalp_zgated": ("prosperity.strategies.round_3.gamma_scalp_zgated", "GammaScalpZGatedStrategy"),
     "vega_neutral_pair_mm": ("prosperity.strategies.round_3.vega_neutral_pair_mm", "VegaNeutralPairMMStrategy"),
     "velvet_mr_taker_overlay": ("prosperity.strategies.round_3.velvet_mr_taker_overlay", "VelvetMRTakerOverlayStrategy"),
