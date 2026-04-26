@@ -1,5 +1,86 @@
 # Round 3 Findings
 
+## LATEST — Theo v7 passive unwind integrated → +6,434 PnL on VELVET (Leo2 2026-04-26)
+
+Theo shared `r3_velvet_options_v7_passiveunwind`. Diff vs v6 was tiny (3 lines, all in
+VELVET params):
+
+```
+- inventory_aversion_gamma: 0.0015 → 0.001
++ passive_unwind_skew_ticks: 1
++ passive_unwind_trigger: 0.38
+```
+
+**The idea**: `_asym_passive_skew()` in `MMFirstV4ComboStrategy` (which we already had).
+When `|position| / position_limit > 0.38`, tighten only the UNWIND-side passive quote
+by 1 tick (scaled linearly). More efficient than `inventory_aversion_gamma` which shifts
+fair value bilaterally. Logic: pay only 1 spread to clear inventory, not 2.
+
+**Backtest results** (3-day, realistic fill, velvet+options only):
+
+| Variant | PnL | DD | Ratio | Notes |
+|---|---:|---:|---:|---|
+| v53 (toxic flow only) | 149,576 | 59,970 | 2.494 | prior TOP1 |
+| **v57 (v53 + passive unwind) ★** | **156,010** | **59,720** | **2.612** | **+6,434 PnL, -250 DD** |
+| v56 (toxic + 5300) | 152,262 | 62,415 | 2.440 | dominated by v58 |
+| **v58 (v57 + 5300)** | **158,696** | **62,165** | **2.553** | dominates v54+v56 |
+| v54 (per-strike z) | 156,358 | 74,220 | 2.107 | dominated by v58 |
+| v55 (per-strike z + all 8 strikes) | 159,245 | 80,494 | 1.978 | only +549 PnL vs v58 for +18k DD |
+
+**Sensitivity test on `passive_unwind_trigger`** (anti-overfit check):
+
+| Trigger | PnL | DD | Ratio | Δ vs v53 |
+|---|---:|---:|---:|---:|
+| no unwind (v53) | 149,576 | 59,970 | 2.494 | 0 |
+| 0.30 | 155,808 | 59,720 | 2.609 | +6,232 |
+| **0.38** ★ | **156,010** | 59,720 | **2.612** | **+6,434** |
+| 0.40 | 155,913 | 59,720 | 2.611 | +6,337 |
+| 0.50 | 155,502 | 59,904 | 2.596 | +5,926 |
+
+Curve is FLAT around 0.38 (range = 508 PnL = 0.3% of total). **The IDEA is robust**,
+the magic number 0.38 doesn't matter — any trigger in [0.30, 0.50] gives +5.9k to +6.4k.
+Not overfit.
+
+**Per-asset on v57**:
+
+| Asset | PnL | DD | Ratio | DD%cap |
+|---|---:|---:|---:|---:|
+| VELVETFRUIT_EXTRACT | **86,518** | 19,056 | **4.54** | 0.9% |
+| VEV_4000 | 45,355 | 60,833 | 0.75 | 5.7% |
+| VEV_4500 | 32,416 | 43,714 | 0.74 | 9.1% |
+| VEV_5100 | 28,489 | 40,052 | 0.71 | 37.2% |
+| VEV_5000 | 15,364 | 21,612 | 0.71 | 26.5% |
+| VEV_5200 | 14,667 | 20,246 | 0.72 | 45.9% |
+
+VELVET PnL went from 76,068 (v53) → 82,502 (v57 summary PnL) / **86,518** (per-asset
+reconstruction with MTM-end-of-day). +6.4k summary delta confirmed.
+
+**Cumulative VELVET-only progression** (matches each Theo iteration):
+
+| Layer | VELVET PnL (per-asset MTM) | DD | Ratio | Δ |
+|---|---:|---:|---:|---|
+| v34 baseline (pre-Theo R3) | 27,518 | 19,980 | 1.58 | — |
+| + R3GuardedAnchorMM (v52) | 76,016 | 15,929 | 4.77 | +48,498 |
+| + Toxic flow (v53) | 78,238 | 17,130 | 4.57 | +2,222 |
+| + Passive unwind (v57) ★ | **86,518** | 19,056 | 4.54 | **+8,280** |
+
+Total VELVET gain: **+59,000 PnL** with ratio maintained > 4.5.
+
+**Theo v7 reference** (full HYDROGEL+VELVET+options): 159,278 / 43,804 / 3.636.
+Theo v7 velvet+options ONLY: 129,818 / 44,268 / 2.933 (vs his v6 123k → +6.4k).
+
+**Our TOP1 v57 (velvet+options) beats Theo's velvet+options-only by +26,192**.
+HYDROGEL is what gives Theo's full strategy 3.636 ratio (the +29.5k of HYDRO + DD
+diversification).
+
+**Final candidates locked** in `00_FINAL_CANDIDATES/`:
+- `TOP0_LOWEST_DD__v52_theo_minimal` (148k / 59k / 2.488)
+- `TOP1_BEST_RATIO__v57_v7_passive_unwind` ★ (156k / 60k / 2.612) ← NEW DEFAULT
+- `TOP2_BALANCED__v58_v7_with_5300` (159k / 62k / 2.553)
+- `TOP4_MAX_PNL_STRETCH__v55_v6_full` (159k / 80k / 1.978)
+
+**Removed (dominated)**: v53, v50, v56, v54.
+
 ## LATEST — Live alpha discovery + diagnostic probe 17 (Leo2 2026-04-26)
 
 After Codex built 16 diagnostic probes (`a_tester_sur_imc_live/live_alpha_probes/`),

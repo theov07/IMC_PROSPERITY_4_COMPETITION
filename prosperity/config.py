@@ -5691,6 +5691,105 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v55_v6_full"] = {
 }
 
 
+# v57: v53 + Theo v7 passive unwind on VELVET (asym skew toward mid when |pos|>38%)
+# Theo v7 diff vs v6: only 3 lines in VELVET params
+#   inventory_aversion_gamma: 0.0015 → 0.001 (less fair-value shift)
+#   passive_unwind_skew_ticks=1
+#   passive_unwind_trigger=0.38
+# Logic: when |pos|/limit > 0.38, tighten only the UNWIND side passive quote by
+# 1 tick (scaled linearly with pressure). More efficient than shifting both sides.
+_R3_THEO_V7_GUARDED_VELVET_PARAMS = dict(
+    _R3_THEO_V6_GUARDED_VELVET_PARAMS,
+    inventory_aversion_gamma=0.001,  # was 0.0015
+    passive_unwind_skew_ticks=1,
+    passive_unwind_trigger=0.38,
+)
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v57_v7_passive_unwind"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v58: v56 + passive unwind (5300 included with iv_gate)
+# Sensitivity test: vary passive_unwind_trigger to detect overfit
+def _build_unwind_variant(trigger: float) -> Dict[str, Any]:
+    return dict(
+        _R3_THEO_V6_GUARDED_VELVET_PARAMS,
+        inventory_aversion_gamma=0.001,
+        passive_unwind_skew_ticks=1,
+        passive_unwind_trigger=trigger,
+    )
+
+for _suffix, _trigger in [("030", 0.30), ("040", 0.40), ("050", 0.50)]:
+    MEMBER_OVERRIDES[f"r3_velvet_options_max3d_v57_unwind_trigger_{_suffix}"] = {
+        3: {
+            "HYDROGEL_PACK": None,
+            "VELVETFRUIT_EXTRACT": _override(
+                ROUND_3["VELVETFRUIT_EXTRACT"],
+                **_build_unwind_variant(_trigger),
+            ),
+            "VEV_4000": _override(
+                ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+            ),
+            **{
+                f"VEV_{strike}": _override(
+                    ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                    **_gamma_zgated_with_iv_gate(z_skip=0.5),
+                )
+                for strike in [4500, 5000, 5100, 5200]
+            },
+            **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+        },
+    }
+
+
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v58_v7_with_5300"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_with_iv_gate(z_skip=0.8),
+        ),
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},
+    },
+}
+
+
 # v56: v53 + add VEV_5300 with iv_gate (Pareto stretch — like v50 with v6 toxic flow)
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v56_v6_with_5300"] = {
     3: {
