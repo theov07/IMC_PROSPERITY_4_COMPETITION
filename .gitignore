@@ -55,3 +55,5 @@ artifacts/submissions/round_3/_FINAL_DELIVERY/*.log
 # Logs (heavy IMC live logs)
 logs/round_3/*.log
 logs/round_3/*.json
+artifacts/backtest_results/*
+artifacts/backtests/*
