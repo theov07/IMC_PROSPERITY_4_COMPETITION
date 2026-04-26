@@ -40,6 +40,7 @@ logs/round_2/theo
 artifacts/analysis/round_3/backtest_*.json
 
 logs/round_3
+logs/round_3
 # Large backtest JSON dumps (>50MB, blocks GitHub push)
 artifacts/backtests/*.json
 artifacts/backtests/**/*.json
@@ -76,3 +77,5 @@ logs/round_*/*.json
 artifacts/**/backtest_*.json
 artifacts/**/_3d.json
 artifacts/**/oracle_*.json
+artifacts/backtest_results/*
+artifacts/backtests/*
