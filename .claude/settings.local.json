@@ -190,7 +190,18 @@
       "Bash(python3 -m prosperity.tooling.counterparties_analysis --prices data/round_4/prices_round_4_day_1.csv --trades data/round_4/trades_round_4_day_1.csv --out artifacts/analysis/round_4/counterparties_day1.html)",
       "Bash(python3 -m prosperity.tooling.counterparties_analysis --prices data/round_4/prices_round_4_day_1.csv data/round_4/prices_round_4_day_2.csv data/round_4/prices_round_4_day_3.csv --trades data/round_4/trades_round_4_day_1.csv data/round_4/trades_round_4_day_2.csv data/round_4/trades_round_4_day_3.csv --out artifacts/analysis/round_4/counterparties_all.html)",
       "Bash(python3 -m prosperity.tooling.counterparties_analysis --prices data/round_4/prices_round_4_day_1.csv --trades data/round_4/trades_round_4_day_1.csv --product VELVETFRUIT_EXTRACT --out artifacts/analysis/round_4/counterparties_velvet.html)",
-      "Bash(python backtest.py --strategy hydro_v200 --round 3 --days 0 1 2 --match-trades realistic --product HYDROGEL_PACK)"
+      "Bash(python backtest.py --strategy hydro_v200 --round 3 --days 0 1 2 --match-trades realistic --product HYDROGEL_PACK)",
+      "Bash(python /Users/thibautdesauty/Documents/Prosperity4/IMC_PROSPERITY_4_COMPETITION/backtest.py --help)",
+      "Bash(python -c \"import prosperity.config; print\\('OK'\\)\")",
+      "Bash(python /Users/thibautdesauty/Documents/Prosperity4/IMC_PROSPERITY_4_COMPETITION/backtest.py --strategy hydro_v200 --round 3 --days 0 1 2 --match-trades realistic --save-json artifacts/backtest_results/round_3/hydro/hydro_v200.json)",
+      "Bash(python /Users/thibautdesauty/Documents/Prosperity4/IMC_PROSPERITY_4_COMPETITION/backtest.py --strategy hydro_v200 --round 3 --days 0 1 2 --match-trades realistic --json-out artifacts/backtest_results/round_3/hydro/hydro_v200.json)",
+      "Bash(python -m prosperity.tooling.dashboard --log artifacts/backtest_results/round_3/hydro/hydro_v200.json)",
+      "Bash(curl -s http://localhost:8050)",
+      "Bash(curl -s http://localhost:8000)",
+      "Bash(python -m prosperity.tooling.dashboard --backtest-json artifacts/backtest_results/round_3/hydro/hydro_v200.json)",
+      "Bash(python -m prosperity.tooling.r3_backtest_html --help)",
+      "Bash(python -m prosperity.tooling.r3_backtest_html --json artifacts/backtest_results/round_3/hydro/hydro_v200.json --prices-dir data/round_3 --out artifacts/backtest_results/round_3/hydro/hydro_v200.html)",
+      "Bash(open /Users/thibautdesauty/Documents/Prosperity4/IMC_PROSPERITY_4_COMPETITION/artifacts/backtest_results/round_3/hydro/hydro_v200.html)"
     ]
   }
 }

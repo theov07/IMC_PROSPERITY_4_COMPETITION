@@ -92,14 +92,10 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "theo_best_clean_generalized_v4": ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedV4Strategy"),
     # ── Round 3 ──
     "option_mm_bs": ("prosperity.strategies.round_3.option_mm_bs", "OptionMMBSStrategy"),
-<<<<<<< HEAD
     "r3_gamma_scalp_zgated": ("prosperity.strategies.round_3.velvet_option_layers", "GammaScalpZGatedStrategy"),
     "r3_smile_iv_scalper": ("prosperity.strategies.round_3.velvet_option_layers", "SmileIVScalperStrategy"),
-    "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
     "r3_live_defensive_mm": ("prosperity.strategies.round_3.live_defensive_mm", "R3LiveDefensiveMMStrategy"),
-    "r3_guarded_anchor_mm": ("prosperity.strategies.round_3.guarded_anchor_mm", "R3GuardedAnchorMMStrategy"),
     "r3_hydro_reversion_mm": ("prosperity.strategies.round_3.hydro_reversion_mm", "R3HydroReversionMMStrategy"),
-=======
     "option_skew_signal_mm": ("prosperity.strategies.round_3.option_skew_signal_mm", "OptionSkewSignalMMStrategy"),
     "option_skew_dynamic_mm": ("prosperity.strategies.round_3.option_skew_dynamic_mm", "OptionSkewDynamicMMStrategy"),
     "option_live_probe_mm": ("prosperity.strategies.round_3.option_live_probe_mm", "OptionLiveProbeMMStrategy"),
@@ -109,7 +105,6 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "vega_neutral_pair_mm": ("prosperity.strategies.round_3.vega_neutral_pair_mm", "VegaNeutralPairMMStrategy"),
     "velvet_mr_taker_overlay": ("prosperity.strategies.round_3.velvet_mr_taker_overlay", "VelvetMRTakerOverlayStrategy"),
     "iv_momentum_mm": ("prosperity.strategies.round_3.iv_momentum_mm", "IVMomentumMMStrategy"),
-    "r3_guarded_anchor_mm": ("prosperity.strategies.round_3.r3_guarded_anchor_mm", "R3GuardedAnchorMMStrategy"),
     "velvet_r2_exhaustion_mm": ("prosperity.strategies.round_3.velvet_r2_exhaustion_mm", "VelvetR2ExhaustionMMStrategy"),
     "velvet_delta_hedger": ("prosperity.strategies.round_3.velvet_delta_hedger", "VelvetDeltaHedgerStrategy"),
     "vol_harvest": ("prosperity.strategies.round_3.vol_harvest", "VolHarvestStrategy"),
@@ -205,7 +200,6 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "gamma_scalp_v200":    ("prosperity.strategies.round_3.tibo.velvet_strat_v200", "GammaScalpV200"),
     # v200: HYDROGEL standalone
     "hydro_mm_v200":       ("prosperity.strategies.round_3.tibo.hydro_strat_v200", "HydroMMV200"),
->>>>>>> origin/main
 }
 
 
