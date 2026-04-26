@@ -122,7 +122,27 @@
       "Bash(python backtest.py --strategy tibo_velvet_v3_ask --round 3 --days 0 1 2 --match-trades realistic)",
       "Bash(python -m prosperity.tooling.grid_search --strategy tibo_velvet_v3_ask --round 3 --days 1 --execution-rule realistic --param VEV_5300.zscore_threshold=0.3,0.5,0.8,1.2,1.5,2.0 --top 6 --rank-by pnl)",
       "Bash(python scripts/export_submission.py --member tibo_velvet_v3 --round 3)",
-      "Bash(python backtest.py --strategy tibo_velvet_v24 --round 3 --days 0 --match-trades realistic)"
+      "Bash(python backtest.py --strategy tibo_velvet_v24 --round 3 --days 0 --match-trades realistic)",
+      "Bash(python -c \"from prosperity.config import get_round_config; cfg = get_round_config\\(3, 'tibo_velvet_v25'\\); print\\({k: v.strategy for k, v in cfg.items\\(\\)}\\)\")",
+      "Bash(python scripts/export_submission.py --member tibo_velvet_v25 --round 3)",
+      "Bash(python backtest.py --strategy tibo_velvet_v25 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v3 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python scripts/ablation_v25.py --days 0 1 2)",
+      "Bash(python -c \"from prosperity.config import ROUNDS; print\\(list\\(ROUNDS[3].keys\\(\\)\\)\\)\")",
+      "Bash(python backtest.py --strategy tibo_velvet_v25 --round 3 --days 0 1 2 --match-trades realistic --json-out artifacts/analysis/round_3/tibo_velvet_v25.json)",
+      "Bash(python -m prosperity.tooling.r3_backtest_html --json artifacts/analysis/round_3/tibo_velvet_v25.json --prices-dir data/round_3 --out artifacts/analysis/round_3/tibo_velvet_v25_report.html)",
+      "Bash(python -c \"from prosperity.config import get_round_config; cfg = get_round_config\\(3, 'tibo_velvet_v26'\\); print\\({k: \\(v.strategy, v.params.get\\('skip_when_expensive','n/a'\\), v.params.get\\('use_delta_hedge','n/a'\\), v.params.get\\('zscore_exec_mode','n/a'\\)\\) for k, v in cfg.items\\(\\)}\\)\")",
+      "Bash(python scripts/export_submission.py --member tibo_velvet_v26 --round 3)",
+      "Bash(python backtest.py --strategy tibo_velvet_v27 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v26 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_theo_v7 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python scripts/export_submission.py --member tibo_theo_v7 --round 3)",
+      "Bash(python backtest.py --strategy theo_v7_original --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v28 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v28_dyn_medium --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v28_dyn_fast   --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python backtest.py --strategy tibo_velvet_v28_dyn_slow   --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python scripts/export_submission.py --member tibo_velvet_v28 --round 3)"
     ]
   }
 }

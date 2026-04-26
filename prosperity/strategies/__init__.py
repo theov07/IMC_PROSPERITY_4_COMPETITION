@@ -124,10 +124,25 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     # ── Tibo Round 3 ──
     "gamma_scalp_zgated":  ("prosperity.strategies.round_3.tibo.gamma_scalp_zgated", "GammaScalpZGatedStrategy"),
     "velvet_strat":        ("prosperity.strategies.round_3.tibo.velvet_strat",    "VelvetStratV1"),
+    "velvet_strat_v25_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v25", "VelvetMMV25"),
+    "velvet_strat_v25_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v25", "VEVOptionMMV25"),
+    "gamma_scalp_v25":      ("prosperity.strategies.round_3.tibo.velvet_strat_v25", "GammaScalpV25"),
+    "velvet_strat_v26_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v26", "VelvetMMV26"),
+    "velvet_strat_v26_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v26", "VEVOptionMMV26"),
+    "gamma_scalp_v26":      ("prosperity.strategies.round_3.tibo.velvet_strat_v26", "GammaScalpV26"),
     "velvet_strat_v2_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v2", "VelvetMMV2"),
     "velvet_strat_v2_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v2", "VEVOptionMMV2"),
     "velvet_strat_v3_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v3", "VelvetMMV3"),
     "velvet_strat_v3_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v3", "VEVOptionMMV3"),
+    "smile_iv_scalper":          ("prosperity.strategies.round_3.tibo.smile_iv_scalper", "SmileIVScalerStrategy"),
+    "smile_iv_scaler_v27":       ("prosperity.strategies.round_3.tibo.velvet_strat_v27", "SmileIVScalerV27"),
+    "gamma_scalp_zgated_mixin":  ("prosperity.strategies.round_3.tibo.smile_iv_scalper", "GammaScalpZGatedMixinStrategy"),
+    "theo_v7_velvet_mm":         ("prosperity.strategies.round_3.tibo.velvet_strat_theo_v7", "TheoV7VelvetMM"),
+    "theo_v7_gamma_scalp":       ("prosperity.strategies.round_3.tibo.velvet_strat_theo_v7", "TheoV7GammaScalp"),
+    "dynamic_anchor_mm":         ("prosperity.strategies.round_3.tibo.mm_first_v4_combo", "DynamicAnchorMMStrategy"),
+    "velvet_strat_v28_mm":       ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "TheoV7VelvetMMV28"),
+    "gamma_scalp_v28":           ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "TheoV7GammaScalpV28"),
+    "velvet_strat_v28_opt":      ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "VEVOptionMMV28"),
 }
 
 

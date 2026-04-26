@@ -3380,6 +3380,405 @@ MEMBER_OVERRIDES["tibo_velvet_v24"] = {
 }
 
 
+# ── tibo_velvet_v25: best-of-both combination ────────────────────────────────
+# VELVETFRUIT + VEV_4000/5200/5300/5400: v3 approach (passive MM, never directional)
+# VEV_4500/5000/5100:                    v24 approach (GammaScalpZGated, new strikes)
+#
+# Root causes fixed vs v24:
+#   VELVETFRUIT:  mm_first_v4_combo AR signal shorted on D2 when price rose → -6.5k
+#                 Fix: revert to VelvetMMV3 (passive, consistent +6-7k/day, no direction bet)
+#   VEV_5200/5300: skip_when_expensive+threshold=0.5 silenced accumulation when VELVETFRUIT
+#                 trended (z>0.5 majority of D1) → only 27/90 units vs v3's 300
+#                 Fix: revert to VEVOptionMMV3 which never skips bids, only adapts ask
+
+MEMBER_OVERRIDES["tibo_velvet_v25"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+
+        # ── VEV options: run BEFORE VELVETFRUIT so delta is published first ──
+
+        # VEV_4000: symmetric passive MM, deep ITM spread capture
+        "VEV_4000": ProductConfig(symbol="VEV_4000", strategy="velvet_strat_v25_opt", position_limit=300,
+            params={**_VEV_OPT_V3_BASE, "strike": 4000.0, "maker_size_bid": 20, "maker_size_ask": 20,
+                    "ask_offset_neutral": 1, "ask_offset_sell": 1}),
+
+        # VEV_4500/5000/5100: GammaScalpV25 — active taker + passive bid accumulation
+        "VEV_4500": ProductConfig(symbol="VEV_4500", strategy="gamma_scalp_v25", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 4500}),
+        "VEV_5000": ProductConfig(symbol="VEV_5000", strategy="gamma_scalp_v25", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5000}),
+        "VEV_5100": ProductConfig(symbol="VEV_5100", strategy="gamma_scalp_v25", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5100}),
+
+        # VEV_5200/5300: bid-heavy passive MM, never skips bids, ask adapts to z-score
+        "VEV_5200": ProductConfig(symbol="VEV_5200", strategy="velvet_strat_v25_opt", position_limit=300,
+            params={**_VEV_OPT_V3_BASE, "strike": 5200.0, "maker_size_bid": 20, "maker_size_ask": 5}),
+        "VEV_5300": ProductConfig(symbol="VEV_5300", strategy="velvet_strat_v25_opt", position_limit=300,
+            params={**_VEV_OPT_V3_BASE, "strike": 5300.0, "maker_size_bid": 20, "maker_size_ask": 5}),
+
+        # VEV_5400: prevent_crossing=True — passive only, 1-tick spread
+        "VEV_5400": ProductConfig(symbol="VEV_5400", strategy="velvet_strat_v25_opt", position_limit=300,
+            params={**_VEV_OPT_V3_BASE, "strike": 5400.0, "maker_size_bid": 20, "maker_size_ask": 5,
+                    "prevent_crossing": True}),
+
+        "VEV_5500": None, "VEV_6000": None, "VEV_6500": None,
+
+        # VELVETFRUIT: passive penny-improve MM, no directional bets, delta hedge from VEV
+        "VELVETFRUIT_EXTRACT": ProductConfig(symbol="VELVETFRUIT_EXTRACT",
+            strategy="velvet_strat_v25_mm", position_limit=200, params=_VELVET_V3_MM_PARAMS),
+    },
+}
+
+
+# ── tibo_velvet_v26: ablation-driven simplification of v25 ───────────────────
+# Ablation findings (3-day, realistic fill mode):
+#   zscore_exec_mode removal (VEV_5200/5300/5400): 0 PnL impact → remove
+#   use_delta_hedge removal (VELVETFRUIT):          0 PnL impact → remove
+#   skip_when_expensive=False on V4500:            +2,326
+#   skip_when_expensive=False on V5000:            +2,265
+#   skip_when_expensive=True  on V5100 (keep):     saves -2,410 if removed
+#   Expected v26 total: ~+96,264 vs v25's +94,083
+
+_VELVET_V26_MM_PARAMS = dict(
+    maker_size_base_pct=0.30,
+    pct_kept_for_takers=0.15,
+    mid_smooth_window=50,
+    mid_smooth_half_life=20,
+    use_delta_hedge=False,        # ablation: zero impact, removed for simplicity
+    zscore_window=500,
+    ts_increment=100,
+    last_ts_value=999900,
+    log_flush_ts=1000,
+)
+
+_VEV_OPT_V26_BASE = dict(
+    **{k: v for k, v in _VEV_OPT_V3_BASE.items() if k != "zscore_exec_mode"},
+    zscore_exec_mode="none",      # ablation: zero impact, z-score ask adapt is dead code
+)
+
+MEMBER_OVERRIDES["tibo_velvet_v26"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+
+        # VEV_4000: symmetric passive MM, deep ITM spread capture
+        "VEV_4000": ProductConfig(symbol="VEV_4000", strategy="velvet_strat_v26_opt", position_limit=300,
+            params={**_VEV_OPT_V26_BASE, "strike": 4000.0, "maker_size_bid": 20, "maker_size_ask": 20,
+                    "ask_offset_neutral": 1, "ask_offset_sell": 1}),
+
+        # VEV_4500: skip gate OFF — delta≈1 so accumulating when expensive is fine (+2,326)
+        "VEV_4500": ProductConfig(symbol="VEV_4500", strategy="gamma_scalp_v26", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 4500, "skip_when_expensive": False}),
+
+        # VEV_5000: skip gate OFF — benefit from extra fills outweighs directional risk (+2,265)
+        "VEV_5000": ProductConfig(symbol="VEV_5000", strategy="gamma_scalp_v26", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5000, "skip_when_expensive": False}),
+
+        # VEV_5100: skip gate ON — closest to ATM (delta≈0.7), removing would cost -2,410
+        "VEV_5100": ProductConfig(symbol="VEV_5100", strategy="gamma_scalp_v26", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5100, "skip_when_expensive": True}),
+
+        # VEV_5200/5300: bid-heavy, mode="none" (z-score ask adapt was dead code)
+        "VEV_5200": ProductConfig(symbol="VEV_5200", strategy="velvet_strat_v26_opt", position_limit=300,
+            params={**_VEV_OPT_V26_BASE, "strike": 5200.0, "maker_size_bid": 20, "maker_size_ask": 5}),
+        "VEV_5300": ProductConfig(symbol="VEV_5300", strategy="velvet_strat_v26_opt", position_limit=300,
+            params={**_VEV_OPT_V26_BASE, "strike": 5300.0, "maker_size_bid": 20, "maker_size_ask": 5}),
+
+        # VEV_5400: passive only, prevent_crossing=True
+        "VEV_5400": ProductConfig(symbol="VEV_5400", strategy="velvet_strat_v26_opt", position_limit=300,
+            params={**_VEV_OPT_V26_BASE, "strike": 5400.0, "maker_size_bid": 20, "maker_size_ask": 5,
+                    "prevent_crossing": True}),
+
+        "VEV_5500": None, "VEV_6000": None, "VEV_6500": None,
+
+        # VELVETFRUIT: passive MM, delta hedge removed (zero ablation impact)
+        "VELVETFRUIT_EXTRACT": ProductConfig(symbol="VELVETFRUIT_EXTRACT",
+            strategy="velvet_strat_v26_mm", position_limit=200, params=_VELVET_V26_MM_PARAMS),
+    },
+}
+
+
+# ── tibo_velvet_v27: SmileIVScaler for OTM/NTM VEV strikes ──────────────────
+# Replaces VEV_5100/5200/5300/5400 with SmileIVScalerV27:
+#   - LOO polynomial smile fit → fair IV per strike
+#   - EWMA residual baseline + z-score
+#   - Aggressively buy when cheap vs smile (resid_z <= -0.9)
+#   - Exit when IV mean-reverts (resid_z >= 0.6 or price edge met)
+#   - Passive maker around smile reference price
+# Unchanged from v26: VELVETFRUIT, VEV_4000, VEV_4500, VEV_5000
+
+_SMILE_SCALPER_V27_BASE = dict(
+    tte_days_initial=5.0,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+    timestamp_units_per_day=1_000_000,
+    ts_increment=100,
+    last_ts_value=999900,
+    log_flush_ts=1000,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    # IV / smile params
+    prior_vol=0.0125,
+    implied_vol_prior=0.0125,
+    smile_degree=2,
+    smile_min_points=4,
+    sigma_floor=0.005,
+    sigma_cap=0.10,
+    # Residual EWMA
+    resid_ewma_alpha=0.03,
+    resid_std_init=0.0015,
+    resid_std_floor=0.0005,
+    # Active rank gate
+    active_reference_spot=5250.0,
+    active_expand_every=120.0,
+    active_base_count=6,
+    active_max_extra_count=2,
+    # Trading params
+    soft_position_limit=150,
+    entry_position_cap=60,
+    take_size=20,
+    maker_size=10,
+    maker_edge=2.0,
+    take_price_edge=2.0,
+    reduce_price_edge=1.0,
+    take_zscore=0.9,
+    reduce_zscore=0.6,
+    cheap_reset_z=0.35,
+    inventory_skew=3.0,
+    min_quote_price=1.0,
+    resid_warmup_ticks=60,
+    maker_join_best=True,
+    inactive_unwind_bias=1,
+    take_cooldown_ts=0,
+    position_limit=300,
+)
+
+MEMBER_OVERRIDES["tibo_velvet_v27"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+
+        # VEV_4000: deep ITM, symmetric passive MM — unchanged from v26
+        "VEV_4000": ProductConfig(symbol="VEV_4000", strategy="velvet_strat_v26_opt", position_limit=300,
+            params={**_VEV_OPT_V26_BASE, "strike": 4000.0, "maker_size_bid": 20, "maker_size_ask": 20,
+                    "ask_offset_neutral": 1, "ask_offset_sell": 1}),
+
+        # VEV_4500/5000: skip gate OFF — ablation confirmed +4,591 — unchanged from v26
+        "VEV_4500": ProductConfig(symbol="VEV_4500", strategy="gamma_scalp_v26", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 4500, "skip_when_expensive": False}),
+        "VEV_5000": ProductConfig(symbol="VEV_5000", strategy="gamma_scalp_v26", position_limit=300,
+            params={**_V24_GAMMA_BASE, "strike": 5000, "skip_when_expensive": False}),
+
+        # VEV_5100/5200/5300/5400: SmileIVScaler (replaces GammaScalp skip=True + passive MM)
+        "VEV_5100": ProductConfig(symbol="VEV_5100", strategy="smile_iv_scaler_v27", position_limit=300,
+            params={**_SMILE_SCALPER_V27_BASE, "strike": 5100}),
+        "VEV_5200": ProductConfig(symbol="VEV_5200", strategy="smile_iv_scaler_v27", position_limit=300,
+            params={**_SMILE_SCALPER_V27_BASE, "strike": 5200}),
+        "VEV_5300": ProductConfig(symbol="VEV_5300", strategy="smile_iv_scaler_v27", position_limit=300,
+            params={**_SMILE_SCALPER_V27_BASE, "strike": 5300}),
+        "VEV_5400": ProductConfig(symbol="VEV_5400", strategy="smile_iv_scaler_v27", position_limit=300,
+            params={**_SMILE_SCALPER_V27_BASE, "strike": 5400}),
+
+        "VEV_5500": None, "VEV_6000": None, "VEV_6500": None,
+
+        # VELVETFRUIT: unchanged from v26
+        "VELVETFRUIT_EXTRACT": ProductConfig(symbol="VELVETFRUIT_EXTRACT",
+            strategy="velvet_strat_v26_mm", position_limit=200, params=_VELVET_V26_MM_PARAMS),
+    },
+}
+
+
+# ── tibo_theo_v7: Theo's velvettuned_v7 as a member config ───────────────────
+# Params copied verbatim from velvettuned_v7.py PRODUCTS dict.
+# HYDROGEL excluded. VEV_4000–VEV_5500 all use TheoV7GammaScalp.
+
+_THEO_V7_VEV_BASE = dict(
+    boost_when_cheap=False,
+    edge_ticks=0.0,
+    enable_takers=False,
+    entry_size=30,
+    entry_size_boost=1.5,
+    implied_vol_prior=0.0125,
+    inv_bias_per_unit=0.02,
+    iv_ewma_alpha=0.3,
+    last_ts_value=999900,
+    log_flush_ts=1000,
+    maker_edge=2,
+    maker_size=20,
+    min_quote_price=2.0,
+    passive_bid_size=24,
+    penny_improve_around_mkt=True,
+    prior_vol=0.0125,
+    sigma_cap=0.1,
+    sigma_floor=0.005,
+    skip_when_expensive=True,
+    take_edge=3.0,
+    take_size=40,
+    target_qty=300,
+    timestamp_units_per_day=1_000_000,
+    ts_increment=100,
+    tte_days_initial=5.0,
+    underlying_symbol="VELVETFRUIT_EXTRACT",
+    unwind_tte_threshold=1.5,
+    use_smile=True,
+    zscore_boost_threshold=1.0,
+    zscore_window=500,
+    historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+)
+
+_THEO_V7_VELVET_PARAMS = dict(
+    anchor_alpha=0.02,
+    anchor_drift_bound=2.0,
+    anchor_price=5250.0,
+    ar_gain=0.3,
+    ar_shift_source="mid_smooth",
+    full_capacity_on_empty=True,
+    guard_inventory_dist=40.0,
+    guard_max_dist=80.0,
+    guard_min_dist=0.0,
+    guard_near_band=0.0,
+    guard_reversion_threshold=7.5,
+    guard_trend_alpha=0.45,
+    inventory_aversion_gamma=0.001,
+    last_ts_value=999900,
+    log_flush_ts=1000,
+    maker_size=30,
+    maker_size_base_pct=0.4,
+    passive_unwind_skew_ticks=1,
+    passive_unwind_trigger=0.38,
+    pct_kept_for_takers=0.005,
+    take_edge_hi=1.2,
+    take_edge_lo=0.6,
+    tighten_ticks=1,
+    toxic_size_frac=0.68,
+    toxic_threshold=0.6,
+    toxic_window=8,
+    ts_increment=100,
+    unwind_take_edge=3.0,
+)
+
+MEMBER_OVERRIDES["tibo_theo_v7"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT", strategy="theo_v7_velvet_mm",
+            position_limit=200, params=_THEO_V7_VELVET_PARAMS),
+
+        "VEV_4000": ProductConfig(symbol="VEV_4000", strategy="theo_v7_gamma_scalp",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 4000,
+                "zscore_skip_threshold": 1.5}),
+        "VEV_4500": ProductConfig(symbol="VEV_4500", strategy="theo_v7_gamma_scalp",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 4500,
+                "zscore_skip_threshold": 2.0}),
+        "VEV_5000": ProductConfig(symbol="VEV_5000", strategy="theo_v7_gamma_scalp",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5000,
+                "zscore_skip_threshold": 1.0}),
+        "VEV_5100": ProductConfig(symbol="VEV_5100", strategy="theo_v7_gamma_scalp",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5100,
+                "zscore_skip_threshold": 0.5}),
+        "VEV_5200": ProductConfig(symbol="VEV_5200", strategy="theo_v7_gamma_scalp",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5200,
+                "zscore_skip_threshold": 2.0}),
+        "VEV_5300": ProductConfig(symbol="VEV_5300", strategy="theo_v7_gamma_scalp",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5300,
+                "zscore_skip_threshold": 2.0}),
+        "VEV_5400": ProductConfig(symbol="VEV_5400", strategy="theo_v7_gamma_scalp",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5400,
+                "zscore_skip_threshold": 1.0}),
+        "VEV_5500": ProductConfig(symbol="VEV_5500", strategy="theo_v7_gamma_scalp",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5500,
+                "zscore_skip_threshold": 0.5}),
+
+        "VEV_6000": None, "VEV_6500": None,
+    },
+}
+
+
+# ── tibo_velvet_v28: best-of-both v7 + v26 ablation fixes ────────────────────
+# v7 wins: VELVETFRUIT (GuardedAnchor), VEV_4000 (GammaScalp active taker)
+# v26 wins: VEV_5200/5300/5400 (passive bid-heavy), VEV_5000 skip=False
+
+MEMBER_OVERRIDES["tibo_velvet_v28"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+
+        # VELVETFRUIT: v7's GuardedAnchorMM (unchanged from v7)
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT", strategy="velvet_strat_v28_mm",
+            position_limit=200, params=_THEO_V7_VELVET_PARAMS),
+
+        # VEV_4000: v7 GammaScalp, skip=True thresh=1.5 (unchanged)
+        "VEV_4000": ProductConfig(symbol="VEV_4000", strategy="gamma_scalp_v28",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 4000,
+                "zscore_skip_threshold": 1.5}),
+
+        # VEV_4500: v7 GammaScalp, skip=True thresh=2.0 (near-equiv to skip=False)
+        "VEV_4500": ProductConfig(symbol="VEV_4500", strategy="gamma_scalp_v28",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 4500,
+                "zscore_skip_threshold": 2.0}),
+
+        # VEV_5000: skip=False (v26 ablation: +2,265 vs skip=True thresh=0.5)
+        "VEV_5000": ProductConfig(symbol="VEV_5000", strategy="gamma_scalp_v28",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5000,
+                "skip_when_expensive": False}),
+
+        # VEV_5100: keep skip=True thresh=0.5 (ablation confirmed: removing costs -2,410)
+        "VEV_5100": ProductConfig(symbol="VEV_5100", strategy="gamma_scalp_v28",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5100,
+                "zscore_skip_threshold": 0.5}),
+
+        # VEV_5200/5300/5400: switch to passive bid-heavy (v26 wins: +6.2k total)
+        "VEV_5200": ProductConfig(symbol="VEV_5200", strategy="velvet_strat_v28_opt",
+            position_limit=300,
+            params={**_VEV_OPT_V26_BASE, "strike": 5200.0,
+                    "maker_size_bid": 20, "maker_size_ask": 5}),
+        "VEV_5300": ProductConfig(symbol="VEV_5300", strategy="velvet_strat_v28_opt",
+            position_limit=300,
+            params={**_VEV_OPT_V26_BASE, "strike": 5300.0,
+                    "maker_size_bid": 20, "maker_size_ask": 5}),
+        "VEV_5400": ProductConfig(symbol="VEV_5400", strategy="velvet_strat_v28_opt",
+            position_limit=300,
+            params={**_VEV_OPT_V26_BASE, "strike": 5400.0,
+                    "maker_size_bid": 20, "maker_size_ask": 5,
+                    "prevent_crossing": True}),
+
+        # VEV_5500: keep v7 GammaScalp
+        "VEV_5500": ProductConfig(symbol="VEV_5500", strategy="gamma_scalp_v28",
+            position_limit=300, params={**_THEO_V7_VEV_BASE, "strike": 5500,
+                "zscore_skip_threshold": 0.5}),
+
+        "VEV_6000": None, "VEV_6500": None,
+    },
+}
+
+
+# ── tibo_velvet_v28_dyn_*: v28 with dynamic slow-anchor on VELVETFRUIT ───────
+# Replace fixed anchor=5250 with a slow EWMA of mid.  Three alpha values:
+#   slow   (alpha=0.00005, HL ~14000 ticks = ~1.4 days)
+#   medium (alpha=0.0002,  HL ~ 3500 ticks = ~0.35 days)
+#   fast   (alpha=0.0008,  HL ~  866 ticks = ~0.09 days)
+# All other params identical to v28.  anchor_alpha=0 (no fast-drift on top),
+# anchor_drift_bound=0 (dynamic anchor is already smooth enough).
+
+def _v28_dyn_velvet_params(alpha: float) -> dict:
+    return dict(
+        _THEO_V7_VELVET_PARAMS,
+        anchor_price=5250.0,          # seed value only (overridden dynamically)
+        anchor_alpha=0.0,             # disable fast anchor drift
+        anchor_drift_bound=0.0,       # no drift bound
+        anchor_slow_alpha=alpha,
+    )
+
+def _make_v28_dyn(alpha: float) -> Dict:
+    vf = ProductConfig(
+        symbol="VELVETFRUIT_EXTRACT", strategy="dynamic_anchor_mm",
+        position_limit=200, params=_v28_dyn_velvet_params(alpha))
+    base = dict(MEMBER_OVERRIDES["tibo_velvet_v28"][3])
+    base["VELVETFRUIT_EXTRACT"] = vf
+    return {3: base}
+
+MEMBER_OVERRIDES["tibo_velvet_v28_dyn_slow"]   = _make_v28_dyn(0.00005)
+MEMBER_OVERRIDES["tibo_velvet_v28_dyn_medium"]  = _make_v28_dyn(0.0002)
+MEMBER_OVERRIDES["tibo_velvet_v28_dyn_fast"]    = _make_v28_dyn(0.0008)
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
