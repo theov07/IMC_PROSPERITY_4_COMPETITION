@@ -229,6 +229,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
     # ── HEAD-only Round 3 ──
     "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
+    # ── Round 4 ──
+    "oracle_replay_r4d3": ("prosperity/strategies/round_4/oracle_replay_d3.py", "OracleReplayR4D3Strategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
