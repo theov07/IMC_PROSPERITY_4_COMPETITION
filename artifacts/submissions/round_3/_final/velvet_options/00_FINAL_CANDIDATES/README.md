@@ -14,8 +14,8 @@ not overfit. The IDEA wins, the magic number doesn't matter.
 | **TOP0_LOWEST_DD** v52_theo_minimal | +147,679 | -59,356 | 2.488 | Lowest DD, no v6/v7 features |
 | **TOP1_BEST_RATIO** v57_v7_passive_unwind ★ | +156,010 | **-59,720** | **2.612** | **DEFAULT** — strictly dominates v53 |
 | **TOP2_BALANCED** v58_v7_with_5300 | +158,696 | -62,165 | 2.553 | + VEV_5300 — strictly dominates v54 AND v56 |
-| **TOP3_MAX_PNL_SAFE** v60_v7_per_strike_z_unwind | +162,792 | -73,970 | 2.201 | Per-strike z + unwind, dominates v54 (+6.4k PnL, -250 DD) |
-| **TOP4_MAX_PNL_STRETCH** v59_v7_max_pnl_unwind | **+165,680** | -80,244 | 2.065 | All 8 strikes + unwind, dominates v55 — **highest PnL** |
+| **TOP3_MAX_PNL_SAFE** v61_tibo_far_otm NEW | +160,766 | -68,228 | **2.356** | Tibo's 2-sided MM on VEV_5300/5400 (re-enable far OTM safely) — **better ratio than v60** |
+| **TOP4_MAX_PNL_STRETCH** v62_tibo_5200_5400 NEW | **+165,476** | -76,360 | 2.167 | + Tibo's MM on VEV_5200 too (replaces gamma_scalp) — **dominates v59 in DD/ratio** |
 
 ### Win story per VELVET enhancement
 
@@ -77,11 +77,32 @@ The key magic number `0.38` was tuned by Theo. We tested its sensitivity:
 | 05_MAX_PNL_STRETCH v12_r2velvet | +94,614 | -60,508 | 1.56 | Pre-Theo |
 
 ## REMOVED (dominated)
-- ~~v53_v6_toxic_flow~~ → dominated by v57 (PnL up 6.4k, DD down 250)
+- ~~v53_v6_toxic_flow~~ → dominated by v57
 - ~~v50_theo_integrated~~ → dominated by v58
-- ~~v56_v6_with_5300~~ → dominated by v58 (PnL up 6.4k, DD down 250)
-- ~~v54_v6_per_strike_z~~ → dominated by v60 (PnL up 6.4k, DD down 250)
-- ~~v55_v6_full~~ → dominated by v59 (PnL up 6.4k, DD down 250)
+- ~~v56_v6_with_5300~~ → dominated by v58
+- ~~v54_v6_per_strike_z~~ → dominated by v60 then v61
+- ~~v55_v6_full~~ → dominated by v59 then v62
+- ~~v60_v7_per_strike_z_unwind~~ → replaced by v61 (better ratio 2.356 vs 2.201)
+- ~~v59_v7_max_pnl_unwind~~ → replaced by v62 (better DD: 76k vs 80k, ratio 2.167 vs 2.065)
+
+## Tibo v28 integration (the new alpha)
+
+Tibo's v28 strategy (`tibo_velvet_v28`) hit 142k velvet+options-only (below our 156k v57)
+because his options config has issues (VEV_5100 skipped entirely costs him -19.5k).
+But his **VEVOptionMMV3 strategy on far-OTM strikes is genuine alpha**:
+
+  - 2-sided passive MM (bid 20 / ask 5 wide @ best_ask+9)
+  - Z-score gating with mode='none' (default penny-improve / wide-ask)
+  - Unlike gamma_scalp_zgated (target_qty long-only, drag on far OTM),
+    this lets us flip out via small ask fills
+
+Per-strike measurement (Tibo vs us):
+- VEV_5200: Tibo 11,882 vs us 7,172 (+4,710 with 2-sided MM)
+- VEV_5300: Tibo 4,426 vs us 0 disabled (+4,426 re-enabled)
+- VEV_5400: Tibo 330 vs us 0 disabled (+330 re-enabled)
+
+v61 = our v57 + Tibo's MM on 5300/5400 only (keep IV gate on 5200) — +4,756 PnL
+v62 = our v57 + Tibo's MM on 5200/5300/5400 — +9,466 PnL (replaces our IV gate on 5200 too)
 
 ## Decision rules
 

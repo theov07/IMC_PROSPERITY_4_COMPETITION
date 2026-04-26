@@ -1,5 +1,170 @@
 # Round 3 Findings
 
+## LATEST — Tibo's VEVOptionMMV3 (2-sided far-OTM MM) integrated → +9,466 PnL (Leo2 2026-04-26)
+
+Tibo shared `tibo_velvet_v28` (PnL 142,087 — velvet+options only, below our 156k v57). But
+he has genuine alpha on far-OTM options.
+
+**Tibo's idea**: instead of `gamma_scalp_zgated` (target_qty long-only, drag on far-OTM),
+use `VEVOptionMMV3` 2-sided MM (bid 20 penny-improve / ask 5 wide @ best_ask+9). This lets
+us flip out of inventory periodically.
+
+| Strike | Tibo PnL | v57 PnL | Diff |
+|---|---:|---:|---:|
+| VEV_5200 | 11,882 | 7,172 | +4,710 |
+| VEV_5300 | 4,426 | 0 disabled | +4,426 |
+| VEV_5400 | 330 | 0 disabled | +330 |
+
+Built `prosperity/strategies/round_3/vev_option_mm_v3.py`. Created v61/v62:
+
+| Variant | PnL | DD | Ratio | vs v57 |
+|---|---:|---:|---:|---:|
+| **v61 (TOP3 NEW)** | 160,766 | 68,228 | **2.356** | +4,756 PnL / +8,508 DD |
+| **v62 (TOP4 NEW)** | 165,476 | 76,360 | 2.167 | +9,466 PnL / +16,640 DD |
+
+v61 replaces v60 (better ratio 2.356 vs 2.201).
+v62 replaces v59 (lower DD 76k vs 80k, better ratio 2.167 vs 2.065).
+
+**Final lineup**: TOP0 v52 / TOP1 v57 ★ / TOP2 v58 / TOP3 v61 / TOP4 v62.
+Removed (dominated): v53, v50, v54, v55, v56, v59, v60.
+
+## LATEST - r3_live_alpha_core_v1 built (Codex 2026-04-26)
+
+Implemented the live-evidence core requested by Leo:
+
+- member config: `r3_live_alpha_core_v1` in `prosperity/config.py`;
+- upload folder:
+  `artifacts/submissions/round_3/a_tester_sur_imc_live/live_alpha_core/`;
+- upload file:
+  `r3_live_alpha_core_v1_round3_submission_stripped_minified.py`;
+- backtest JSONs:
+  `artifacts/backtest_results/round_3/live_alpha_core/r3_live_alpha_core_v1_day2.json`
+  and
+  `artifacts/backtest_results/round_3/live_alpha_core/r3_live_alpha_core_v1_3days.json`.
+
+Design:
+
+- `HYDROGEL_PACK`: fixed-anchor v4_F5 clean HYDRO base.
+- `VELVETFRUIT_EXTRACT`: small passive `naive_tight_mm`; no flow-follow.
+- `VEV_4000`: tiny passive `option_mm_bs`, no takers.
+- `VEV_4500`: dynamic z/IV-gated `gamma_scalp_zgated`, capped at target `160`.
+- `VEV_5000/5100/5200`: conservative dynamic z/IV-gated legs, target `60`.
+- `VEV_5300+`: disabled.
+
+Validation:
+
+- raw export: `124,931` bytes;
+- stripped+minified upload: `73,841` bytes;
+- syntax OK, no banned imports, `Trader.__init__` OK, `run()` OK;
+- p99 runtime about `1.35ms`.
+
+Realistic backtest:
+
+| Window | Total PnL |
+|---|---:|
+| Day 2 | `+46,211.5` |
+| 3 days | `+120,332` |
+
+3-day product PnL:
+
+| Product | PnL | Max pos |
+|---|---:|---:|
+| HYDROGEL_PACK | `+86,838` | `195` |
+| VELVETFRUIT_EXTRACT | `+3,290` | `40` |
+| VEV_4000 | `+8,809.5` | `44` |
+| VEV_4500 | `+11,679` | `160` |
+| VEV_5000 | `+3,654` | `60` |
+| VEV_5100 | `+3,063` | `60` |
+| VEV_5200 | `+2,998.5` | `60` |
+| VEV_5300+ | `0` | `0` |
+
+Read:
+
+- This is a live-alignment candidate, not max historical PnL. It deliberately
+  gives up the large v57/v58 backtest option stack to avoid the live-toxic
+  `VEV_5400+`, gap-sweep, and VELVET flow-follow behavior.
+- `VEV_5200` is the weakest included leg: PnL is positive, but 3-day
+  short-horizon markout is slightly negative. Keep it for now only because the
+  IMC live campaign showed positive small-size behavior in `03/04/05`.
+
+## LATEST - Full IMC live alpha campaign 00A..17 (Codex 2026-04-26)
+
+Parsed all 20 live logs from Leo's IMC campaign: `00A`, `00B`, `00C`, and
+`01` through `17`.
+
+Artifacts:
+
+- `scripts/analyze_r3_live_alpha_campaign.py`
+- `artifacts/analysis/round_3_live_alpha/live_alpha_campaign_report.md`
+- `artifacts/analysis/round_3_live_alpha/run_summary.csv`
+- `artifacts/analysis/round_3_live_alpha/product_pnl.csv`
+- `artifacts/analysis/round_3_live_alpha/trade_markout_summary.csv`
+- `artifacts/analysis/round_3_live_alpha/submission_trades_enriched.csv`
+
+Sanity checks:
+
+- All 20 logs have the same `activity_hash` (`fb716fc58b88c179`), so run-to-run
+  comparisons are on the same visible market path.
+- `outside_market` fills = `0 / 3720`. We did not find a live off-market fill
+  exploit in these logs.
+- `participant_summary.csv` is empty: no named buyer/seller alpha is visible in
+  these official logs yet.
+- Probe `10` (options far quotes) had zero fills. Far option quote alpha is dead
+  on this live path.
+
+Run ranking:
+
+| Run | Strategy | Live PnL | Read |
+|---|---:|---:|---|
+| `03/04/05` | dynamic skew auto/follow/fade | `+1,134` | best clean option package; all three identical, so no follow-vs-fade discrimination |
+| `14` | IV momentum conservative | `+1,023` | strong but risky: VELVET ends `-183`, VEV_5400 loses `-214` |
+| `06` | old options alpha | `+916` | conservative baseline works |
+| `01` | passive skew signal | `+776` | low-risk signal works |
+| `00A` | all-products far quotes | `+760` | mostly HYDRO + VELVET, not off-market fills |
+| `09` | HYDRO far quotes | `+490` | HYDRO live edge confirmed |
+| `08` | VELVET flow follow | `+75` | weak PnL with toxic markouts |
+| `11/12/13/15/16/00B` | gap/flow/aggro/vol harvest probes | negative | reject these live overlays |
+
+Per-product live alpha:
+
+- `HYDROGEL_PACK`: clean. Run `09`/`00A` gives `+489.8`, 35 volume,
+  `markout_5 = +6.16`, adverse rate `5.7%`.
+- `VELVETFRUIT_EXTRACT`: passive is clean, flow-follow is toxic.
+  Passive package: 273 volume, `markout_5 = +1.25`, adverse `19.8%`.
+  Flow-follow/taker variants: `markout_5 ~= -1.8..-1.9`, adverse `75%+`.
+- `VEV_4000`: two regimes. Tiny passive skew is excellent (`15` volume,
+  `markout_5 = +10.4`). Aggressive/gap/flow is catastrophic (`253..288`
+  volume, `markout_5 ~= -9.5`, adverse `95%+`). Do not generalize the passive
+  result into a taker/gap rule.
+- `VEV_4500`: strongest new option leg. Dynamic/IV package gives `45..46`
+  volume, `markout_5 ~= +2.0`, adverse `15%`, PnL about `+244..249`.
+- `VEV_5000/5100/5200`: safe only as small conservative dynamic skew. Dynamic
+  package markouts are positive; aggressive IV momentum and vol-harvest versions
+  are strongly adverse.
+- `VEV_5400`: negative in conservative IV momentum (`-214`, `markout_5=-0.59`)
+  and worse in aggro. Disable for live-scoring candidates unless a new signal
+  proves otherwise.
+- `VEV_5500/6000/6500`: no edge in these logs; they mostly pay the half-spread.
+
+Most important correction to earlier notes:
+
+- "VEV_4000 is toxic" is only true for aggressive/gap/flow execution.
+- The small passive VEV_4000 leg remains good live on this path.
+- The robust live option core is `VEV_4000` tiny passive + `VEV_4500` dynamic +
+  small `VEV_5000/5100/5200`, while avoiding large taker inventory.
+
+Candidate build from live evidence:
+
+- `live_alpha_core_v1`: HYDRO clean passive/anchor + VELVET passive MM +
+  VEV_4000 tiny passive + VEV_4500 dynamic + small conservative
+  VEV_5000/5100/5200. Disable `VEV_5400+`, disable option gap sweeps, disable
+  VELVET flow-follow takers. Estimated live-path PnL is about `+1,624`
+  (`03/04/05` + clean HYDRO `09`), before any implementation interaction.
+- `iv_momentum_conservative_no_5400`: run `14` without VEV_5400 would have
+  estimated live PnL around `+1,237` on this path, or about `+1,727` with clean
+  HYDRO added, but must cap VELVET exposure because run `14` ended at `-183`
+  VELVET with negative short-horizon markouts.
+
 ## LATEST — Theo v7 passive unwind integrated → +6,434 PnL on VELVET (Leo2 2026-04-26)
 
 Theo shared `r3_velvet_options_v7_passiveunwind`. Diff vs v6 was tiny (3 lines, all in

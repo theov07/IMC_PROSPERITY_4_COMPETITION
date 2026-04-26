@@ -114,6 +114,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "option_skew_dynamic_mm": ("prosperity/strategies/round_3/option_skew_dynamic_mm.py", "OptionSkewDynamicMMStrategy"),
     "option_live_probe_mm": ("prosperity/strategies/round_3/option_live_probe_mm.py", "OptionLiveProbeMMStrategy"),
     "diagnostic_probe_mm": ("prosperity/strategies/round_3/diagnostic_probe_mm.py", "DiagnosticProbeMMStrategy"),
+    "vev_option_mm_v3": ("prosperity/strategies/round_3/vev_option_mm_v3.py", "VEVOptionMMV3Strategy"),
     "gamma_scalp_zgated":  ("prosperity/strategies/round_3/gamma_scalp_zgated.py", "GammaScalpZGatedStrategy"),
     "vega_neutral_pair_mm": ("prosperity/strategies/round_3/vega_neutral_pair_mm.py", "VegaNeutralPairMMStrategy"),
     "velvet_mr_taker_overlay": ("prosperity/strategies/round_3/velvet_mr_taker_overlay.py", "VelvetMRTakerOverlayStrategy"),

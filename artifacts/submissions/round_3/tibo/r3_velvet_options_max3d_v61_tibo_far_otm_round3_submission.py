@@ -2498,6 +2498,139 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             out["GuardOn"] = float(use_anchor)
         return out
 
+
+# ── prosperity/strategies/round_3/vev_option_mm_v3.py ─────────────────────────────
+
+class VEVOptionMMV3Strategy(BaseStrategy):
+    """Tibo's 2-sided passive MM with z-score gating (default mode='none')."""
+
+    # ── Z-score (self-contained from VELVET spot) ──────────────────────────
+    def _compute_zscore(self, state: TradingState, memory: Dict[str, Any]) -> Optional[float]:
+        S = self._get_spot(state)
+        if S is None:
+            return None
+        window = int(self.params.get("zscore_window", 500))
+        buf: List[float] = memory.setdefault("_velvet_buf", [])
+        buf.append(S)
+        if len(buf) > window:
+            buf[:] = buf[-window:]
+        if len(buf) < max(3, window // 4):
+            return None
+        n = len(buf)
+        mean = sum(buf) / n
+        var = sum((x - mean) ** 2 for x in buf) / max(n - 1, 1)
+        std = var ** 0.5
+        if std < 1e-9:
+            return None
+        return (S - mean) / std
+
+    def _signal_state(self, z: Optional[float]) -> str:
+        if z is None:
+            return "neutral"
+        threshold = float(self.params.get("zscore_threshold", 1.0))
+        if z < -threshold:
+            return "cheap"
+        if z > threshold:
+            return "expensive"
+        return "neutral"
+
+    def _quote_bid(self, book: BookSnapshot, signal: str, mode: str) -> Optional[int]:
+        if book.best_bid is None:
+            return None
+        if mode in ("bid_only", "both"):
+            if signal == "cheap" and bool(self.params.get("allow_taker", True)):
+                return book.best_ask if book.best_ask is not None else book.best_bid + 1
+            if signal == "expensive":
+                return None  # skip bid when expensive
+        bid = book.best_bid + 1
+        if bool(self.params.get("prevent_crossing", False)):
+            if book.best_ask is not None and bid >= book.best_ask:
+                bid = book.best_ask - 1
+        return bid
+
+    def _quote_ask(self, book: BookSnapshot, signal: str, mode: str) -> Optional[int]:
+        if book.best_ask is None:
+            return None
+        neutral_offset = int(self.params.get("ask_offset_neutral", 10))
+        if mode in ("ask_adapt", "both"):
+            if signal == "expensive":
+                return book.best_ask - 1
+            if signal == "cheap":
+                return book.best_ask + neutral_offset + 5
+        return book.best_ask - 1 + neutral_offset
+
+    def _resolve_tte(self, state: TradingState) -> float:
+        tte0 = resolve_initial_tte_days(
+            state.traderData,
+            float(self.params.get("tte_days_initial", 5.0)),
+            self.params.get("historical_tte_by_day"),
+        )
+        ts_per_day = timestamp_units_per_day_from_params(self.params)
+        return max(0.01, time_to_expiry_days(int(state.timestamp), tte0, timestamp_units_per_day=ts_per_day))
+
+    def _get_spot(self, state: TradingState) -> Optional[float]:
+        underlying = str(self.params.get("underlying_symbol", "VELVETFRUIT_EXTRACT"))
+        od = state.order_depths.get(underlying)
+        if od is None:
+            return None
+        bb = max(od.buy_orders.keys()) if od.buy_orders else None
+        ba = min(od.sell_orders.keys()) if od.sell_orders else None
+        if bb is not None and ba is not None:
+            return (bb + ba) / 2.0
+        return float(bb or ba or 0) or None
+
+    def _post_orders(
+        self,
+        bid_px: Optional[int],
+        ask_px: Optional[int],
+        buy_cap: int,
+        sell_cap: int,
+    ) -> List[Order]:
+        size_bid = int(self.params.get("maker_size_bid", 20))
+        size_ask = int(self.params.get("maker_size_ask", 5))
+        orders: List[Order] = []
+        if bid_px is not None and bid_px > 0 and buy_cap > 0:
+            orders.append(Order(self.product, bid_px, min(size_bid, buy_cap)))
+        if ask_px is not None and ask_px > 0 and sell_cap > 0 and size_ask > 0:
+            orders.append(Order(self.product, ask_px, -min(size_ask, sell_cap)))
+        return orders
+
+    def compute_orders(
+        self,
+        state: TradingState,
+        book: BookSnapshot,
+        order_depth: OrderDepth,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> Tuple[List[Order], int]:
+        if book.best_bid is None or book.best_ask is None:
+            return [], 0
+        mid = 0.5 * (book.best_bid + book.best_ask)
+        if mid < float(self.params.get("min_quote_price", 2.0)):
+            return [], 0
+
+        z = self._compute_zscore(state, memory)
+        memory["_zscore"] = z
+        mode = str(self.params.get("zscore_exec_mode", "none"))
+        signal = self._signal_state(z)
+
+        buy_cap = self.buy_capacity(position)
+        sell_cap = self.sell_capacity(position)
+
+        bid_px = self._quote_bid(book, signal, mode)
+        ask_px = self._quote_ask(book, signal, mode)
+
+        # Safety: prevent crossing
+        if bid_px is not None and ask_px is not None and ask_px <= bid_px:
+            ask_px = bid_px + 1
+
+        orders = self._post_orders(bid_px, ask_px, buy_cap, sell_cap)
+        return orders, 0
+
+    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        z = memory.get("_zscore")
+        return {"z_velvet": round(z, 3)} if z is not None else {}
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 PRODUCTS = {'VELVETFRUIT_EXTRACT': {'anchor_alpha': 0.02,
@@ -2562,16 +2695,22 @@ PRODUCTS = {'VELVETFRUIT_EXTRACT': {'anchor_alpha': 0.02,
               'unwind_tte_threshold': 1.5,
               'use_smile': True,
               'zscore_boost_threshold': 1.0,
-              'zscore_skip_threshold': 1.5,
+              'zscore_skip_threshold': 0.5,
               'zscore_window': 500},
  'VEV_4500': {'boost_when_cheap': False,
               'edge_ticks': 0.0,
               'enable_takers': False,
               'entry_size': 30,
-              'entry_size_boost': 1.5,
               'implied_vol_prior': 0.0125,
               'inv_bias_per_unit': 0.02,
+              'iv_boost_threshold': 0.001,
+              'iv_delta_threshold': 0.0003,
               'iv_ewma_alpha': 0.3,
+              'iv_ewma_fast_alpha': 0.1,
+              'iv_ewma_slow_alpha': 0.02,
+              'iv_passive_boost': 1.5,
+              'iv_residual_gate': True,
+              'iv_skip_threshold': 0.001,
               'last_ts_value': 999900,
               'log_flush_ts': 1000,
               'maker_edge': 2,
@@ -2595,17 +2734,22 @@ PRODUCTS = {'VELVETFRUIT_EXTRACT': {'anchor_alpha': 0.02,
               'underlying_symbol': 'VELVETFRUIT_EXTRACT',
               'unwind_tte_threshold': 1.5,
               'use_smile': True,
-              'zscore_boost_threshold': 1.0,
-              'zscore_skip_threshold': 2.0,
+              'zscore_skip_threshold': 0.5,
               'zscore_window': 500},
  'VEV_5000': {'boost_when_cheap': False,
               'edge_ticks': 0.0,
               'enable_takers': False,
               'entry_size': 30,
-              'entry_size_boost': 1.5,
               'implied_vol_prior': 0.0125,
               'inv_bias_per_unit': 0.02,
+              'iv_boost_threshold': 0.001,
+              'iv_delta_threshold': 0.0003,
               'iv_ewma_alpha': 0.3,
+              'iv_ewma_fast_alpha': 0.1,
+              'iv_ewma_slow_alpha': 0.02,
+              'iv_passive_boost': 1.5,
+              'iv_residual_gate': True,
+              'iv_skip_threshold': 0.001,
               'last_ts_value': 999900,
               'log_flush_ts': 1000,
               'maker_edge': 2,
@@ -2629,17 +2773,22 @@ PRODUCTS = {'VELVETFRUIT_EXTRACT': {'anchor_alpha': 0.02,
               'underlying_symbol': 'VELVETFRUIT_EXTRACT',
               'unwind_tte_threshold': 1.5,
               'use_smile': True,
-              'zscore_boost_threshold': 1.0,
-              'zscore_skip_threshold': 1.0,
+              'zscore_skip_threshold': 0.5,
               'zscore_window': 500},
  'VEV_5100': {'boost_when_cheap': False,
               'edge_ticks': 0.0,
               'enable_takers': False,
               'entry_size': 30,
-              'entry_size_boost': 1.5,
               'implied_vol_prior': 0.0125,
               'inv_bias_per_unit': 0.02,
+              'iv_boost_threshold': 0.001,
+              'iv_delta_threshold': 0.0003,
               'iv_ewma_alpha': 0.3,
+              'iv_ewma_fast_alpha': 0.1,
+              'iv_ewma_slow_alpha': 0.02,
+              'iv_passive_boost': 1.5,
+              'iv_residual_gate': True,
+              'iv_skip_threshold': 0.001,
               'last_ts_value': 999900,
               'log_flush_ts': 1000,
               'maker_edge': 2,
@@ -2663,17 +2812,22 @@ PRODUCTS = {'VELVETFRUIT_EXTRACT': {'anchor_alpha': 0.02,
               'underlying_symbol': 'VELVETFRUIT_EXTRACT',
               'unwind_tte_threshold': 1.5,
               'use_smile': True,
-              'zscore_boost_threshold': 1.0,
               'zscore_skip_threshold': 0.5,
               'zscore_window': 500},
  'VEV_5200': {'boost_when_cheap': False,
               'edge_ticks': 0.0,
               'enable_takers': False,
               'entry_size': 30,
-              'entry_size_boost': 1.5,
               'implied_vol_prior': 0.0125,
               'inv_bias_per_unit': 0.02,
+              'iv_boost_threshold': 0.001,
+              'iv_delta_threshold': 0.0003,
               'iv_ewma_alpha': 0.3,
+              'iv_ewma_fast_alpha': 0.1,
+              'iv_ewma_slow_alpha': 0.02,
+              'iv_passive_boost': 1.5,
+              'iv_residual_gate': True,
+              'iv_skip_threshold': 0.001,
               'last_ts_value': 999900,
               'log_flush_ts': 1000,
               'maker_edge': 2,
@@ -2697,11 +2851,76 @@ PRODUCTS = {'VELVETFRUIT_EXTRACT': {'anchor_alpha': 0.02,
               'underlying_symbol': 'VELVETFRUIT_EXTRACT',
               'unwind_tte_threshold': 1.5,
               'use_smile': True,
-              'zscore_boost_threshold': 1.0,
-              'zscore_skip_threshold': 2.0,
+              'zscore_skip_threshold': 0.5,
+              'zscore_window': 500},
+ 'VEV_5300': {'ask_offset_neutral': 10,
+              'ask_offset_sell': 1,
+              'delta_sigma': 0.022,
+              'enable_takers': False,
+              'inv_bias_per_unit': 0.02,
+              'iv_ewma_alpha': 0.3,
+              'last_ts_value': 999900,
+              'log_flush_ts': 1000,
+              'maker_edge': 2,
+              'maker_size': 20,
+              'maker_size_ask': 5,
+              'maker_size_bid': 20,
+              'min_quote_price': 2.0,
+              'penny_improve_around_mkt': True,
+              'position_limit': 300,
+              'prevent_crossing': False,
+              'prior_vol': 0.0125,
+              'sigma_cap': 0.1,
+              'sigma_floor': 0.005,
+              'strategy': 'vev_option_mm_v3',
+              'strike': 5300.0,
+              'take_edge': 3.0,
+              'take_size': 40,
+              'timestamp_units_per_day': 1000000,
+              'ts_increment': 100,
+              'tte_days_initial': 5.0,
+              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
+              'use_smile': True,
+              'zscore_bid_max': 4.0,
+              'zscore_bid_scale': 2.0,
+              'zscore_exec_mode': 'none',
+              'zscore_threshold': 1.0,
+              'zscore_window': 500},
+ 'VEV_5400': {'ask_offset_neutral': 10,
+              'ask_offset_sell': 1,
+              'delta_sigma': 0.022,
+              'enable_takers': False,
+              'inv_bias_per_unit': 0.02,
+              'iv_ewma_alpha': 0.3,
+              'last_ts_value': 999900,
+              'log_flush_ts': 1000,
+              'maker_edge': 2,
+              'maker_size': 20,
+              'maker_size_ask': 5,
+              'maker_size_bid': 20,
+              'min_quote_price': 2.0,
+              'penny_improve_around_mkt': True,
+              'position_limit': 300,
+              'prevent_crossing': True,
+              'prior_vol': 0.0125,
+              'sigma_cap': 0.1,
+              'sigma_floor': 0.005,
+              'strategy': 'vev_option_mm_v3',
+              'strike': 5400.0,
+              'take_edge': 3.0,
+              'take_size': 40,
+              'timestamp_units_per_day': 1000000,
+              'ts_increment': 100,
+              'tte_days_initial': 5.0,
+              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
+              'use_smile': True,
+              'zscore_bid_max': 4.0,
+              'zscore_bid_scale': 2.0,
+              'zscore_exec_mode': 'none',
+              'zscore_threshold': 1.0,
               'zscore_window': 500}}
 
-STRATEGY_CLASSES = {"gamma_scalp_zgated": GammaScalpZGatedStrategy, "r3_guarded_anchor_mm": R3GuardedAnchorMMStrategy}
+STRATEGY_CLASSES = {"gamma_scalp_zgated": GammaScalpZGatedStrategy, "r3_guarded_anchor_mm": R3GuardedAnchorMMStrategy, "vev_option_mm_v3": VEVOptionMMV3Strategy}
 
 # ── Trader ────────────────────────────────────────────────────────────────────
 

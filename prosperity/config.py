@@ -5763,6 +5763,93 @@ for _suffix, _trigger in [("030", 0.30), ("040", 0.40), ("050", 0.50)]:
     }
 
 
+# v61: v57 base (R3GuardedAnchor + toxic + unwind on VELVET, gamma_scalp+IV gate on 4500-5200)
+# + Tibo's VEVOptionMMV3 (2-sided passive MM) on VEV_5300/5400 (re-enable far-OTM strikes)
+# Tibo proved: 2-sided MM beats gamma_scalp on far-OTM by ~6k because we can flip out
+def _tibo_vev_mm(strike: int, prevent_crossing: bool = False, **extra: Any) -> Dict[str, Any]:
+    return _override(
+        ROUND_3[f"VEV_{strike}"],
+        position_limit=300,
+        strategy="vev_option_mm_v3",
+        strike=float(strike),
+        ask_offset_neutral=10,
+        ask_offset_sell=1,
+        delta_sigma=0.022,
+        maker_size_ask=5,
+        maker_size_bid=20,
+        min_quote_price=2.0,
+        prevent_crossing=prevent_crossing,
+        zscore_bid_max=4.0,
+        zscore_bid_scale=2.0,
+        zscore_exec_mode="none",
+        zscore_threshold=1.0,
+        zscore_window=500,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+        tte_days_initial=5.0,
+        timestamp_units_per_day=1000000,
+        historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
+        **extra,
+    )
+
+
+# v61: v57 + 2-sided MM on VEV_5300/5400 (re-enable with safe approach)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v61_tibo_far_otm"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        # Tibo's far-OTM MM (re-enable 5300/5400 with 2-sided)
+        "VEV_5300": _tibo_vev_mm(5300),
+        "VEV_5400": _tibo_vev_mm(5400, prevent_crossing=True),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# v62: v61 + replace gamma_scalp on 5200 with Tibo's 2-sided MM (full Tibo far-OTM mode)
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v62_tibo_5200_5400"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100]
+        },
+        # Tibo's far-OTM MM (5200/5300/5400 all 2-sided)
+        "VEV_5200": _tibo_vev_mm(5200),
+        "VEV_5300": _tibo_vev_mm(5300),
+        "VEV_5400": _tibo_vev_mm(5400, prevent_crossing=True),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
 # v59: v55 (max PnL stretch with all 8 strikes per-strike z) + passive unwind on VELVET
 # Goal: capture +6.4k VELVET boost from passive unwind on top of v55's max PnL setup
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v59_v7_max_pnl_unwind"] = {
