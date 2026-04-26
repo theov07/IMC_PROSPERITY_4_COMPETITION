@@ -2419,6 +2419,9 @@ MEMBER_OVERRIDES["r3_velvet_options_v3_hydro_optionblend"] = {
         "VEV_5500": None,
         "VEV_6000": None,
         "VEV_6500": None,
+    },
+}
+
 
 # ── CHAMPION FINAL v7 : OSM full_capacity + IPR v7_continuous ──
 MEMBER_OVERRIDES["champion_final_v7"] = {
@@ -2775,14 +2778,11 @@ MEMBER_OVERRIDES["champion_osm_v4only"] = {
 }
 
 
-<<<<<<< HEAD
-=======
 # ──────────────────────────────────────────────────────────────────────────────
 # R3 HEDGED CHAMPION — naive_tight_mm on HYDROGEL + velvet_delta_hedger on
 # VELVETFRUIT (reads option positions from coordinator to offset delta) +
 # option_mm_bs on vouchers (default ROUND_3 config).
 # ──────────────────────────────────────────────────────────────────────────────
->>>>>>> origin/main
 _THEO_R3_ACTIVE_OPTION_STRIKES = (5400, 5500)
 
 _THEO_R3_UNDERLYING = _override(
@@ -2873,6 +2873,9 @@ _R3_LIVE_DEFENSIVE_PARAMS = dict(
     inventory_reduce_ratio=0.35,
     inventory_stop_ratio=0.62,
     unwind_boost=1.45,
+)
+
+
 MEMBER_OVERRIDES["r3_hedged_champion"] = {
     3: {
         "HYDROGEL_PACK": _override(
@@ -5515,6 +5518,10 @@ MEMBER_OVERRIDES["r3_live_defensive_v1"] = {
             **_R3_LIVE_DEFENSIVE_PARAMS,
         ),
         # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
+    },
+}
+
+
 # v12: passive-only hedger (taker_edge huge → never fires), small size skew
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v12_dh_passive"] = {
     3: {
@@ -5538,7 +5545,13 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v12_dh_passive"] = {
 # benefits from defensive trend/inventory throttling. Options remain the stable
 # passive BS MM.
 MEMBER_OVERRIDES["r3_live_hybrid_v1"] = {
+    3: {},  # placeholder — original content lost in bad merge
+}
+
+
 # v13: low-freq hedger — taker only on huge imbalance + bigger passive bias
+
+
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v13_dh_lowfreq"] = {
     3: {
         **_v11_options_only(),
@@ -7711,28 +7724,7 @@ MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
             position_limit=200,
             **_R3_LIVE_DEFENSIVE_PARAMS,
         ),
-        # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
-            strategy="velvet_delta_hedger",
-            position_limit=200,
-            underlying_symbol="VELVETFRUIT_EXTRACT",
-            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500],
-            strike_prefix="VEV_",
-            tte_days_initial=5.0,
-            timestamp_units_per_day=1000000,
-            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
-            target_delta=0.0,
-            hedge_taker_edge=30.0,
-            max_hedge_size=50,
-            passive_base_size=30,
-            passive_skew_per_delta=0.5,
-            quote_inside_book=True,
-            sigma_floor=0.005,
-            sigma_cap=0.10,
-            prior_vol=0.0215,
-            log_flush_ts=1000,
-            ts_increment=100,
-            last_ts_value=999900,
-        ),
+        # VEV options: vol_harvest strategy (orphan velvet_delta_hedger params dropped — bad merge artifact)
         **{
             f"VEV_{k}": ProductConfig(
                 symbol=f"VEV_{k}",
@@ -7781,6 +7773,8 @@ _R3_GUARDED_VELVET_PARAMS = {
     "guard_max_dist": 80.0,
     "guard_reversion_threshold": 0.0,
     "guard_inventory_dist": 40.0,
+}
+
 # Live-only alpha probes. These intentionally use event/flow/book-state rules,
 # not day/timestamp fingerprints. They are meant for IMC live discovery runs.
 _R3_LIVE_PROBE_VELVET_BASE = {
@@ -8571,6 +8565,10 @@ MEMBER_OVERRIDES["theo_r3_vol_arb_v2"] = {
         ),
         # Options: no override → inherits ROUND_3 default option_mm_bs on all 10 strikes.
         # VEV_5400/5500 vol_arb layer dropped (was getting 0 fills in live + backtest).
+    },
+}
+
+
 _R3_LIVE_PROBE_OPTION_BASE = dict(
     strategy="option_live_probe_mm",
     quote_trace_enabled=True,
@@ -8672,6 +8670,11 @@ MEMBER_OVERRIDES["theo_r3_vol_arb_v3"] = {
             position_limit=200,
             maker_size=30,
             tighten_ticks=1,
+        ),
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_live_probe_all_gap_flow_follow"] = {
     3: {
         "HYDROGEL_PACK": _r3_delta_live_probe(
@@ -10227,6 +10230,71 @@ MEMBER_OVERRIDES["tibo_v200_full"] = {
 
         "VEV_6000": None, "VEV_6500": None,
     }
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# R4 STARTING POINT — best HYDRO (v7b_guarded_loose) + best VELVET (v57)
+#                     + best options (mix v62 Tibo 2-sided MM + IV gate)
+#
+# Built 2026-04-26 as starting baseline for Round 4.
+# Backtest target: should match or beat final_sub_v100 (240,918 PnL / 56,858 DD / 4.237 ratio).
+# ──────────────────────────────────────────────────────────────────────────────
+
+# HYDRO best params (v7b_guarded_loose: guard threshold 3.0 + toxic + unwind)
+_R4_HYDRO_BEST_PARAMS = dict(
+    strategy="r3_guarded_anchor_mm",
+    position_limit=200,
+    quote_trace_enabled=True,
+    # toxic + unwind layers
+    toxic_threshold=0.6, toxic_window=8, toxic_size_frac=0.68,
+    passive_unwind_skew_ticks=1, passive_unwind_trigger=0.38,
+    inventory_aversion_gamma=0.001,
+    pct_kept_for_takers=0.005,
+    # guard params (LOOSE = threshold 3.0)
+    guard_trend_alpha=0.45,
+    guard_reversion_threshold=3.0,
+    guard_inventory_dist=40.0,
+    guard_min_dist=0.0,
+    guard_max_dist=80.0,
+    guard_near_band=0.0,
+)
+
+
+# r3_combined_best — combine our best on each product, validate vs final_sub_v100
+MEMBER_OVERRIDES["r3_combined_best"] = {
+    3: {
+        # HYDROGEL = v7b_guarded_loose
+        "HYDROGEL_PACK": _override(
+            _R3_HYDROGEL_V4_F5,
+            **_R4_HYDRO_BEST_PARAMS,
+        ),
+        # VELVET = v57 (R3GuardedAnchor + toxic + passive unwind)
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        # VEV options = v62 mix: per-strike z + Tibo 2-sided MM on 5200/5400
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"], position_limit=300, strike=4000,
+            **_gamma_zgated_params(target_qty=300, z_skip_threshold=0.5),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_with_iv_gate(z_skip=0.5),
+            )
+            for strike in [4500, 5000, 5100]
+        },
+        # 5200, 5400 use Tibo's 2-sided passive MM (better than gamma_scalp on far-OTM)
+        "VEV_5200": _tibo_vev_mm(5200),
+        "VEV_5300": _override(
+            ROUND_3["VEV_5300"], position_limit=300, strike=5300,
+            **_gamma_zgated_with_iv_gate(z_skip=0.8),
+        ),
+        "VEV_5400": _tibo_vev_mm(5400, prevent_crossing=True),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
 }
 
 
