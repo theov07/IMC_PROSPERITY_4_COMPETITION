@@ -10181,6 +10181,63 @@ MEMBER_OVERRIDES["hydro_v200_r4"] = {
     }
 }
 
+# ── v201: Mark 14 informed-trader gate (3 variants) ───────────────────────────
+_HYDRO_V201_BASE_PARAMS = dict(
+    **_HYDRO_V7B_PARAMS,
+    informed_trader_name="Mark 14",
+)
+
+_HYDRO_V201_NONE_PRODS = {
+    "VELVETFRUIT_EXTRACT": None,
+    "VEV_4000": None, "VEV_4500": None, "VEV_5000": None, "VEV_5100": None,
+    "VEV_5200": None, "VEV_5300": None, "VEV_5400": None, "VEV_5500": None,
+    "VEV_6000": None, "VEV_6500": None,
+}
+
+
+# Variant 2: Influenced — suppress opposing, scale agreeing sizes ×2
+MEMBER_OVERRIDES["hydro_v201_influenced"] = {
+    3: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_influenced",
+            position_limit=200,
+            params=dict(**_HYDRO_V201_BASE_PARAMS, mark14_agree_factor=2.0)),
+        **_HYDRO_V201_NONE_PRODS,
+    },
+    4: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_influenced",
+            position_limit=200,
+            params=dict(**_HYDRO_V201_BASE_PARAMS, mark14_agree_factor=2.0)),
+    },
+}
+
+# Variant 3: Cancel-against — only strip orders that oppose Mark 14, keep all others
+MEMBER_OVERRIDES["hydro_v201_cancel_against"] = {
+    3: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_cancel_against",
+            position_limit=200,
+            params=dict(**_HYDRO_V201_BASE_PARAMS)),
+        **_HYDRO_V201_NONE_PRODS,
+    },
+    4: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_cancel_against",
+            position_limit=200,
+            params=dict(**_HYDRO_V201_BASE_PARAMS)),
+    },
+}
+
+# Baseline v200 round 4 reference
+MEMBER_OVERRIDES["hydro_v200_r4_ref"] = {
+    4: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v200_r4",
+            position_limit=200, params=_HYDRO_V7B_PARAMS),
+    }
+}
+
 _tibo_v100_full = dict(MEMBER_OVERRIDES["tibo_velvet_v100"][3])
 _tibo_v100_full["HYDROGEL_PACK"] = ProductConfig(
     symbol="HYDROGEL_PACK", strategy="hydro_mm_v100",

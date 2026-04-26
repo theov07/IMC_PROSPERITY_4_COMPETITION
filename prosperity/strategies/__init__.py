@@ -202,6 +202,10 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydro_mm_v200":       ("prosperity.strategies.round_3.tibo.hydro_strat_v200", "HydroMMV200"),
     # v200r4: HYDROGEL standalone (round 4 — direct BaseStrategy subclass, same logic)
     "hydro_mm_v200_r4":    ("prosperity.strategies.round_4.tibo.hydro_strat_v200", "HydroMMV200"),
+    # v201: Mark 14 informed-trader gate (3 variants)
+    "hydro_mm_v201_ruled":         ("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201Ruled"),
+    "hydro_mm_v201_influenced":    ("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201Influenced"),
+    "hydro_mm_v201_cancel_against":("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201CancelAgainst"),
 }
 
 
