@@ -110,6 +110,17 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+    "option_skew_signal_mm": ("prosperity/strategies/round_3/option_skew_signal_mm.py", "OptionSkewSignalMMStrategy"),
+    "option_skew_dynamic_mm": ("prosperity/strategies/round_3/option_skew_dynamic_mm.py", "OptionSkewDynamicMMStrategy"),
+    "option_live_probe_mm": ("prosperity/strategies/round_3/option_live_probe_mm.py", "OptionLiveProbeMMStrategy"),
+    "diagnostic_probe_mm": ("prosperity/strategies/round_3/diagnostic_probe_mm.py", "DiagnosticProbeMMStrategy"),
+    "vev_option_mm_v3": ("prosperity/strategies/round_3/vev_option_mm_v3.py", "VEVOptionMMV3Strategy"),
+    "gamma_scalp_zgated":  ("prosperity/strategies/round_3/gamma_scalp_zgated.py", "GammaScalpZGatedStrategy"),
+    "vega_neutral_pair_mm": ("prosperity/strategies/round_3/vega_neutral_pair_mm.py", "VegaNeutralPairMMStrategy"),
+    "velvet_mr_taker_overlay": ("prosperity/strategies/round_3/velvet_mr_taker_overlay.py", "VelvetMRTakerOverlayStrategy"),
+    "iv_momentum_mm": ("prosperity/strategies/round_3/iv_momentum_mm.py", "IVMomentumMMStrategy"),
+    "r3_guarded_anchor_mm": ("prosperity/strategies/round_3/r3_guarded_anchor_mm.py", "R3GuardedAnchorMMStrategy"),
+    "velvet_r2_exhaustion_mm": ("prosperity/strategies/round_3/velvet_r2_exhaustion_mm.py", "VelvetR2ExhaustionMMStrategy"),
     "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
     "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
     "anchor_adaptive":    ("prosperity/strategies/round_3/anchor_adaptive.py", "AnchorAdaptiveStrategy"),
@@ -119,6 +130,36 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "hydrogel_oracle_inspired": ("prosperity/strategies/round_3/hydrogel_oracle_inspired.py", "HydrogelOracleInspiredStrategy"),
     "hydrogel_asym_mm": ("prosperity/strategies/round_3/hydrogel_asym_mm.py", "HydrogelAsymMMStrategy"),
     "hydrogel_follow_mm": ("prosperity/strategies/round_3/hydrogel_follow_mm.py", "HydrogelFollowMMStrategy"),
+    "hydrogel_ladder_mm": ("prosperity/strategies/round_3/hydrogel_ladder_mm.py", "HydrogelLadderMMStrategy"),
+    "hydrogel_ladder_v2": ("prosperity/strategies/round_3/hydrogel_ladder_v2.py", "HydrogelLadderV2Strategy"),
+    "hydrogel_reversion_mm": ("prosperity/strategies/round_3/hydrogel_reversion_mm.py", "HydrogelReversionMMStrategy"),
+    "hydrogel_combo_mm": ("prosperity/strategies/round_3/hydrogel_combo_mm.py", "HydrogelComboMMStrategy"),
+    "hydrogel_guarded_reversion_mm": (
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "HydrogelGuardedReversionMMStrategy",
+    ),
+    "hydro_anchor_zgate_mm": ("prosperity/strategies/round_3/hydro_anchor_zgate_mm.py", "HydroAnchorZGateMMStrategy"),
+    "hydrogel_super_mm": ("prosperity/strategies/round_3/hydrogel_super_mm.py", "HydrogelSuperMMStrategy"),
+    "hydrogel_reversion_v2": ("prosperity/strategies/round_3/hydrogel_reversion_v2.py", "HydrogelReversionV2Strategy"),
+    "hydrogel_regime_switch_mm": ("prosperity/strategies/round_3/hydrogel_regime_switch_mm.py", "HydrogelRegimeSwitchMMStrategy"),
+    "hydrogel_robust_mm": ("prosperity/strategies/round_3/hydrogel_robust_mm.py", "HydrogelRobustMMStrategy"),
+    "hydrogel_smart_mm": ("prosperity/strategies/round_3/hydrogel_smart_mm.py", "HydrogelSmartMMStrategy"),
+    "hydrogel_day2_selector_mm": (
+        "prosperity/strategies/round_3/hydrogel_day2_selector_mm.py",
+        "HydrogelDay2SelectorMMStrategy",
+    ),
+    "hydrogel_day2_oracle_anchor": (
+        "prosperity/strategies/round_3/hydrogel_day2_oracle_anchor.py",
+        "HydrogelDay2OracleAnchorStrategy",
+    ),
+    "hydrogel_day2_oracle_guarded": (
+        "prosperity/strategies/round_3/hydrogel_day2_oracle_guarded.py",
+        "HydrogelDay2OracleGuardedStrategy",
+    ),
+    "hydro_velvet_spread_skew_mm": (
+        "prosperity/strategies/round_3/hydro_velvet_spread_skew_mm.py",
+        "HydroVelvetSpreadSkewMMStrategy",
+    ),
     "hydrogel_exhaustion_taker": (
         "prosperity/strategies/round_3/hydrogel_exhaustion_taker.py",
         "HydrogelExhaustionTakerStrategy",
@@ -196,6 +237,14 @@ _R3_OPTIONS_DEPS = [
     "prosperity/options/implied_vol.py",
     "prosperity/options/smile.py",
     "prosperity/options/coordinator.py",
+    # NOTE: hedging.py omitted (only used by velvet_delta_hedger which we don't ship)
+]
+_R3_OPTIONS_DEPS_FULL = [  # explicit full list when hedging is needed
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+    "prosperity/options/coordinator.py",
     "prosperity/options/hedging.py",
 ]
 _R3_OPTIONS_DEPS_SLIM = [
@@ -210,11 +259,32 @@ _R3_OPTIONS_DEPS_BS_ONLY = [
 ]
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "option_mm_bs":       _R3_OPTIONS_DEPS,
-    "velvet_delta_hedger": _R3_OPTIONS_DEPS,
+    "option_skew_signal_mm": _R3_OPTIONS_DEPS,
+    "option_skew_dynamic_mm": _R3_OPTIONS_DEPS,
+    "velvet_delta_hedger": _R3_OPTIONS_DEPS_FULL,  # needs hedging.py
     "vol_harvest":        _R3_OPTIONS_DEPS,
     "ms_regime_option":   _R3_OPTIONS_DEPS,
     "anchor_adaptive":    ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "hydrogel_day2_selector_mm": [
+        "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+    ],
+    "hydrogel_day2_oracle_anchor": [
+        "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+    ],
+    "hydrogel_day2_oracle_guarded": [
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+    ],
     "gamma_scalp":        _R3_OPTIONS_DEPS,
+    "gamma_scalp_zgated": _R3_OPTIONS_DEPS,
+    "iv_momentum_mm": _R3_OPTIONS_DEPS,
+    "r3_guarded_anchor_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "velvet_r2_exhaustion_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "hydro_anchor_zgate_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
     "velvet_strat_v3_mm":  _R3_OPTIONS_DEPS_BS_ONLY,
     "velvet_strat_v3_opt": _R3_OPTIONS_DEPS_BS_ONLY,
