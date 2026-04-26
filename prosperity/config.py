@@ -175,7 +175,66 @@ ROUND_3: Dict[str, ProductConfig] = {
         for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
     },
 }
-ROUND_4: Dict[str, ProductConfig] = {}
+ROUND_4: Dict[str, ProductConfig] = {
+    "HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK",
+        strategy="naive_tight_mm",
+        position_limit=200,
+        params=dict(
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    ),
+    "VELVETFRUIT_EXTRACT": ProductConfig(
+        symbol="VELVETFRUIT_EXTRACT",
+        strategy="naive_tight_mm",
+        position_limit=200,
+        params=dict(
+            maker_size=30,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    ),
+    # 10 VELVETFRUIT_EXTRACT_VOUCHER options
+    # R4 TTE: live = 4 days (vs 5 in R3), historical days 1/2/3 = 7/6/5
+    **{
+        f"VEV_{k}": ProductConfig(
+            symbol=f"VEV_{k}",
+            strategy="option_mm_bs",
+            position_limit=300,
+            params=dict(
+                strike=k,
+                tte_days_initial=4.0,  # R4 LIVE TTE
+                ticks_per_day=10000,
+                timestamp_units_per_day=1000000,
+                historical_tte_by_day={1: 7.0, 2: 6.0, 3: 5.0},  # R4 backtest days
+                prior_vol=0.0125,
+                maker_edge=2,
+                maker_size=20,
+                take_edge=3.0,
+                take_size=40,
+                use_smile=True,
+                iv_ewma_alpha=0.3,
+                sigma_floor=0.005,
+                sigma_cap=0.10,
+                min_quote_price=2.0,
+                inv_bias_per_unit=0.02,
+                enable_takers=False,
+                penny_improve_around_mkt=True,
+                underlying_symbol="VELVETFRUIT_EXTRACT",
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        )
+        for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+    },
+}
 ROUND_5: Dict[str, ProductConfig] = {}
 
 
@@ -10259,6 +10318,98 @@ _R4_HYDRO_BEST_PARAMS = dict(
     guard_max_dist=80.0,
     guard_near_band=0.0,
 )
+
+
+# R4 TTE override: live=4 days, backtest days 1/2/3 = 7/6/5
+_R4_TTE_OVERRIDE = dict(
+    tte_days_initial=4.0,
+    historical_tte_by_day={1: 7.0, 2: 6.0, 3: 5.0},
+)
+
+
+# Helper: build option params with R4 TTE override applied last
+def _r4_gamma_params(z_skip=0.5, with_iv_gate=False):
+    base = _gamma_zgated_with_iv_gate(z_skip=z_skip) if with_iv_gate else _gamma_zgated_params(target_qty=300, z_skip_threshold=z_skip)
+    base.update(_R4_TTE_OVERRIDE)  # override TTE for R4
+    return base
+
+
+def _r4_tibo_vev_mm(strike, prevent_crossing=False):
+    """Tibo's 2-sided MM with R4 TTE."""
+    cfg = _tibo_vev_mm(strike, prevent_crossing=prevent_crossing)
+    # cfg is a ProductConfig — need to update its params
+    new_params = dict(cfg.params)
+    new_params["tte_days_initial"] = 4.0
+    new_params["historical_tte_by_day"] = {1: 7.0, 2: 6.0, 3: 5.0}
+    return ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                         position_limit=cfg.position_limit, params=new_params)
+
+
+# r4_combined_best — same as r3_combined_best but for ROUND_4
+MEMBER_OVERRIDES["r4_combined_best"] = {
+    4: {
+        # HYDROGEL = v7b_guarded_loose
+        "HYDROGEL_PACK": _override(
+            ROUND_4["HYDROGEL_PACK"],
+            **_R4_HYDRO_BEST_PARAMS,
+        ),
+        # VELVET = v57 (R3GuardedAnchor + toxic + passive unwind)
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_4["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        # VEV options = v62 mix: per-strike z + Tibo 2-sided MM on 5200/5400
+        "VEV_4000": _override(
+            ROUND_4["VEV_4000"], position_limit=300, strike=4000,
+            **_r4_gamma_params(z_skip=0.5, with_iv_gate=False),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_4[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_r4_gamma_params(z_skip=0.5, with_iv_gate=True),
+            )
+            for strike in [4500, 5000, 5100]
+        },
+        # 5200, 5400 use Tibo's 2-sided passive MM
+        "VEV_5200": _r4_tibo_vev_mm(5200),
+        "VEV_5300": _override(
+            ROUND_4["VEV_5300"], position_limit=300, strike=5300,
+            **_r4_gamma_params(z_skip=0.8, with_iv_gate=True),
+        ),
+        "VEV_5400": _r4_tibo_vev_mm(5400, prevent_crossing=True),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# r4_velvet_options_only — HYDROGEL DISABLED (was -104k in R4 D3)
+MEMBER_OVERRIDES["r4_velvet_options_only"] = {
+    4: {
+        "HYDROGEL_PACK": None,  # ⚠️ disable — was bleeding -104k in R4 backtest
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_4["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_4["VEV_4000"], position_limit=300, strike=4000,
+            **_r4_gamma_params(z_skip=0.5, with_iv_gate=False),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_4[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_r4_gamma_params(z_skip=0.5, with_iv_gate=True),
+            )
+            for strike in [4500, 5000, 5100]
+        },
+        "VEV_5200": _r4_tibo_vev_mm(5200),
+        "VEV_5300": _override(
+            ROUND_4["VEV_5300"], position_limit=300, strike=5300,
+            **_r4_gamma_params(z_skip=0.8, with_iv_gate=True),
+        ),
+        "VEV_5400": _r4_tibo_vev_mm(5400, prevent_crossing=True),
+        **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
 
 
 # r3_combined_best — combine our best on each product, validate vs final_sub_v100
