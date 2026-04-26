@@ -211,7 +211,8 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
 
     Logic identical to gamma_scalp_zgated.py, but uses the mixin's
     _resolve_spot() (shared tick-level cache) and _resolve_tte().
-    This matches Theo's velvettuned_v7 GammaScalpZGatedStrategy exactly.
+    This matches Theo's velvettuned_v7 GammaScalpZGatedStrategy exactly when
+    the optional IV residual gate parameters are left at their defaults.
     """
 
     def _read_params(self, state: TradingState) -> Dict[str, Any]:
@@ -236,6 +237,13 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
             "sell_when_very_expensive": bool(params.get("sell_when_very_expensive", False)),
             "zscore_sell_threshold":    float(params.get("zscore_sell_threshold", 1.5)),
             "sell_size_pct":            float(params.get("sell_size_pct", 0.10)),
+            "iv_residual_gate":         bool(params.get("iv_residual_gate", False)),
+            "iv_skip_threshold":        float(params.get("iv_skip_threshold", 0.0010)),
+            "iv_boost_threshold":       float(params.get("iv_boost_threshold", 0.0010)),
+            "iv_delta_threshold":       float(params.get("iv_delta_threshold", 0.0003)),
+            "iv_ewma_fast_alpha":       float(params.get("iv_ewma_fast_alpha", 0.10)),
+            "iv_ewma_slow_alpha":       float(params.get("iv_ewma_slow_alpha", 0.02)),
+            "iv_passive_boost":         float(params.get("iv_passive_boost", 1.5)),
         }
 
     def _update_zscore(self, S: float, memory: Dict[str, Any], params: Dict[str, Any]) -> Optional[float]:
@@ -253,6 +261,42 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
         if std < 1e-9:
             return None
         return (S - mean) / std
+
+    def _update_iv_residual(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+        spot: float,
+        params: Dict[str, Any],
+        ts: int,
+    ) -> Tuple[Optional[float], Optional[float]]:
+        strike = int(params["K"])
+        chain = self._build_chain_snapshot(state, memory, spot, params["T"], ts)
+        own_iv = chain.get(strike, {}).get("iv")
+        if own_iv is None:
+            return None, None
+        fair_iv = self._fit_leave_one_out_iv(
+            memory,
+            strike=strike,
+            chain=chain,
+            S=spot,
+            T=params["T"],
+            ts=ts,
+        )
+        if fair_iv is None:
+            return None, None
+        residual = float(own_iv) - float(fair_iv)
+        slow = memory.get("_iv_resid_slow")
+        fast = memory.get("_iv_resid_fast")
+        if slow is None or fast is None:
+            slow = residual
+            fast = residual
+        else:
+            slow = (1.0 - params["iv_ewma_slow_alpha"]) * float(slow) + params["iv_ewma_slow_alpha"] * residual
+            fast = (1.0 - params["iv_ewma_fast_alpha"]) * float(fast) + params["iv_ewma_fast_alpha"] * residual
+        memory["_iv_resid_slow"] = slow
+        memory["_iv_resid_fast"] = fast
+        return residual, float(fast) - float(slow)
 
     def compute_orders(
         self,
@@ -292,6 +336,20 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
                     orders.append(Order(self.product, ask_px, -qty))
             memory["_mode"] = "unwind"
             return orders, 0
+        memory["_iv_boost"] = False
+        if p["iv_residual_gate"]:
+            iv_resid, iv_resid_delta = self._update_iv_residual(state, memory, S, p, ts)
+            memory["_iv_resid"] = iv_resid
+            memory["_iv_resid_delta"] = iv_resid_delta
+            if iv_resid is not None and iv_resid_delta is not None:
+                if iv_resid < -p["iv_skip_threshold"] and iv_resid_delta < -p["iv_delta_threshold"]:
+                    memory["_mode"] = "iv_skip_falling"
+                    return orders, 0
+                if iv_resid > p["iv_boost_threshold"] and iv_resid_delta > p["iv_delta_threshold"]:
+                    memory["_iv_boost"] = True
+        else:
+            memory.pop("_iv_resid", None)
+            memory.pop("_iv_resid_delta", None)
         if (p["sell_when_very_expensive"] and z is not None
                 and z > p["zscore_sell_threshold"] and position > 0 and sell_cap > 0):
             ask_px = book.best_ask - 1
@@ -314,6 +372,8 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
             memory["_mode"] = "accumulate"
         eff_entry_size   = max(1, int(round(p["entry_size"]      * size_mult)))
         eff_passive_size = max(1, int(round(p["passive_bid_size"] * size_mult)))
+        if memory.get("_iv_boost", False):
+            eff_passive_size = max(1, int(round(eff_passive_size * p["iv_passive_boost"])))
         if buy_cap > 0 and position < p["target_qty"]:
             ask = book.best_ask
             if ask is not None and ask <= fair + p["edge_ticks"]:
@@ -336,10 +396,12 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
         out: Dict[str, float] = {}
         if (f := memory.get("_fair_iv"))   is not None: out["fair_iv"]   = float(f)
         if (z := memory.get("_velvet_z"))  is not None: out["velvet_z"]  = float(z)
+        if (r := memory.get("_iv_resid")) is not None: out["iv_resid"] = float(r)
+        if (d := memory.get("_iv_resid_delta")) is not None: out["iv_resid_delta"] = float(d)
         if (m := memory.get("_mode"))      is not None:
             out["mode"] = {"accumulate": 1.0, "unwind": 0.0,
                            "z_skipped_expensive": -1.0, "z_boost_cheap": 2.0,
-                           "z_profit_take": 0.5}.get(str(m), 0.5)
+                           "z_profit_take": 0.5, "iv_skip_falling": -1.5}.get(str(m), 0.5)
         return out
 
 
