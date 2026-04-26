@@ -122,6 +122,10 @@ class HydrogelFollowMMStrategy(BaseStrategy):
         bid_size, ask_size = self._quote_sizes(
             regime, effective_trend, effective_z, position, p
         )
+        quote_bid_price = None
+        quote_ask_price = None
+        quote_bid_size = 0
+        quote_ask_size = 0
 
         # ── Hard position cap ───────────────────────────────────────────
         hard_cap = p["hard_pos_cap"]
@@ -133,10 +137,14 @@ class HydrogelFollowMMStrategy(BaseStrategy):
         if bid_size > 0 and buy_cap > 0:
             qty = min(bid_size, buy_cap)
             orders.append(Order(self.product, bid_price, qty))
+            quote_bid_price = bid_price
+            quote_bid_size = qty
             buy_cap -= qty
         if ask_size > 0 and sell_cap > 0:
             qty = min(ask_size, sell_cap)
             orders.append(Order(self.product, ask_price, -qty))
+            quote_ask_price = ask_price
+            quote_ask_size = qty
             sell_cap -= qty
 
         # ── Aggressive unwind taker ─────────────────────────────────────
@@ -152,6 +160,23 @@ class HydrogelFollowMMStrategy(BaseStrategy):
             if take is not None:
                 orders.append(take)
 
+        self.log_quote_snapshot(
+            state=state,
+            memory=memory,
+            bid_price=quote_bid_price,
+            ask_price=quote_ask_price,
+            extras={
+                "bid_size": quote_bid_size,
+                "ask_size": quote_ask_size,
+                "mid": round(mid, 4),
+                "ema_fast": round(new_fast, 4),
+                "ema_slow": round(new_slow, 4),
+                "zscore": round(effective_z, 6),
+                "trend": round(effective_trend, 6),
+                "regime": {"flat": 0, "up_trend": 1, "down_trend": 2}.get(regime, -1),
+                "position": position,
+            },
+        )
         return orders, 0
 
     # ── Quote prices (penny-improve) ────────────────────────────────────

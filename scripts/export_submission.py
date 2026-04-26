@@ -110,6 +110,25 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+<<<<<<< HEAD
+    "r3_gamma_scalp_zgated": ("prosperity/strategies/round_3/velvet_option_layers.py", "GammaScalpZGatedStrategy"),
+    "r3_smile_iv_scalper": ("prosperity/strategies/round_3/velvet_option_layers.py", "SmileIVScalperStrategy"),
+    "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
+    "r3_live_defensive_mm": ("prosperity/strategies/round_3/live_defensive_mm.py", "R3LiveDefensiveMMStrategy"),
+    "r3_guarded_anchor_mm": ("prosperity/strategies/round_3/guarded_anchor_mm.py", "R3GuardedAnchorMMStrategy"),
+    "r3_hydro_reversion_mm": ("prosperity/strategies/round_3/hydro_reversion_mm.py", "R3HydroReversionMMStrategy"),
+=======
+    "option_skew_signal_mm": ("prosperity/strategies/round_3/option_skew_signal_mm.py", "OptionSkewSignalMMStrategy"),
+    "option_skew_dynamic_mm": ("prosperity/strategies/round_3/option_skew_dynamic_mm.py", "OptionSkewDynamicMMStrategy"),
+    "option_live_probe_mm": ("prosperity/strategies/round_3/option_live_probe_mm.py", "OptionLiveProbeMMStrategy"),
+    "diagnostic_probe_mm": ("prosperity/strategies/round_3/diagnostic_probe_mm.py", "DiagnosticProbeMMStrategy"),
+    "vev_option_mm_v3": ("prosperity/strategies/round_3/vev_option_mm_v3.py", "VEVOptionMMV3Strategy"),
+    "gamma_scalp_zgated":  ("prosperity/strategies/round_3/gamma_scalp_zgated.py", "GammaScalpZGatedStrategy"),
+    "vega_neutral_pair_mm": ("prosperity/strategies/round_3/vega_neutral_pair_mm.py", "VegaNeutralPairMMStrategy"),
+    "velvet_mr_taker_overlay": ("prosperity/strategies/round_3/velvet_mr_taker_overlay.py", "VelvetMRTakerOverlayStrategy"),
+    "iv_momentum_mm": ("prosperity/strategies/round_3/iv_momentum_mm.py", "IVMomentumMMStrategy"),
+    "r3_guarded_anchor_mm": ("prosperity/strategies/round_3/r3_guarded_anchor_mm.py", "R3GuardedAnchorMMStrategy"),
+    "velvet_r2_exhaustion_mm": ("prosperity/strategies/round_3/velvet_r2_exhaustion_mm.py", "VelvetR2ExhaustionMMStrategy"),
     "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
     "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
     "anchor_adaptive":    ("prosperity/strategies/round_3/anchor_adaptive.py", "AnchorAdaptiveStrategy"),
@@ -119,6 +138,36 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "hydrogel_oracle_inspired": ("prosperity/strategies/round_3/hydrogel_oracle_inspired.py", "HydrogelOracleInspiredStrategy"),
     "hydrogel_asym_mm": ("prosperity/strategies/round_3/hydrogel_asym_mm.py", "HydrogelAsymMMStrategy"),
     "hydrogel_follow_mm": ("prosperity/strategies/round_3/hydrogel_follow_mm.py", "HydrogelFollowMMStrategy"),
+    "hydrogel_ladder_mm": ("prosperity/strategies/round_3/hydrogel_ladder_mm.py", "HydrogelLadderMMStrategy"),
+    "hydrogel_ladder_v2": ("prosperity/strategies/round_3/hydrogel_ladder_v2.py", "HydrogelLadderV2Strategy"),
+    "hydrogel_reversion_mm": ("prosperity/strategies/round_3/hydrogel_reversion_mm.py", "HydrogelReversionMMStrategy"),
+    "hydrogel_combo_mm": ("prosperity/strategies/round_3/hydrogel_combo_mm.py", "HydrogelComboMMStrategy"),
+    "hydrogel_guarded_reversion_mm": (
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "HydrogelGuardedReversionMMStrategy",
+    ),
+    "hydro_anchor_zgate_mm": ("prosperity/strategies/round_3/hydro_anchor_zgate_mm.py", "HydroAnchorZGateMMStrategy"),
+    "hydrogel_super_mm": ("prosperity/strategies/round_3/hydrogel_super_mm.py", "HydrogelSuperMMStrategy"),
+    "hydrogel_reversion_v2": ("prosperity/strategies/round_3/hydrogel_reversion_v2.py", "HydrogelReversionV2Strategy"),
+    "hydrogel_regime_switch_mm": ("prosperity/strategies/round_3/hydrogel_regime_switch_mm.py", "HydrogelRegimeSwitchMMStrategy"),
+    "hydrogel_robust_mm": ("prosperity/strategies/round_3/hydrogel_robust_mm.py", "HydrogelRobustMMStrategy"),
+    "hydrogel_smart_mm": ("prosperity/strategies/round_3/hydrogel_smart_mm.py", "HydrogelSmartMMStrategy"),
+    "hydrogel_day2_selector_mm": (
+        "prosperity/strategies/round_3/hydrogel_day2_selector_mm.py",
+        "HydrogelDay2SelectorMMStrategy",
+    ),
+    "hydrogel_day2_oracle_anchor": (
+        "prosperity/strategies/round_3/hydrogel_day2_oracle_anchor.py",
+        "HydrogelDay2OracleAnchorStrategy",
+    ),
+    "hydrogel_day2_oracle_guarded": (
+        "prosperity/strategies/round_3/hydrogel_day2_oracle_guarded.py",
+        "HydrogelDay2OracleGuardedStrategy",
+    ),
+    "hydro_velvet_spread_skew_mm": (
+        "prosperity/strategies/round_3/hydro_velvet_spread_skew_mm.py",
+        "HydroVelvetSpreadSkewMMStrategy",
+    ),
     "hydrogel_exhaustion_taker": (
         "prosperity/strategies/round_3/hydrogel_exhaustion_taker.py",
         "HydrogelExhaustionTakerStrategy",
@@ -180,6 +229,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "velvet_strat_v3":     ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetStratV3"),
     "velvet_strat_v3_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetMMV3"),
     "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
+>>>>>>> origin/main
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -191,6 +241,14 @@ CORE_MODULES = [
 
 # Optional per-strategy file deps (paths inlined BEFORE the strategy file).
 _R3_OPTIONS_DEPS = [
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+    "prosperity/options/coordinator.py",
+    # NOTE: hedging.py omitted (only used by velvet_delta_hedger which we don't ship)
+]
+_R3_OPTIONS_DEPS_FULL = [  # explicit full list when hedging is needed
     "prosperity/options/time.py",
     "prosperity/options/black_scholes.py",
     "prosperity/options/implied_vol.py",
@@ -210,11 +268,52 @@ _R3_OPTIONS_DEPS_BS_ONLY = [
 ]
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "option_mm_bs":       _R3_OPTIONS_DEPS,
-    "velvet_delta_hedger": _R3_OPTIONS_DEPS,
+    "option_skew_signal_mm": _R3_OPTIONS_DEPS,
+    "option_skew_dynamic_mm": _R3_OPTIONS_DEPS,
+    "velvet_delta_hedger": _R3_OPTIONS_DEPS_FULL,  # needs hedging.py
     "vol_harvest":        _R3_OPTIONS_DEPS,
     "ms_regime_option":   _R3_OPTIONS_DEPS,
     "anchor_adaptive":    ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "hydrogel_day2_selector_mm": [
+        "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+    ],
+<<<<<<< HEAD
+    "r3_gamma_scalp_zgated": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+    "r3_smile_iv_scalper": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+    ],
+    "theo_r3_vol_arb_v1": [
+        "prosperity/options/time.py",
+        "prosperity/options/black_scholes.py",
+        "prosperity/options/implied_vol.py",
+        "prosperity/options/smile.py",
+=======
+    "hydrogel_day2_oracle_anchor": [
+        "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+>>>>>>> origin/main
+    ],
+    "hydrogel_day2_oracle_guarded": [
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+    ],
     "gamma_scalp":        _R3_OPTIONS_DEPS,
+    "gamma_scalp_zgated": _R3_OPTIONS_DEPS,
+    "iv_momentum_mm": _R3_OPTIONS_DEPS,
+    "r3_guarded_anchor_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "velvet_r2_exhaustion_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "hydro_anchor_zgate_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
     "velvet_strat_v3_mm":  _R3_OPTIONS_DEPS_BS_ONLY,
     "velvet_strat_v3_opt": _R3_OPTIONS_DEPS_BS_ONLY,
@@ -273,6 +372,9 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_generalized": ["round1_regression_mm_v5"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
+<<<<<<< HEAD
+    "r3_guarded_anchor_mm": ["mm_first_v4_combo"],
+=======
     "ms_regime_delta": ["option_mm_bs"],
     "ms_regime_option": ["option_mm_bs"],
     "velvet_strat_v25_mm":  ["velvet_strat_v3_mm", "gamma_scalp_zgated"],
@@ -362,6 +464,7 @@ STRATEGY_DEPS: dict[str, list[str]] = {
                                           "mm_first_v4_combo", "r3_guarded_anchor_mm",
                                           "theo_v7_velvet_mm", "theo_v7_gamma_scalp",
                                           "velvet_strat_v28_mm", "gamma_scalp_with_ask_v40"],
+>>>>>>> origin/main
 }
 
 # Params useful for local analysis/backtests but pointless in the live upload.
@@ -424,6 +527,40 @@ def _extract(source: str) -> tuple[list[str], str]:
     body_lines = [line for i, line in enumerate(src_lines, 1) if i not in skip]
     body_text = "".join(body_lines).strip()
     return external, body_text
+
+
+def _strip_docstrings_and_comment_lines(source: str) -> str:
+    """Strip docstrings/comment-only lines from a complete exported submission."""
+    tree = ast.parse(source)
+    docstring_lines: set[int] = set()
+
+    def collect_docstring_lines(node: ast.AST) -> None:
+        body = getattr(node, "body", None)
+        if not body:
+            return
+        first = body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            for line_no in range(first.lineno, first.end_lineno + 1):
+                docstring_lines.add(line_no)
+
+    collect_docstring_lines(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            collect_docstring_lines(node)
+
+    out: list[str] = []
+    for line_no, line in enumerate(source.splitlines(), 1):
+        stripped = line.strip()
+        if line_no in docstring_lines or stripped.startswith("#") or stripped == "":
+            continue
+        out.append(line.rstrip())
+    minified = "\n".join(out) + "\n"
+    ast.parse(minified)
+    return minified
 
 
 # ── Trader template (thin dispatch layer — not a strategy implementation) ──
@@ -708,6 +845,16 @@ def main() -> int:
         _TRADER_CLASS,
     ]
     output = "\n".join(parts)
+    before_minify = len(output.encode("utf-8"))
+    if before_minify > 100_000:
+        output = _strip_docstrings_and_comment_lines(output)
+        after_minify = len(output.encode("utf-8"))
+        print(f"Minified export: {before_minify:,} -> {after_minify:,} bytes")
+        if after_minify > 100_000:
+            print(
+                "WARNING: exported file is still above 100KB after minification",
+                file=sys.stderr,
+            )
 
     if args.output:
         output_path = Path(args.output)
