@@ -42,3 +42,5 @@ artifacts/analysis/round_3/backtest_*.json
 # Large backtest JSON dumps (>50MB, blocks GitHub push)
 artifacts/backtests/*.json
 artifacts/backtests/**/*.json
+artifacts/backtest_results/*
+artifacts/backtests/*
