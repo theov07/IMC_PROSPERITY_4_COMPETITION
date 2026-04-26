@@ -3765,6 +3765,77 @@ MEMBER_OVERRIDES["r3_hydro_anchor_max3d_v7"] = {
 }
 
 
+# r3_hydro_v7b_guarded_loose — guarded_v7 with PERMISSIVE guard (threshold 3.0 vs 7.5)
+# Guard fires less aggressively → should keep D0 win without losing D2
+def _hydro_v7_base():
+    return dict(
+        toxic_threshold=0.6, toxic_window=8, toxic_size_frac=0.68,
+        passive_unwind_skew_ticks=1, passive_unwind_trigger=0.38,
+        inventory_aversion_gamma=0.001,
+        pct_kept_for_takers=0.005,
+    )
+
+
+def _hydro_guard_params(threshold=7.5, inv_dist=40.0, max_dist=80.0, near_band=0.0):
+    return dict(
+        guard_trend_alpha=0.45,
+        guard_reversion_threshold=threshold,
+        guard_inventory_dist=inv_dist,
+        guard_min_dist=0.0,
+        guard_max_dist=max_dist,
+        guard_near_band=near_band,
+    )
+
+
+for label, gparams in [
+    ("v7b_guarded_loose",   _hydro_guard_params(threshold=3.0)),       # less restrictive
+    ("v7c_guarded_strict",  _hydro_guard_params(threshold=12.0)),      # more restrictive
+    ("v7d_guarded_nearband",_hydro_guard_params(threshold=7.5, near_band=20.0)),  # always-on within 20 of anchor
+    ("v7e_guarded_widedist", _hydro_guard_params(threshold=7.5, max_dist=120.0)), # extend reverting zone
+]:
+    MEMBER_OVERRIDES[f"r3_hydro_{label}"] = {
+        3: {
+            "HYDROGEL_PACK": _override(
+                _R3_HYDROGEL_V4_F5,
+                strategy="r3_guarded_anchor_mm",
+                quote_trace_enabled=True,
+                **_hydro_v7_base(),
+                **gparams,
+            ),
+            **_R3_HYDRO_DISABLE_REST,
+        },
+    }
+
+
+# v7f: max3d_v7 + ar_gain 0.3 (like VELVET, was 0.2 in HYDRO)
+MEMBER_OVERRIDES["r3_hydro_v7f_argain_03"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDROGEL_V4_F5,
+            quote_trace_enabled=True,
+            **_hydro_v7_base(),
+            ar_gain=0.3,
+        ),
+        **_R3_HYDRO_DISABLE_REST,
+    },
+}
+
+
+# v7g: max3d_v7 + stronger passive unwind (skew=2 vs 1)
+_v7g_params = _hydro_v7_base()
+_v7g_params["passive_unwind_skew_ticks"] = 2
+MEMBER_OVERRIDES["r3_hydro_v7g_unwind_skew2"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDROGEL_V4_F5,
+            quote_trace_enabled=True,
+            **_v7g_params,
+        ),
+        **_R3_HYDRO_DISABLE_REST,
+    },
+}
+
+
 # r3_hydro_guarded_v7 — apply R3GuardedAnchorMM to HYDROGEL (regime-aware anchor)
 # Tests if guard logic (skip anchor pull when wrong-way + drifting away) helps HYDRO.
 # HYDRO anchor=10000 might benefit from guarding when price drifts >40 ticks away.

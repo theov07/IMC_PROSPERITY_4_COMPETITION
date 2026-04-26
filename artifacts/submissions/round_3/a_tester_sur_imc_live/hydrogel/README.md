@@ -2,10 +2,11 @@
 
 ## Tier 1 — POST-Theo-v7 enhancements (NEW 2026-04-26)
 
-| File | 3d PnL | DD | Ratio | Profile |
-|---|---:|---:|---:|---|
-| **`01_HYDRO_BEST_CLEAN_v7__anchor_max3d_v7__pnl92k_dd19k_ratio486.py`** ★ | **+91,684** | **-18,872** | **4.858** | **NEW DEFAULT** — Theo v7 layers (toxic flow + passive unwind) added to max3d. +4,846 PnL with -104 DD vs base, all 3 days uniformly improved. Pareto win, NO overfit signs. |
-| `03_HYDRO_MAX_PNL_STRETCH_v7__guarded_v7__pnl103k_dd20k_ratio523_OVERFIT_WARNING.py` | +103,145 | -19,705 | 5.234 | ⚠️ **OVERFIT WARNING**: R3GuardedAnchor regime detector. D0 explodes (+18k vs base) but D2 regresses (-4k). Pattern is non-uniform — possible regime-overfit on day 0. Only pick if confident in similar live regime. |
+| File | 3d PnL | DD | Ratio | CV% | Profile |
+|---|---:|---:|---:|---:|---|
+| **`01_HYDRO_BEST_v7b__guarded_loose__pnl100k_dd19k_ratio523.py`** ★ | **+99,541** | **-19,030** | **5.23** | **18.2%** | **NEW DEFAULT** — guarded_v7 with PERMISSIVE guard (reversion_threshold=3.0 vs 7.5). Captures most of guarded_v7's D0 boost (+12k vs base) without losing D2 (-1.8k vs guarded_v7's -4k). MOST UNIFORM PnL distribution of all variants tested. |
+| `01_HYDRO_BEST_CLEAN_v7__anchor_max3d_v7__pnl92k_dd19k_ratio486.py` | +91,684 | -18,872 | 4.86 | 29.5% | Pure microstructure (toxic+unwind, no guard). Safest fallback if guard logic seems fragile in live. |
+| `03_HYDRO_MAX_PNL_STRETCH_v7__guarded_v7__pnl103k_dd20k_ratio523_OVERFIT_WARNING.py` | +103,145 | -19,705 | 5.23 | 23.0% | ⚠️ **OVERFIT WARNING**: full guarded_v7. D0 explodes (+18k vs base) but D2 regresses (-4k). Only pick if confident in similar live regime. |
 
 ## Tier 0 — Previous candidates (kept)
 
@@ -16,7 +17,9 @@
 
 ## Decision rules
 
-**Default upload** → `01_HYDRO_BEST_CLEAN_v7__anchor_max3d_v7` ★ (pure Pareto upgrade, no overfit signs)
+**Default upload** → `01_HYDRO_BEST_v7b__guarded_loose` ★ (best PnL among non-overfit, lowest CV at 18.2%, +12.7k vs base, +7.9k vs max3d_v7)
+
+**Conservative pure-microstructure fallback** → `01_HYDRO_BEST_CLEAN_v7__anchor_max3d_v7` (no guard logic at all, just toxic+unwind)
 
 **If you want max PnL with regime risk** → `03_HYDRO_MAX_PNL_STRETCH_v7__guarded_v7` (warning: D2 regresses, fragile)
 
