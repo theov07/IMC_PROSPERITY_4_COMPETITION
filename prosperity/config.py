@@ -10419,6 +10419,111 @@ MEMBER_OVERRIDES["r4_oracle_overfit"] = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# R4 VARIANTS — re-test all R3 ideas on R4 data (velvet+options only)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# v52 R4: minimal R3GuardedAnchor (no toxic, no unwind) — baseline
+MEMBER_OVERRIDES["r4_v52_minimal"] = {
+    4: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_4["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_GUARDED_VELVET_PARAMS,  # base R3 (no toxic, no unwind)
+        ),
+        "VEV_4000": _override(
+            ROUND_4["VEV_4000"], position_limit=300, strike=4000,
+            **_r4_gamma_params(z_skip=0.5, with_iv_gate=False),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_4[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_r4_gamma_params(z_skip=0.5, with_iv_gate=True),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v57 R4: + toxic flow + passive unwind (no 5300/5400)
+MEMBER_OVERRIDES["r4_v57_best_ratio"] = {
+    4: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_4["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_4["VEV_4000"], position_limit=300, strike=4000,
+            **_r4_gamma_params(z_skip=0.5, with_iv_gate=False),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_4[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_r4_gamma_params(z_skip=0.5, with_iv_gate=True),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v58 R4: v57 + VEV_5300 (with iv_gate z=0.8)
+MEMBER_OVERRIDES["r4_v58_balanced"] = {
+    4: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_4["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        "VEV_4000": _override(
+            ROUND_4["VEV_4000"], position_limit=300, strike=4000,
+            **_r4_gamma_params(z_skip=0.5, with_iv_gate=False),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_4[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_r4_gamma_params(z_skip=0.5, with_iv_gate=True),
+            )
+            for strike in [4500, 5000, 5100, 5200]
+        },
+        "VEV_5300": _override(
+            ROUND_4["VEV_5300"], position_limit=300, strike=5300,
+            **_r4_gamma_params(z_skip=0.8, with_iv_gate=True),
+        ),
+        **{f"VEV_{k}": None for k in [5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# v55 R4: full strikes 4000-5500 with per-strike z (Theo v6 thresholds)
+_R4_THEO_V6_Z_SKIP = {4000: 1.5, 4500: 2.0, 5000: 1.0, 5100: 0.5, 5200: 2.0, 5300: 2.0, 5400: 1.0, 5500: 0.5}
+MEMBER_OVERRIDES["r4_v55_full_strikes"] = {
+    4: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_4["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_4[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_r4_gamma_params(z_skip=_R4_THEO_V6_Z_SKIP[strike], with_iv_gate=False),
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500]
+        },
+        **{f"VEV_{k}": None for k in [6000, 6500]},
+    },
+}
+
+
+# v62 R4 = current baseline = r4_velvet_options_only (Tibo's MM on 5200/5400)
+# Already exists below
+
+
 # r4_velvet_options_only — HYDROGEL DISABLED (was -104k in R4 D3)
 MEMBER_OVERRIDES["r4_velvet_options_only"] = {
     4: {

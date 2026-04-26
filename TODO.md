@@ -2,6 +2,40 @@
 
 Priority list for turning this repository from a solid framework into a competition-winning platform.
 
+## Round 4 — Baseline locked, next iterations
+
+### Default upload (decided)
+- ★ `R4_v57_best_ratio__pnl152k_dd62k_ratio246.py` — best risk-adjusted (Ratio 2.46, PnL 152k, DD 62k, CV 47.8%)
+- Backup aggressive: `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py` (157k PnL, +11k DD)
+
+### High-priority R4 ideas (testable)
+- **Re-tune HYDROGEL for R4** — current R3 config bleeds -104k on D3.
+  - Anchor at 10000 over-trades and gets adversely picked
+  - Try pure passive small-size (live-confirmed +5.78 markout in tiny passive mode)
+  - Possibly anchor-free + z-score skew only
+- **Counterparty / "Mark" tracker** — R4 exposes buyer/seller names live.
+  - Map participant IDs to alpha (e.g., "Caesar" trades like X, "Penelope" like Y)
+  - Build per-counterparty toxic flow detector
+  - Enable side-aware passive size decisions
+- **Faster gamma_scalp warm-up** — current `zscore_window=500` = 50 ticks dead time.
+  - Reduce to 100-200 to start trading earlier on D3 (10000 ticks total)
+  - Test on R4 D3 only since D1/D2 are already saturated
+- **Re-test VEV_5400 with stricter z gate** — v55 with z=1.0 bleeds, but z=2.0+ might unlock +500
+- **VEV_5300 size optimization** — currently +1,535, might be 2-3x with proper sizing
+
+### LIVE-only alpha (untestable in backtest)
+- Informed vs uninformed trader detection on skew deformation
+- Gap exploit on thin option strikes (live order book required)
+- Time-of-session adaptive params (first 100 ticks = build, last 100 = harvest)
+- End-of-session unwind dynamics for large positions
+
+### Manual challenge (separate game)
+- AETHER_CRYSTAL exotics: chooser, binary put, knock-out put.
+- Underlying: GBM, 251% annualized vol, 4-step grid per day.
+- Solve independently from algo (manual ticket entry).
+
+---
+
 ## Round 3 LIVE alpha exploration (untestable in backtest — to do during live)
 
 Backtest space is saturated (Pareto frontier reached on velvet+options).
