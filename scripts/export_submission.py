@@ -92,6 +92,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "theo_best_clean_generalized_v2": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV2Strategy"),
     "theo_best_clean_generalized_v3": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV3Strategy"),
     "theo_best_clean_generalized_v4": ("prosperity/strategies/round_2/theo/theo_best_clean_generalized.py", "TheoBestCleanGeneralizedV4Strategy"),
+    "theo_best_clean_generalized_v7": ("prosperity/strategies/round_2/theo/theo_v7_continuous.py", "TheoBestCleanGeneralizedV7Strategy"),
     "mean_reversion":     ("prosperity/strategies/round_1/mean_reversion.py",          "MeanReversionStrategy"),
     "zscore":             ("prosperity/strategies/metal_winner/zscore.py",             "ZScoreStrategy"),
     "buy_and_hold":       ("prosperity/strategies/base/buy_and_hold.py",       "BuyAndHoldStrategy"),
@@ -109,12 +110,126 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
+<<<<<<< HEAD
     "r3_gamma_scalp_zgated": ("prosperity/strategies/round_3/velvet_option_layers.py", "GammaScalpZGatedStrategy"),
     "r3_smile_iv_scalper": ("prosperity/strategies/round_3/velvet_option_layers.py", "SmileIVScalperStrategy"),
     "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
     "r3_live_defensive_mm": ("prosperity/strategies/round_3/live_defensive_mm.py", "R3LiveDefensiveMMStrategy"),
     "r3_guarded_anchor_mm": ("prosperity/strategies/round_3/guarded_anchor_mm.py", "R3GuardedAnchorMMStrategy"),
     "r3_hydro_reversion_mm": ("prosperity/strategies/round_3/hydro_reversion_mm.py", "R3HydroReversionMMStrategy"),
+=======
+    "option_skew_signal_mm": ("prosperity/strategies/round_3/option_skew_signal_mm.py", "OptionSkewSignalMMStrategy"),
+    "option_skew_dynamic_mm": ("prosperity/strategies/round_3/option_skew_dynamic_mm.py", "OptionSkewDynamicMMStrategy"),
+    "option_live_probe_mm": ("prosperity/strategies/round_3/option_live_probe_mm.py", "OptionLiveProbeMMStrategy"),
+    "diagnostic_probe_mm": ("prosperity/strategies/round_3/diagnostic_probe_mm.py", "DiagnosticProbeMMStrategy"),
+    "vev_option_mm_v3": ("prosperity/strategies/round_3/vev_option_mm_v3.py", "VEVOptionMMV3Strategy"),
+    "gamma_scalp_zgated":  ("prosperity/strategies/round_3/gamma_scalp_zgated.py", "GammaScalpZGatedStrategy"),
+    "vega_neutral_pair_mm": ("prosperity/strategies/round_3/vega_neutral_pair_mm.py", "VegaNeutralPairMMStrategy"),
+    "velvet_mr_taker_overlay": ("prosperity/strategies/round_3/velvet_mr_taker_overlay.py", "VelvetMRTakerOverlayStrategy"),
+    "iv_momentum_mm": ("prosperity/strategies/round_3/iv_momentum_mm.py", "IVMomentumMMStrategy"),
+    "r3_guarded_anchor_mm": ("prosperity/strategies/round_3/r3_guarded_anchor_mm.py", "R3GuardedAnchorMMStrategy"),
+    "velvet_r2_exhaustion_mm": ("prosperity/strategies/round_3/velvet_r2_exhaustion_mm.py", "VelvetR2ExhaustionMMStrategy"),
+    "velvet_delta_hedger":("prosperity/strategies/round_3/velvet_delta_hedger.py", "VelvetDeltaHedgerStrategy"),
+    "vol_harvest":        ("prosperity/strategies/round_3/vol_harvest.py", "VolHarvestStrategy"),
+    "anchor_adaptive":    ("prosperity/strategies/round_3/anchor_adaptive.py", "AnchorAdaptiveStrategy"),
+    "gamma_scalp":        ("prosperity/strategies/round_3/gamma_scalp.py", "GammaScalpStrategy"),
+    "hydrogel_mm":        ("prosperity/strategies/round_3/hydrogel_mm.py", "HydrogelMMStrategy"),
+    "hydrogel_mean_rev_taker": ("prosperity/strategies/round_3/hydrogel_mean_rev_taker.py", "HydrogelMeanRevTakerStrategy"),
+    "hydrogel_oracle_inspired": ("prosperity/strategies/round_3/hydrogel_oracle_inspired.py", "HydrogelOracleInspiredStrategy"),
+    "hydrogel_asym_mm": ("prosperity/strategies/round_3/hydrogel_asym_mm.py", "HydrogelAsymMMStrategy"),
+    "hydrogel_follow_mm": ("prosperity/strategies/round_3/hydrogel_follow_mm.py", "HydrogelFollowMMStrategy"),
+    "hydrogel_ladder_mm": ("prosperity/strategies/round_3/hydrogel_ladder_mm.py", "HydrogelLadderMMStrategy"),
+    "hydrogel_ladder_v2": ("prosperity/strategies/round_3/hydrogel_ladder_v2.py", "HydrogelLadderV2Strategy"),
+    "hydrogel_reversion_mm": ("prosperity/strategies/round_3/hydrogel_reversion_mm.py", "HydrogelReversionMMStrategy"),
+    "hydrogel_combo_mm": ("prosperity/strategies/round_3/hydrogel_combo_mm.py", "HydrogelComboMMStrategy"),
+    "hydrogel_guarded_reversion_mm": (
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "HydrogelGuardedReversionMMStrategy",
+    ),
+    "hydro_anchor_zgate_mm": ("prosperity/strategies/round_3/hydro_anchor_zgate_mm.py", "HydroAnchorZGateMMStrategy"),
+    "hydrogel_super_mm": ("prosperity/strategies/round_3/hydrogel_super_mm.py", "HydrogelSuperMMStrategy"),
+    "hydrogel_reversion_v2": ("prosperity/strategies/round_3/hydrogel_reversion_v2.py", "HydrogelReversionV2Strategy"),
+    "hydrogel_regime_switch_mm": ("prosperity/strategies/round_3/hydrogel_regime_switch_mm.py", "HydrogelRegimeSwitchMMStrategy"),
+    "hydrogel_robust_mm": ("prosperity/strategies/round_3/hydrogel_robust_mm.py", "HydrogelRobustMMStrategy"),
+    "hydrogel_smart_mm": ("prosperity/strategies/round_3/hydrogel_smart_mm.py", "HydrogelSmartMMStrategy"),
+    "hydrogel_day2_selector_mm": (
+        "prosperity/strategies/round_3/hydrogel_day2_selector_mm.py",
+        "HydrogelDay2SelectorMMStrategy",
+    ),
+    "hydrogel_day2_oracle_anchor": (
+        "prosperity/strategies/round_3/hydrogel_day2_oracle_anchor.py",
+        "HydrogelDay2OracleAnchorStrategy",
+    ),
+    "hydrogel_day2_oracle_guarded": (
+        "prosperity/strategies/round_3/hydrogel_day2_oracle_guarded.py",
+        "HydrogelDay2OracleGuardedStrategy",
+    ),
+    "hydro_velvet_spread_skew_mm": (
+        "prosperity/strategies/round_3/hydro_velvet_spread_skew_mm.py",
+        "HydroVelvetSpreadSkewMMStrategy",
+    ),
+    "hydrogel_exhaustion_taker": (
+        "prosperity/strategies/round_3/hydrogel_exhaustion_taker.py",
+        "HydrogelExhaustionTakerStrategy",
+    ),
+    "hydrogel_passive_regime_mm": (
+        "prosperity/strategies/round_3/hydrogel_passive_regime_mm.py",
+        "HydrogelPassiveRegimeMMStrategy",
+    ),
+    "oracle_day2_replay": (
+        "prosperity/strategies/round_3/oracle_day2_replay.py",
+        "OracleDay2ReplayStrategy",
+    ),
+    "oracle_day2_l1_replay": (
+        "prosperity/strategies/round_3/oracle_day2_l1_replay.py",
+        "OracleDay2L1ReplayStrategy",
+    ),
+    "ms_regime_delta":    ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeDeltaOneStrategy"),
+    "ms_regime_option":   ("prosperity/strategies/round_3/ms_regime_switching.py", "MSRegimeOptionMMStrategy"),
+    "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
+    # ── Tibo Round 3 ──
+    "gamma_scalp_zgated":  ("prosperity/strategies/round_3/tibo/gamma_scalp_zgated.py", "GammaScalpZGatedStrategy"),
+    "velvet_strat":        ("prosperity/strategies/round_3/tibo/velvet_strat.py",    "VelvetStratV1"),
+    "velvet_strat_v25_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v25.py", "VelvetMMV25"),
+    "velvet_strat_v25_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v25.py", "VEVOptionMMV25"),
+    "gamma_scalp_v25":      ("prosperity/strategies/round_3/tibo/velvet_strat_v25.py", "GammaScalpV25"),
+    "velvet_strat_v26_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v26.py", "VelvetMMV26"),
+    "velvet_strat_v26_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v26.py", "VEVOptionMMV26"),
+    "gamma_scalp_v26":      ("prosperity/strategies/round_3/tibo/velvet_strat_v26.py", "GammaScalpV26"),
+    # ── v28 ──
+    "velvet_strat_v28_mm":       ("prosperity/strategies/round_3/tibo/velvet_strat_v28.py", "TheoV7VelvetMMV28"),
+    "gamma_scalp_v28":           ("prosperity/strategies/round_3/tibo/velvet_strat_v28.py", "TheoV7GammaScalpV28"),
+    "velvet_strat_v28_opt":      ("prosperity/strategies/round_3/tibo/velvet_strat_v28.py", "VEVOptionMMV28"),
+    # ── v40 ──
+    "symmetric_option_mm_v40":   ("prosperity/strategies/round_3/tibo/velvet_strat_v40.py", "SymmetricOptionMMV40"),
+    "gamma_scalp_with_ask_v40":  ("prosperity/strategies/round_3/tibo/velvet_strat_v40.py", "GammaScalpWithAskV40"),
+    # ── v30 ──
+    "gamma_scalp_smile_v30_vev4500":    ("prosperity/strategies/round_3/tibo/velvet_strat_v30.py", "GammaScalpSmileV30VEV4500"),
+    "gamma_scalp_with_ask_v30_vev5100": ("prosperity/strategies/round_3/tibo/velvet_strat_v30.py", "GammaScalpWithAskV30VEV5100"),
+    "gamma_scalp_smile_v30_vev5200":    ("prosperity/strategies/round_3/tibo/velvet_strat_v30.py", "GammaScalpSmileV30VEV5200"),
+    "delta_one_mm_v30":                 ("prosperity/strategies/round_3/tibo/velvet_strat_v30.py", "DeltaOneMMV30"),
+    # ── v100: canonical standalone ──
+    "velvet_mm_v100":     ("prosperity/strategies/round_3/tibo/velvet_strat_v100.py", "VelvetMMV100"),
+    "gamma_scalp_v100":   ("prosperity/strategies/round_3/tibo/velvet_strat_v100.py", "GammaScalpV100"),
+    "vev_option_mm_v100": ("prosperity/strategies/round_3/tibo/velvet_strat_v100.py", "VEVOptionMMV100"),
+    "hydro_mm_v100":      ("prosperity/strategies/round_3/tibo/velvet_strat_v100.py", "HydroMMV100"),
+    "velvet_mm_v200":     ("prosperity/strategies/round_3/tibo/velvet_strat_v200.py", "VelvetMMV200"),
+    "gamma_scalp_v200":   ("prosperity/strategies/round_3/tibo/velvet_strat_v200.py", "GammaScalpV200"),
+    "hydro_mm_v200":      ("prosperity/strategies/round_3/tibo/hydro_strat_v200.py", "HydroMMV200"),
+    # ── smile IV scalper ──
+    "smile_iv_scalper":          ("prosperity/strategies/round_3/tibo/smile_iv_scalper.py", "SmileIVScalerStrategy"),
+    # ── Theo v7 ──
+    "mm_first_v4_combo":         ("prosperity/strategies/round_3/tibo/mm_first_v4_combo.py", "MMFirstV4ComboStrategy"),
+    "r3_guarded_anchor_mm":      ("prosperity/strategies/round_3/tibo/mm_first_v4_combo.py", "R3GuardedAnchorMMStrategy"),
+    "gamma_scalp_zgated_mixin":  ("prosperity/strategies/round_3/tibo/smile_iv_scalper.py", "GammaScalpZGatedMixinStrategy"),
+    "theo_v7_velvet_mm":         ("prosperity/strategies/round_3/tibo/velvet_strat_theo_v7.py", "TheoV7VelvetMM"),
+    "theo_v7_gamma_scalp":       ("prosperity/strategies/round_3/tibo/velvet_strat_theo_v7.py", "TheoV7GammaScalp"),
+    "velvet_strat_v2_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v2.py", "VelvetMMV2"),
+    "velvet_strat_v2_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v2.py", "VEVOptionMMV2"),
+    "velvet_strat_v3":     ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetStratV3"),
+    "velvet_strat_v3_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetMMV3"),
+    "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
+>>>>>>> origin/main
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -125,13 +240,46 @@ CORE_MODULES = [
 ]
 
 # Optional per-strategy file deps (paths inlined BEFORE the strategy file).
+_R3_OPTIONS_DEPS = [
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+    "prosperity/options/coordinator.py",
+    # NOTE: hedging.py omitted (only used by velvet_delta_hedger which we don't ship)
+]
+_R3_OPTIONS_DEPS_FULL = [  # explicit full list when hedging is needed
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+    "prosperity/options/coordinator.py",
+    "prosperity/options/hedging.py",
+]
+_R3_OPTIONS_DEPS_SLIM = [
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+    "prosperity/options/implied_vol.py",
+    "prosperity/options/smile.py",
+]
+_R3_OPTIONS_DEPS_BS_ONLY = [
+    "prosperity/options/time.py",
+    "prosperity/options/black_scholes.py",
+]
 STRATEGY_FILE_DEPS: dict[str, list[str]] = {
-    "option_mm_bs": [
-        "prosperity/options/time.py",
-        "prosperity/options/black_scholes.py",
-        "prosperity/options/implied_vol.py",
-        "prosperity/options/smile.py",
+    "option_mm_bs":       _R3_OPTIONS_DEPS,
+    "option_skew_signal_mm": _R3_OPTIONS_DEPS,
+    "option_skew_dynamic_mm": _R3_OPTIONS_DEPS,
+    "velvet_delta_hedger": _R3_OPTIONS_DEPS_FULL,  # needs hedging.py
+    "vol_harvest":        _R3_OPTIONS_DEPS,
+    "ms_regime_option":   _R3_OPTIONS_DEPS,
+    "anchor_adaptive":    ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "hydrogel_day2_selector_mm": [
+        "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
     ],
+<<<<<<< HEAD
     "r3_gamma_scalp_zgated": [
         "prosperity/options/time.py",
         "prosperity/options/black_scholes.py",
@@ -149,7 +297,63 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
         "prosperity/options/black_scholes.py",
         "prosperity/options/implied_vol.py",
         "prosperity/options/smile.py",
+=======
+    "hydrogel_day2_oracle_anchor": [
+        "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+>>>>>>> origin/main
     ],
+    "hydrogel_day2_oracle_guarded": [
+        "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
+        "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
+    ],
+    "gamma_scalp":        _R3_OPTIONS_DEPS,
+    "gamma_scalp_zgated": _R3_OPTIONS_DEPS,
+    "iv_momentum_mm": _R3_OPTIONS_DEPS,
+    "r3_guarded_anchor_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "velvet_r2_exhaustion_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "hydro_anchor_zgate_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
+    "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
+    "velvet_strat_v3_mm":  _R3_OPTIONS_DEPS_BS_ONLY,
+    "velvet_strat_v3_opt": _R3_OPTIONS_DEPS_BS_ONLY,
+    "gamma_scalp_zgated":  _R3_OPTIONS_DEPS_BS_ONLY,
+    "velvet_strat_v25_mm":  _R3_OPTIONS_DEPS_BS_ONLY,
+    "velvet_strat_v25_opt": _R3_OPTIONS_DEPS_BS_ONLY,
+    "gamma_scalp_v25":      _R3_OPTIONS_DEPS_BS_ONLY,
+    "velvet_strat_v26_mm":  _R3_OPTIONS_DEPS_BS_ONLY,
+    "velvet_strat_v26_opt": _R3_OPTIONS_DEPS_BS_ONLY,
+    "gamma_scalp_v26":      _R3_OPTIONS_DEPS_BS_ONLY,
+    # ── v28 ──
+    "velvet_strat_v28_mm":       [],
+    "gamma_scalp_v28":           _R3_OPTIONS_DEPS_BS_ONLY,
+    "velvet_strat_v28_opt":      _R3_OPTIONS_DEPS_BS_ONLY,
+    # ── v40 ──
+    "symmetric_option_mm_v40":   _R3_OPTIONS_DEPS_SLIM,
+    "gamma_scalp_with_ask_v40":  _R3_OPTIONS_DEPS_BS_ONLY,
+    # ── v30 (all use smile fit → _SLIM) ──
+    "gamma_scalp_smile_v30_vev4500":    _R3_OPTIONS_DEPS_SLIM,
+    "gamma_scalp_with_ask_v30_vev5100": _R3_OPTIONS_DEPS_SLIM,
+    "gamma_scalp_smile_v30_vev5200":    _R3_OPTIONS_DEPS_SLIM,
+    "delta_one_mm_v30":                 _R3_OPTIONS_DEPS_SLIM,
+    # ── v100 (file deps inlined via canonical dep strategies) ──
+    "velvet_mm_v100":    [],
+    "gamma_scalp_v100":  [],
+    "vev_option_mm_v100":[],
+    "hydro_mm_v100":     [],
+    "velvet_mm_v200":    _R3_OPTIONS_DEPS_SLIM,
+    "gamma_scalp_v200":  _R3_OPTIONS_DEPS_SLIM,
+    "hydro_mm_v200":     [],
+    # ── smile IV scalper ──
+    # smile_iv_scalper uses call_implied_vol (implied_vol.py) and fit_smile_poly /
+    # smile_predict (smile.py) — requires _SLIM, not just BS_ONLY.
+    "smile_iv_scalper":          _R3_OPTIONS_DEPS_SLIM,
+    # ── Theo v7 ──
+    "mm_first_v4_combo":        [],
+    "r3_guarded_anchor_mm":     [],
+    "gamma_scalp_zgated_mixin": _R3_OPTIONS_DEPS_SLIM,
+    "theo_v7_velvet_mm":        [],
+    "theo_v7_gamma_scalp":      _R3_OPTIONS_DEPS_SLIM,
 }
 
 # Extra strategy-module dependencies (inlined before the strategy file that needs them).
@@ -168,7 +372,99 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_generalized": ["round1_regression_mm_v5"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
+<<<<<<< HEAD
     "r3_guarded_anchor_mm": ["mm_first_v4_combo"],
+=======
+    "ms_regime_delta": ["option_mm_bs"],
+    "ms_regime_option": ["option_mm_bs"],
+    "velvet_strat_v25_mm":  ["velvet_strat_v3_mm", "gamma_scalp_zgated"],
+    "velvet_strat_v25_opt": ["velvet_strat_v3_mm", "gamma_scalp_zgated"],
+    "gamma_scalp_v25":      ["velvet_strat_v3_mm", "gamma_scalp_zgated"],
+    "velvet_strat_v26_mm":  ["velvet_strat_v3_mm", "gamma_scalp_zgated", "velvet_strat_v25_mm"],
+    "velvet_strat_v26_opt": ["velvet_strat_v3_mm", "gamma_scalp_zgated", "velvet_strat_v25_mm"],
+    "gamma_scalp_v26":          ["velvet_strat_v3_mm", "gamma_scalp_zgated", "velvet_strat_v25_mm"],
+    # ── v28 ──
+    # All three share velvet_strat_v28.py which imports from velvet_strat_v26.py,
+    # so every dep from the v26 chain must appear before whichever v28 key is
+    # resolved first (alphabetically: gamma_scalp_v28).
+    "velvet_strat_v28_mm":      ["velvet_strat_v3_mm", "gamma_scalp_zgated",
+                                  "velvet_strat_v25_mm", "velvet_strat_v26_mm",
+                                  "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                  "mm_first_v4_combo", "r3_guarded_anchor_mm",
+                                  "theo_v7_velvet_mm", "theo_v7_gamma_scalp"],
+    "gamma_scalp_v28":          ["velvet_strat_v3_mm", "gamma_scalp_zgated",
+                                  "velvet_strat_v25_mm", "velvet_strat_v26_mm",
+                                  "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                  "mm_first_v4_combo", "r3_guarded_anchor_mm",
+                                  "theo_v7_velvet_mm", "theo_v7_gamma_scalp"],
+    "velvet_strat_v28_opt":     ["velvet_strat_v3_mm", "gamma_scalp_zgated",
+                                  "velvet_strat_v25_mm", "velvet_strat_v26_mm",
+                                  "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                  "mm_first_v4_combo", "r3_guarded_anchor_mm",
+                                  "theo_v7_velvet_mm", "theo_v7_gamma_scalp"],
+    # ── Theo v7 ──
+    "r3_guarded_anchor_mm":     ["mm_first_v4_combo"],
+    "gamma_scalp_zgated_mixin": ["smile_iv_scalper"],
+    # Both classes live in velvet_strat_theo_v7.py which imports from both dep trees,
+    # so whichever is resolved first must have all deps available.
+    "theo_v7_velvet_mm":        ["smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                  "mm_first_v4_combo", "r3_guarded_anchor_mm"],
+    "theo_v7_gamma_scalp":      ["smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                  "mm_first_v4_combo", "r3_guarded_anchor_mm"],
+    # ── v40 ──
+    # Both v40 classes live in velvet_strat_v40.py which imports from smile_iv_scalper.py
+    # (for _VelvetOptionMixin) and from smile_iv_scalper.py (for GammaScalpZGatedMixinStrategy).
+    "symmetric_option_mm_v40":  ["smile_iv_scalper", "gamma_scalp_zgated_mixin"],
+    "gamma_scalp_with_ask_v40": ["velvet_strat_v3_mm", "gamma_scalp_zgated",
+                                  "velvet_strat_v25_mm", "velvet_strat_v26_mm",
+                                  "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                  "mm_first_v4_combo", "r3_guarded_anchor_mm",
+                                  "theo_v7_velvet_mm", "theo_v7_gamma_scalp",
+                                  "velvet_strat_v28_mm"],
+    # ── v100 — direct imports from mm_first_v4_combo, smile_iv_scalper, velvet_strat_v3 ──
+    # Clean deps: no intermediate version chain (v25/v26/v27/v28/theo_v7 all omitted).
+    "velvet_mm_v100":    ["mm_first_v4_combo", "r3_guarded_anchor_mm",
+                          "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                          "velvet_strat_v3_opt"],
+    "gamma_scalp_v100":  ["mm_first_v4_combo", "r3_guarded_anchor_mm",
+                          "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                          "velvet_strat_v3_opt"],
+    "vev_option_mm_v100":["mm_first_v4_combo", "r3_guarded_anchor_mm",
+                          "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                          "velvet_strat_v3_opt"],
+    "hydro_mm_v100":     ["mm_first_v4_combo", "r3_guarded_anchor_mm",
+                          "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                          "velvet_strat_v3_opt"],
+    "velvet_mm_v200":    ["mm_first_v4_combo", "r3_guarded_anchor_mm"],
+    "gamma_scalp_v200":  ["mm_first_v4_combo", "r3_guarded_anchor_mm"],
+    "hydro_mm_v200":     ["mm_first_v4_combo", "r3_guarded_anchor_mm"],
+    # ── v30 — all live in velvet_strat_v30.py which imports GammaScalpWithAsk
+    # from velvet_strat_v40.py, so the full v28+v40 chain must precede it. ──
+    "gamma_scalp_smile_v30_vev4500":    ["velvet_strat_v3_mm", "gamma_scalp_zgated",
+                                          "velvet_strat_v25_mm", "velvet_strat_v26_mm",
+                                          "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                          "mm_first_v4_combo", "r3_guarded_anchor_mm",
+                                          "theo_v7_velvet_mm", "theo_v7_gamma_scalp",
+                                          "velvet_strat_v28_mm", "gamma_scalp_with_ask_v40"],
+    "gamma_scalp_with_ask_v30_vev5100": ["velvet_strat_v3_mm", "gamma_scalp_zgated",
+                                          "velvet_strat_v25_mm", "velvet_strat_v26_mm",
+                                          "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                          "mm_first_v4_combo", "r3_guarded_anchor_mm",
+                                          "theo_v7_velvet_mm", "theo_v7_gamma_scalp",
+                                          "velvet_strat_v28_mm", "gamma_scalp_with_ask_v40"],
+    "gamma_scalp_smile_v30_vev5200":    ["velvet_strat_v3_mm", "gamma_scalp_zgated",
+                                          "velvet_strat_v25_mm", "velvet_strat_v26_mm",
+                                          "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                          "mm_first_v4_combo", "r3_guarded_anchor_mm",
+                                          "theo_v7_velvet_mm", "theo_v7_gamma_scalp",
+                                          "velvet_strat_v28_mm", "gamma_scalp_with_ask_v40"],
+    "delta_one_mm_v30":                 ["velvet_strat_v3_mm", "gamma_scalp_zgated",
+                                          "velvet_strat_v25_mm", "velvet_strat_v26_mm",
+                                          "smile_iv_scalper", "gamma_scalp_zgated_mixin",
+                                          "mm_first_v4_combo", "r3_guarded_anchor_mm",
+                                          "theo_v7_velvet_mm", "theo_v7_gamma_scalp",
+                                          "velvet_strat_v28_mm", "gamma_scalp_with_ask_v40"],
+>>>>>>> origin/main
 }
 
 # Params useful for local analysis/backtests but pointless in the live upload.
@@ -490,7 +786,9 @@ def main() -> int:
         for file_dep in STRATEGY_FILE_DEPS.get(n, []):
             if file_dep not in module_files:
                 module_files.append(file_dep)
-        module_files.append(STRATEGY_REGISTRY[n][0])
+        strategy_file = STRATEGY_REGISTRY[n][0]
+        if strategy_file not in module_files:
+            module_files.append(strategy_file)
 
     # Inline each module, collecting external imports along the way.
     all_ext_imports: list[str] = []

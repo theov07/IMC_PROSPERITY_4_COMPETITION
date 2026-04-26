@@ -27,10 +27,8 @@ def _payload_kind(payload: dict) -> str:
 
 
 def _discover_companion(path: Path) -> tuple[Path | None, dict | None]:
-    for suffix in (".json", ".log"):
-        candidate = path.with_suffix(suffix)
-        if candidate == path or not candidate.exists():
-            continue
+    suffixes = (".log", ".json") if path.suffix == ".json" else (".json", ".log")
+    for candidate in _companion_candidates(path, suffixes):
         try:
             return candidate, _read_payload(candidate)
         except Exception:
@@ -39,8 +37,39 @@ def _discover_companion(path: Path) -> tuple[Path | None, dict | None]:
 
 
 def _discover_python_companion(path: Path) -> Path | None:
-    candidate = path.with_suffix(".py")
-    return candidate if candidate.exists() else None
+    return next(_companion_candidates(path, (".py",)), None)
+
+
+def _companion_candidates(path: Path, suffixes: tuple[str, ...]) -> Iterable[Path]:
+    """Yield likely IMC companion files for a summary/detail log.
+
+    The IMC UI commonly downloads `123.json`, `123.log`, and `123.py` together,
+    but during analysis we often move only the JSON into `logs/round_X/`.  This
+    keeps the dashboard useful by also checking the usual Downloads folders.
+    """
+    seen: set[Path] = set()
+
+    def _yield(candidate: Path):
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate
+        if resolved in seen or candidate == path or not candidate.exists():
+            return
+        seen.add(resolved)
+        yield candidate
+
+    for suffix in suffixes:
+        yield from _yield(path.with_suffix(suffix))
+
+    home = Path.home()
+    downloads = home / "Downloads"
+    download_roots = [downloads]
+    if downloads.exists():
+        download_roots.extend(sorted(downloads.glob("log_*")))
+    for root in download_roots:
+        for suffix in suffixes:
+            yield from _yield(root / f"{path.stem}{suffix}")
 
 
 def _normalize_numeric_columns(frame: pd.DataFrame, integer_columns: set[str] | None = None) -> pd.DataFrame:
