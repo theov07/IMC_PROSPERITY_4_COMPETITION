@@ -200,6 +200,8 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "gamma_scalp_v200":    ("prosperity.strategies.round_3.tibo.velvet_strat_v200", "GammaScalpV200"),
     # v200: HYDROGEL standalone
     "hydro_mm_v200":       ("prosperity.strategies.round_3.tibo.hydro_strat_v200", "HydroMMV200"),
+    # v200r4: HYDROGEL standalone (round 4 — direct BaseStrategy subclass, same logic)
+    "hydro_mm_v200_r4":    ("prosperity.strategies.round_4.tibo.hydro_strat_v200", "HydroMMV200"),
 }
 
 

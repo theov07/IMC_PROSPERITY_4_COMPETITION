@@ -10169,6 +10169,18 @@ MEMBER_OVERRIDES["hydro_v200"] = {
     }
 }
 
+MEMBER_OVERRIDES["hydro_v200_r4"] = {
+    3: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v200_r4",
+            position_limit=200, params=_HYDRO_V7B_PARAMS),
+        "VELVETFRUIT_EXTRACT": None,
+        "VEV_4000": None, "VEV_4500": None, "VEV_5000": None, "VEV_5100": None,
+        "VEV_5200": None, "VEV_5300": None, "VEV_5400": None, "VEV_5500": None,
+        "VEV_6000": None, "VEV_6500": None,
+    }
+}
+
 _tibo_v100_full = dict(MEMBER_OVERRIDES["tibo_velvet_v100"][3])
 _tibo_v100_full["HYDROGEL_PACK"] = ProductConfig(
     symbol="HYDROGEL_PACK", strategy="hydro_mm_v100",

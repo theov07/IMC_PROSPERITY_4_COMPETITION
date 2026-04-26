@@ -201,7 +201,10 @@
       "Bash(python -m prosperity.tooling.dashboard --backtest-json artifacts/backtest_results/round_3/hydro/hydro_v200.json)",
       "Bash(python -m prosperity.tooling.r3_backtest_html --help)",
       "Bash(python -m prosperity.tooling.r3_backtest_html --json artifacts/backtest_results/round_3/hydro/hydro_v200.json --prices-dir data/round_3 --out artifacts/backtest_results/round_3/hydro/hydro_v200.html)",
-      "Bash(open /Users/thibautdesauty/Documents/Prosperity4/IMC_PROSPERITY_4_COMPETITION/artifacts/backtest_results/round_3/hydro/hydro_v200.html)"
+      "Bash(open /Users/thibautdesauty/Documents/Prosperity4/IMC_PROSPERITY_4_COMPETITION/artifacts/backtest_results/round_3/hydro/hydro_v200.html)",
+      "Bash(python backtest.py --strategy hydro_v200_r4 --round 3 --days 0 1 2 --match-trades realistic)",
+      "Bash(python -c \"import prosperity.tooling.counterparties_analysis\")",
+      "Bash(python -m prosperity.tooling.counterparties_analysis --help)"
     ]
   }
 }
