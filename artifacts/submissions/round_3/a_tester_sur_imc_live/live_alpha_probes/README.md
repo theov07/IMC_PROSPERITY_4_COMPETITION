@@ -51,6 +51,43 @@ Analysis of `tradeHistory` + 5-tick post-fill mid moves revealed these **adverse
 - **HYDROGEL is genuinely profitable in live** → should be added to default upload (not just velvet+options)
 - No named participants appeared yet → G1 still useful as future-proof logging
 
+## Findings from full campaign (00A..17 — 2026-04-26)
+
+Full parser output:
+`artifacts/analysis/round_3_live_alpha/live_alpha_campaign_report.md`.
+
+Important checks:
+
+- All 20 logs share the same market-data hash (`fb716fc58b88c179`).
+- `0 / 3720` own trades were outside the official market.
+- No named participant signal appeared in the official logs.
+- Options far-quote probe `10` had zero fills.
+
+Best observed live package is `03/04/05` at `+1,134`. Those three runs are
+identical in fills/PnL, so the result validates the dynamic-skew package but does
+not prove follow versus fade. Run `14` was `+1,023`; without its bad VEV_5400 leg
+it would have been about `+1,237`, but it also carried `-183` VELVET and had
+negative short-horizon VELVET markouts, so it is a stretch candidate.
+
+Product read:
+
+- HYDRO clean: `+489.8`, `markout_5=+6.16`, adverse `5.7%`.
+- VELVET passive clean: `markout_5=+1.25`, adverse `19.8%`.
+- VELVET flow-follow/taker toxic: `markout_5 ~= -1.8`, adverse `75%+`.
+- VEV_4000 tiny passive clean: `markout_5=+10.4` on 15 volume.
+- VEV_4000 aggressive/gap/flow toxic: `markout_5 ~= -9.5`, adverse `95%+`.
+- VEV_4500 is the best new option leg: `markout_5 ~= +2.0`, adverse `15%`.
+- VEV_5000/5100/5200 are OK only in small conservative dynamic mode.
+- VEV_5400+ should be disabled for live-scoring candidates.
+
+Suggested production-style next candidate:
+HYDRO clean passive/anchor + VELVET passive MM + tiny passive VEV_4000 +
+dynamic VEV_4500 + small conservative VEV_5000/5100/5200. Disable VEV_5400+,
+option gap sweeps, and VELVET flow-follow takers. Estimated live-path PnL is
+about `+1,624` (`03/04/05` plus clean HYDRO `09`). A `14` variant with VEV_5400
+disabled plus HYDRO would be about `+1,727`, but carries much higher VELVET
+inventory risk.
+
 ## Recommended upload order
 
 1. Score/default: upload `../velvet_et_options/02_PARETO_BALANCED__v38_drop_bad__pnl86k_dd45k_ratio190.py`.

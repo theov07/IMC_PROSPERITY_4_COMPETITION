@@ -5763,6 +5763,48 @@ for _suffix, _trigger in [("030", 0.30), ("040", 0.40), ("050", 0.50)]:
     }
 
 
+# v59: v55 (max PnL stretch with all 8 strikes per-strike z) + passive unwind on VELVET
+# Goal: capture +6.4k VELVET boost from passive unwind on top of v55's max PnL setup
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v59_v7_max_pnl_unwind"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=_THEO_V6_Z_SKIP[strike]),
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500]
+        },
+        **{f"VEV_{k}": None for k in [6000, 6500]},
+    },
+}
+
+
+# v60: v54 (per-strike z, no full strikes) + passive unwind
+# Goal: capture VELVET boost without 5400/5500 drag
+MEMBER_OVERRIDES["r3_velvet_options_max3d_v60_v7_per_strike_z_unwind"] = {
+    3: {
+        "HYDROGEL_PACK": None,
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_THEO_V7_GUARDED_VELVET_PARAMS,
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"], position_limit=300, strike=strike,
+                **_gamma_zgated_params(target_qty=300, z_skip_threshold=_THEO_V6_Z_SKIP[strike]),
+            )
+            for strike in [4000, 4500, 5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v58_v7_with_5300"] = {
     3: {
         "HYDROGEL_PACK": None,
@@ -5791,6 +5833,87 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v58_v7_with_5300"] = {
 
 
 # v56: v53 + add VEV_5300 with iv_gate (Pareto stretch — like v50 with v6 toxic flow)
+# Live evidence core from IMC probes 00A..17.
+# Keep only legs with positive live markout and remove toxic live probes:
+# HYDRO anchor/passive, VELVET small passive, tiny passive VEV_4000,
+# dynamic VEV_4500, small conservative VEV_5000/5100/5200.
+_R3_LIVE_CORE_4000_PASSIVE = {
+    **_R3_VELVET_OPT_OPTION_PARAMS_V3,
+    "maker_size": 10,
+    "enable_takers": False,
+    "take_size": 0,
+}
+
+
+def _r3_live_core_gamma_params(
+    *,
+    target_qty: int,
+    entry_size: int,
+    passive_bid_size: int,
+    passive_boost: float,
+    z_skip: float = 0.5,
+) -> Dict[str, Any]:
+    params = _gamma_zgated_with_iv_gate(
+        z_skip=z_skip,
+        target_qty=target_qty,
+        passive_boost=passive_boost,
+    )
+    params.update(
+        entry_size=entry_size,
+        passive_bid_size=passive_bid_size,
+        take_size=0,
+    )
+    return params
+
+
+MEMBER_OVERRIDES["r3_live_alpha_core_v1"] = {
+    3: {
+        "HYDROGEL_PACK": _override(
+            _R3_HYDROGEL_V4_F5,
+            quote_trace_enabled=True,
+        ),
+        "VELVETFRUIT_EXTRACT": _override(
+            ROUND_3["VELVETFRUIT_EXTRACT"],
+            **_R3_VELVET_SMALL_MM,
+        ),
+        "VEV_4000": _override(
+            ROUND_3["VEV_4000"],
+            position_limit=80,
+            strike=4000,
+            **_R3_LIVE_CORE_4000_PASSIVE,
+        ),
+        "VEV_4500": _override(
+            ROUND_3["VEV_4500"],
+            position_limit=180,
+            strike=4500,
+            **_r3_live_core_gamma_params(
+                target_qty=160,
+                entry_size=12,
+                passive_bid_size=10,
+                passive_boost=1.25,
+                z_skip=0.5,
+            ),
+        ),
+        **{
+            f"VEV_{strike}": _override(
+                ROUND_3[f"VEV_{strike}"],
+                position_limit=120,
+                strike=strike,
+                **_r3_live_core_gamma_params(
+                    target_qty=60,
+                    entry_size=6,
+                    passive_bid_size=5,
+                    passive_boost=1.15,
+                    z_skip=0.5,
+                ),
+            )
+            for strike in [5000, 5100, 5200]
+        },
+        **{f"VEV_{k}": None for k in [5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v56_v6_with_5300"] = {
     3: {
         "HYDROGEL_PACK": None,

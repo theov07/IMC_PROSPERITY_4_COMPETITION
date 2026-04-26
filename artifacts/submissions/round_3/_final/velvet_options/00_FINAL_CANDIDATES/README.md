@@ -11,10 +11,11 @@ not overfit. The IDEA wins, the magic number doesn't matter.
 
 | File | PnL (3d) | DD | Ratio | Pick if... |
 |---|---:|---:|---:|---|
-| **TOP0_LOWEST_DD** v52_theo_minimal | +147,679 | -59,356 | 2.488 | Lowest DD point, no v6/v7 features |
-| **TOP1_BEST_RATIO** v57_v7_passive_unwind ★ | +156,010 | **-59,720** | **2.612** | **DEFAULT** — strictly dominates v53 (+6.4k PnL, -250 DD) |
+| **TOP0_LOWEST_DD** v52_theo_minimal | +147,679 | -59,356 | 2.488 | Lowest DD, no v6/v7 features |
+| **TOP1_BEST_RATIO** v57_v7_passive_unwind ★ | +156,010 | **-59,720** | **2.612** | **DEFAULT** — strictly dominates v53 |
 | **TOP2_BALANCED** v58_v7_with_5300 | +158,696 | -62,165 | 2.553 | + VEV_5300 — strictly dominates v54 AND v56 |
-| **TOP4_MAX_PNL_STRETCH** v55_v6_full | +159,245 | -80,494 | 1.978 | All 8 strikes — only +549 PnL more than v58 but +18k DD (questionable) |
+| **TOP3_MAX_PNL_SAFE** v60_v7_per_strike_z_unwind | +162,792 | -73,970 | 2.201 | Per-strike z + unwind, dominates v54 (+6.4k PnL, -250 DD) |
+| **TOP4_MAX_PNL_STRETCH** v59_v7_max_pnl_unwind | **+165,680** | -80,244 | 2.065 | All 8 strikes + unwind, dominates v55 — **highest PnL** |
 
 ### Win story per VELVET enhancement
 
@@ -76,10 +77,11 @@ The key magic number `0.38` was tuned by Theo. We tested its sensitivity:
 | 05_MAX_PNL_STRETCH v12_r2velvet | +94,614 | -60,508 | 1.56 | Pre-Theo |
 
 ## REMOVED (dominated)
-- ~~TOP1 v53_v6_toxic_flow~~ → dominated by v57 (PnL up 6.4k, DD down 250)
-- ~~TOP2 v50_theo_integrated~~ → dominated by v58
-- ~~TOP2 v56_v6_with_5300~~ → dominated by v58 (PnL up 6.4k, DD down 250)
-- ~~TOP3 v54_v6_per_strike_z~~ → dominated by v58 (PnL up, DD down 12k!)
+- ~~v53_v6_toxic_flow~~ → dominated by v57 (PnL up 6.4k, DD down 250)
+- ~~v50_theo_integrated~~ → dominated by v58
+- ~~v56_v6_with_5300~~ → dominated by v58 (PnL up 6.4k, DD down 250)
+- ~~v54_v6_per_strike_z~~ → dominated by v60 (PnL up 6.4k, DD down 250)
+- ~~v55_v6_full~~ → dominated by v59 (PnL up 6.4k, DD down 250)
 
 ## Decision rules
 
