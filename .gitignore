@@ -59,10 +59,20 @@ logs/round_3/*.json
 artifacts/backtest_results/*
 artifacts/backtests/*
 
-# Round 4 large backtest JSONs (>50MB blocks push)
-artifacts/analysis/round_4/*.json
-artifacts/analysis/round_4/**/*.json
-logs/round_4/*.log
-logs/round_4/*.json
-artifacts/submissions/round_4/_BASELINE/*.json
-artifacts/submissions/round_4/_BASELINE/*.log
+# ═══ AUTO-IGNORE all future rounds backtest JSONs ═══
+# Catches round_3, round_4, round_5, ... automatically
+artifacts/analysis/round_*/*.json
+artifacts/analysis/round_*/**/*.json
+artifacts/backtest_results/round_*/*.json
+artifacts/backtest_results/round_*/**/*.json
+artifacts/submissions/round_*/_BASELINE/*.json
+artifacts/submissions/round_*/_BASELINE/*.log
+artifacts/submissions/round_*/_FINAL_DELIVERY/*.json
+artifacts/submissions/round_*/_FINAL_DELIVERY/*.log
+logs/round_*/*.log
+logs/round_*/*.json
+
+# Generic fallback: any JSON > 50MB risk patterns
+artifacts/**/backtest_*.json
+artifacts/**/_3d.json
+artifacts/**/oracle_*.json
