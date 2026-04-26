@@ -139,10 +139,29 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "gamma_scalp_zgated_mixin":  ("prosperity.strategies.round_3.tibo.smile_iv_scalper", "GammaScalpZGatedMixinStrategy"),
     "theo_v7_velvet_mm":         ("prosperity.strategies.round_3.tibo.velvet_strat_theo_v7", "TheoV7VelvetMM"),
     "theo_v7_gamma_scalp":       ("prosperity.strategies.round_3.tibo.velvet_strat_theo_v7", "TheoV7GammaScalp"),
+    "r3_guarded_anchor_mm":      ("prosperity.strategies.round_3.tibo.mm_first_v4_combo", "R3GuardedAnchorMMStrategy"),
     "dynamic_anchor_mm":         ("prosperity.strategies.round_3.tibo.mm_first_v4_combo", "DynamicAnchorMMStrategy"),
     "velvet_strat_v28_mm":       ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "TheoV7VelvetMMV28"),
     "gamma_scalp_v28":           ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "TheoV7GammaScalpV28"),
     "velvet_strat_v28_opt":      ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "VEVOptionMMV28"),
+    # v40: true 2-sided MM
+    "symmetric_option_mm_v40":   ("prosperity.strategies.round_3.tibo.velvet_strat_v40", "SymmetricOptionMMV40"),
+    "gamma_scalp_with_ask_v40":  ("prosperity.strategies.round_3.tibo.velvet_strat_v40", "GammaScalpWithAskV40"),
+    # v30: four targeted option ideas
+    "gamma_scalp_smile_v30_vev4500":    ("prosperity.strategies.round_3.tibo.velvet_strat_v30", "GammaScalpSmileV30VEV4500"),
+    "gamma_scalp_with_ask_v30_vev5100": ("prosperity.strategies.round_3.tibo.velvet_strat_v30", "GammaScalpWithAskV30VEV5100"),
+    "gamma_scalp_smile_v30_vev5200":    ("prosperity.strategies.round_3.tibo.velvet_strat_v30", "GammaScalpSmileV30VEV5200"),
+    "delta_one_mm_v30":                 ("prosperity.strategies.round_3.tibo.velvet_strat_v30", "DeltaOneMMV30"),
+    # v100: canonical standalone (direct imports, no intermediate wrapper chain)
+    "velvet_mm_v100":      ("prosperity.strategies.round_3.tibo.velvet_strat_v100", "VelvetMMV100"),
+    "gamma_scalp_v100":    ("prosperity.strategies.round_3.tibo.velvet_strat_v100", "GammaScalpV100"),
+    "vev_option_mm_v100":  ("prosperity.strategies.round_3.tibo.velvet_strat_v100", "VEVOptionMMV100"),
+    "hydro_mm_v100":       ("prosperity.strategies.round_3.tibo.velvet_strat_v100", "HydroMMV100"),
+    # v200: hybrid hydro + velvet port
+    "velvet_mm_v200":      ("prosperity.strategies.round_3.tibo.velvet_strat_v200", "VelvetMMV200"),
+    "gamma_scalp_v200":    ("prosperity.strategies.round_3.tibo.velvet_strat_v200", "GammaScalpV200"),
+    # v200: HYDROGEL standalone
+    "hydro_mm_v200":       ("prosperity.strategies.round_3.tibo.hydro_strat_v200", "HydroMMV200"),
 }
 
 

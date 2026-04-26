@@ -133,6 +133,34 @@ Replaced fixed `anchor_price=5250` with a slow EWMA of mid price (half-lives: 1.
 **Why it failed**: VELVETFRUIT genuinely mean-reverts to 5250 on the historical data. The fixed anchor IS the correct fair value for this asset. A dynamic anchor weakens the AR mean-reversion signal because the anchor chases price — fewer taker opportunities are identified. Faster anchor = worse result.  
 **Lesson**: Keep `anchor_price=5250` as fixed. The guard + AR combination is specifically exploiting the 5250 mean-reversion property.
 
+### v40-v48 (2-sided MM and taker-sell experiments) — comprehensive failure to improve PnL
+
+**Context**: v28 strategies are one-sided accumulators (only buy, never sell during normal operation). We explored genuine 2-sided MM and taker sells in v40-v48. New code in `velvet_strat_v40.py`: `SymmetricOptionMM` and `GammaScalpWithAsk`.
+
+**Key spread data** (from 3-day historical analysis):
+- VEV_4000: avg spread 21 ticks, VEV_4500: 16, VEV_5000: 6, VEV_5100: 4-5, VEV_5200: 3, VEV_5300: 2, VEV_5400/5500: 1
+
+**Experiments and results (all vs v28 baseline 172,982 / 89,792 drawdown):**
+
+| Variant | PnL | Drawdown | Change |
+|---------|-----|----------|--------|
+| v40: Symmetric MM on 5000+5100 | 147,148 | 60,930 | −26k PnL, −29k DD |
+| v41/v41b/v41c: Passive ask on 5000+5100 | 171,818 | ~90k | **0 impact** |
+| v43/v43b: ask_adapt mode on 5200+5300 | 172,982 | 89,792 | 0 (= v28) |
+| v45: Taker sell 5100 when z>1.5, 10% | 158,956 | 66,717 | −14k PnL, −23k DD |
+| v46: Taker sell 5000 when z>1.5 | 160,822 | — | −12k PnL |
+| v46b: Taker sell 5000+5100 | 147,960 | — | −25k PnL |
+
+**Why passive asks failed (v41-v44)**: In the realistic fill model, passive sell orders only fill when a historical market trade occurs at exactly our ask price. Options markets are thin and market participants don't aggressively cross our ask when we're inside the spread. Zero fills observed despite posting at `best_ask-1` on every tick.
+
+**Why symmetric MM hurt (v40)**: Options consistently appreciate because realized vol (2.15%/day) >> implied vol (1.25%/day). Any selling (even small) loses the delta+vega appreciation gains. The symmetric MM keeps average position near 0, missing out on directional gains.
+
+**Why taker sells hurt (v45-v48)**: Selling at `best_bid` (taker price) costs the full half-spread (2-3 ticks on 5000/5100). The mean-reversion gain when VELVETFRUIT reverts from z>1.5 peak is not large enough to compensate. Each sell trades x units at best_bid, then we have to rebuy at best_bid+1 — round trip costs the spread.
+
+**The one finding worth noting (v45)**: Taker sell on VEV_5100 at z>1.5 loses -13.9k PnL but saves -23k drawdown (from 89,792 to 66,717 = 49.7% vs 62.2%). Risk-adjusted ratio PnL/DD: 2.38 vs 1.93. If the user values drawdown reduction: v45 is the best choice. For max competition PnL: stick with v28.
+
+**Lesson**: In this backtest environment where options consistently trend up (realized > implied), the optimal strategy IS to accumulate and hold. Selling at any time reduces PnL. The 2-sided MM approaches are appropriate in a truly mean-reverting option market but not here.
+
 ---
 
 ## Round 3 — How the Option Strategies Actually Work

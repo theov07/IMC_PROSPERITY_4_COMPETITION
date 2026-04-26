@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from datamodel import Order, OrderDepth, TradingState
 
 from prosperity.market import BookSnapshot
-from prosperity.options.black_scholes import call_price
+from prosperity.options.black_scholes import call_delta, call_gamma, call_price
 from prosperity.options.implied_vol import call_implied_vol
 from prosperity.options.smile import fit_smile_poly, smile_predict
 from prosperity.options.time import (
@@ -177,6 +177,56 @@ class _VelvetOptionMixin:
         cache[strike] = fair_iv
         return fair_iv
 
+    def _nearest_chain_iv(
+        self,
+        chain: Dict[int, Dict[str, Any]],
+        spot: float,
+    ) -> Optional[float]:
+        best_iv: Optional[float] = None
+        best_dist: Optional[float] = None
+        for strike, row in chain.items():
+            iv = row.get("iv")
+            if iv is None:
+                continue
+            dist = abs(float(strike) - float(spot))
+            if best_dist is None or dist < best_dist:
+                best_dist = dist
+                best_iv = float(iv)
+        return best_iv
+
+    def _update_realized_vol(
+        self,
+        spot: float,
+        memory: Dict[str, Any],
+        params: Dict[str, Any],
+    ) -> Optional[float]:
+        prev_spot = memory.get("_rv_prev_spot")
+        memory["_rv_prev_spot"] = float(spot)
+        if prev_spot is None or prev_spot <= 0.0 or spot <= 0.0:
+            return memory.get("_realized_vol_daily")
+        ret = math.log(float(spot) / float(prev_spot))
+        window = max(2, int(params["realized_vol_window"]))
+        min_obs = max(2, min(window, int(params["realized_vol_min_obs"])))
+        buf: List[float] = memory.setdefault("_rv_logret_buf", [])
+        buf.append(ret)
+        if len(buf) > window:
+            del buf[:-window]
+        if len(buf) < min_obs:
+            return memory.get("_realized_vol_daily")
+        mean = sum(buf) / len(buf)
+        var_tick = sum((x - mean) ** 2 for x in buf) / max(len(buf) - 1, 1)
+        ts_per_day = timestamp_units_per_day_from_params(self.params)  # type: ignore[attr-defined]
+        ts_increment = max(float(self.params.get("ts_increment", 100.0)), 1.0)  # type: ignore[attr-defined]
+        ticks_per_day = max(ts_per_day / ts_increment, 1.0)
+        sigma_daily = math.sqrt(max(var_tick, 0.0) * ticks_per_day)
+        prev_sigma = memory.get("_realized_vol_daily")
+        alpha = float(params["realized_vol_smooth_alpha"])
+        if prev_sigma is not None:
+            sigma_daily = alpha * sigma_daily + (1.0 - alpha) * float(prev_sigma)
+        sigma_daily = max(float(params["fair_vol_floor"]), min(float(params["fair_vol_cap"]), sigma_daily))
+        memory["_realized_vol_daily"] = sigma_daily
+        return sigma_daily
+
     def _active_rank(
         self,
         *,
@@ -244,6 +294,20 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
             "iv_ewma_fast_alpha":       float(params.get("iv_ewma_fast_alpha", 0.10)),
             "iv_ewma_slow_alpha":       float(params.get("iv_ewma_slow_alpha", 0.02)),
             "iv_passive_boost":         float(params.get("iv_passive_boost", 1.5)),
+            "fair_vol_mode":            str(params.get("fair_vol_mode", "fixed")),
+            "fair_vol_floor":           float(params.get("fair_vol_floor", params.get("sigma_floor", 0.005))),
+            "fair_vol_cap":             float(params.get("fair_vol_cap", params.get("sigma_cap", 0.10))),
+            "realized_vol_window":      int(params.get("realized_vol_window", 600)),
+            "realized_vol_min_obs":     int(params.get("realized_vol_min_obs", 60)),
+            "realized_vol_smooth_alpha": float(params.get("realized_vol_smooth_alpha", 0.15)),
+            "fair_vol_weight_prior":    float(params.get("fair_vol_weight_prior", 1.0)),
+            "fair_vol_weight_realized": float(params.get("fair_vol_weight_realized", 0.0)),
+            "fair_vol_weight_atm":      float(params.get("fair_vol_weight_atm", 0.0)),
+            "fair_vol_weight_smile":    float(params.get("fair_vol_weight_smile", 0.0)),
+            "fair_vol_scale":           float(params.get("fair_vol_scale", 1.0)),
+            "fair_vol_shift":           float(params.get("fair_vol_shift", 0.0)),
+            "fair_time_scale":          float(params.get("fair_time_scale", 1.0)),
+            "fair_price_scale":         float(params.get("fair_price_scale", 1.0)),
         }
 
     def _update_zscore(self, S: float, memory: Dict[str, Any], params: Dict[str, Any]) -> Optional[float]:
@@ -298,6 +362,82 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
         memory["_iv_resid_fast"] = fast
         return residual, float(fast) - float(slow)
 
+    def _compute_fair_value(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+        spot: float,
+        params: Dict[str, Any],
+        ts: int,
+    ) -> Tuple[float, float, float]:
+        prior = float(params["implied_vol_prior"])
+        floor = float(params["fair_vol_floor"])
+        cap = float(params["fair_vol_cap"])
+        mode = str(params["fair_vol_mode"])
+        realized_vol: Optional[float] = None
+        atm_iv: Optional[float] = None
+        smile_iv: Optional[float] = None
+        chain: Optional[Dict[int, Dict[str, Any]]] = None
+
+        if mode in {"realized", "blend"} or params["fair_vol_weight_realized"] > 0.0:
+            realized_vol = self._update_realized_vol(spot, memory, params)
+
+        if mode in {"atm_iv", "smile_iv", "blend"} or (
+            params["fair_vol_weight_atm"] > 0.0 or params["fair_vol_weight_smile"] > 0.0
+        ):
+            chain = self._build_chain_snapshot(state, memory, spot, params["T"], ts)
+
+        if chain is not None:
+            if mode in {"atm_iv", "blend"} or params["fair_vol_weight_atm"] > 0.0:
+                atm_iv = self._nearest_chain_iv(chain, spot)
+            if mode in {"smile_iv", "blend"} or params["fair_vol_weight_smile"] > 0.0:
+                smile_iv = self._fit_leave_one_out_iv(
+                    memory,
+                    strike=int(params["K"]),
+                    chain=chain,
+                    S=spot,
+                    T=params["T"],
+                    ts=ts,
+                )
+
+        if mode == "realized":
+            sigma = realized_vol if realized_vol is not None else prior
+        elif mode == "atm_iv":
+            sigma = atm_iv if atm_iv is not None else prior
+        elif mode == "smile_iv":
+            sigma = smile_iv if smile_iv is not None else prior
+        elif mode == "blend":
+            weighted_sum = 0.0
+            total_weight = 0.0
+            components = (
+                (prior, float(params["fair_vol_weight_prior"])),
+                (realized_vol, float(params["fair_vol_weight_realized"])),
+                (atm_iv, float(params["fair_vol_weight_atm"])),
+                (smile_iv, float(params["fair_vol_weight_smile"])),
+            )
+            for value, weight in components:
+                if value is None or weight <= 0.0:
+                    continue
+                weighted_sum += float(value) * weight
+                total_weight += weight
+            sigma = (weighted_sum / total_weight) if total_weight > 0.0 else prior
+        else:
+            sigma = prior
+
+        sigma = sigma * float(params["fair_vol_scale"]) + float(params["fair_vol_shift"])
+        sigma = max(floor, min(cap, sigma))
+        model_T = max(0.01, float(params["T"]) * float(params["fair_time_scale"]))
+        fair = call_price(spot, params["K"], model_T, sigma) * float(params["fair_price_scale"])
+        fair = max(max(0.0, float(spot) - float(params["K"])), fair)
+
+        memory["_fair_sigma"] = sigma
+        memory["_fair_T_model"] = model_T
+        memory["_fair_prior_sigma"] = prior
+        memory["_fair_realized_sigma"] = realized_vol
+        memory["_fair_atm_sigma"] = atm_iv
+        memory["_fair_smile_sigma"] = smile_iv
+        return fair, sigma, model_T
+
     def compute_orders(
         self,
         state: TradingState,
@@ -314,13 +454,13 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
         if S is None:
             return [], 0
         z = self._update_zscore(S, memory, p)
-        fair  = call_price(S, p["K"], p["T"], p["implied_vol_prior"])
+        fair, fair_sigma, fair_T = self._compute_fair_value(state, memory, S, p, ts)
         memory["_velvet_z"] = z
-        memory["_gamma"]   = None   # populated lazily if needed
-        memory["_delta"]   = None
+        memory["_gamma"]   = call_gamma(S, p["K"], fair_T, fair_sigma)
+        memory["_delta"]   = call_delta(S, p["K"], fair_T, fair_sigma)
         memory["_fair_iv"] = fair
         memory["_spot"]    = S
-        memory["_T"]       = p["T"]
+        memory["_T"]       = fair_T
         if fair < p["min_quote_price"]:
             return [], 0
         orders:   List[Order] = []
@@ -396,6 +536,10 @@ class GammaScalpZGatedMixinStrategy(_VelvetOptionMixin, BaseStrategy):
         out: Dict[str, float] = {}
         if (f := memory.get("_fair_iv"))   is not None: out["fair_iv"]   = float(f)
         if (z := memory.get("_velvet_z"))  is not None: out["velvet_z"]  = float(z)
+        if (s := memory.get("_fair_sigma")) is not None: out["fair_sigma"] = float(s)
+        if (s := memory.get("_fair_realized_sigma")) is not None: out["realized_sigma"] = float(s)
+        if (s := memory.get("_fair_atm_sigma")) is not None: out["atm_sigma"] = float(s)
+        if (s := memory.get("_fair_smile_sigma")) is not None: out["smile_sigma"] = float(s)
         if (r := memory.get("_iv_resid")) is not None: out["iv_resid"] = float(r)
         if (d := memory.get("_iv_resid_delta")) is not None: out["iv_resid_delta"] = float(d)
         if (m := memory.get("_mode"))      is not None:
