@@ -58,3 +58,11 @@ logs/round_3/*.log
 logs/round_3/*.json
 artifacts/backtest_results/*
 artifacts/backtests/*
+
+# Round 4 large backtest JSONs (>50MB blocks push)
+artifacts/analysis/round_4/*.json
+artifacts/analysis/round_4/**/*.json
+logs/round_4/*.log
+logs/round_4/*.json
+artifacts/submissions/round_4/_BASELINE/*.json
+artifacts/submissions/round_4/_BASELINE/*.log
