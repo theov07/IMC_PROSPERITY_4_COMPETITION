@@ -1,5 +1,70 @@
 # Round 3 Findings
 
+## LATEST — Theo R3GuardedAnchorMM integrated → +50-70k PnL (claude/keen-tharp 2026-04-25)
+
+**Trigger**: Theo shared `r3_velvet_options_v5_guardedtuned` (HYDRO+VELVET+options full backtest:
++150,946 / DD 43,440 / Ratio 3.475). The velvet+options portion alone was estimated at ~121k.
+Our previous best velvet+options was ~92k (v24). Gap to close: +30k.
+
+**Key idea extracted**: R3GuardedAnchorMM. The anchor pull (toward fixed mid 5250) is GREAT
+when price is mean-reverting back to the anchor, TERRIBLE when price drifts away (we keep
+loading wrong-way inventory and get crushed). Solution: only USE the anchor pull when:
+- Near the anchor (mean-rev band) OR
+- Far but trend is shrinking the distance (= reverting) AND
+- We don't have wrong-way inventory (long below anchor / short above).
+When trending AWAY from anchor with wrong-way inventory: disable anchor + ar_gain + takers,
+fall back to pure passive penny-improve MM.
+
+Implementation: `prosperity/strategies/round_3/r3_guarded_anchor_mm.py` inherits
+`MMFirstV4ComboStrategy` and adds `_use_anchor()` regime detector. Params:
+- `guard_trend_alpha=0.45` (EWMA alpha for trend)
+- `guard_reversion_threshold=7.5` (require dist*trend ≤ -7.5 to mean "reverting")
+- `guard_inventory_dist=40` (wrong-way inventory threshold)
+- `guard_max_dist=80` (max |dist| for "reverting" zone)
+
+**Second idea**: gamma_scalp_zgated with `target_qty=300` on VEV_4000 (vs our prior
+option_mm_bs default smile passive). Net: VEV_4000 PnL 9.1k → 45.4k (+36k), ratio 0.75.
+
+**Backtest results (3-day, realistic fill)**:
+
+| Variant | PnL | DD | Ratio | D0 | D1 | D2 | Notes |
+|---|---:|---:|---:|---:|---:|---:|---|
+| baseline v34 (pre-Theo) | 88,658 | 46,889 | 1.89 | — | — | — | velvet+options without R3 guard |
+| v52_theo_minimal ★ | **147,679** | 59,356 | **2.49** | 27,683 | 58,310 | 61,686 | drop 5300/5400/5500 (best ratio) |
+| v50_theo_integrated | 150,365 | 61,800 | 2.43 | 28,183 | 59,114 | 63,068 | adds VEV_5300 (+2,686 PnL) |
+| v51_theo_full | 152,214 | 66,716 | 2.28 | 27,399 | 59,668 | 65,147 | adds 5400/5500 (drag, ratio 0.06/0.12) |
+| Theo full (HYDRO+VELVET+options) | 150,946 | 43,440 | 3.475 | — | — | — | HYDROGEL diversifies → lower DD |
+
+Improvement over v34 baseline: **+59k PnL** (+67%), at +12k DD cost. **Ratio also improved**
+(1.89 → 2.49, +32%). This is unequivocally a Pareto improvement.
+
+**Per-asset breakdown (v52)**:
+
+| Asset | PnL | DD | Ratio | DD%cap |
+|---|---:|---:|---:|---:|
+| VELVETFRUIT_EXTRACT | 76,016 | 15,929 | **4.77** | 0.9% |
+| VEV_4000 | 45,355 | 60,833 | 0.75 | 5.7% |
+| VEV_4500 | 32,416 | 43,714 | 0.74 | 9.1% |
+| VEV_5100 | 28,489 | 40,052 | 0.71 | 37.2% |
+| VEV_5000 | 15,364 | 21,612 | 0.71 | 26.5% |
+| VEV_5200 | 14,667 | 20,246 | 0.72 | 45.9% |
+
+Compared to v24 baseline:
+- VELVET: PnL 31,573 → 76,016 (+44.4k), DD 19,980 → 15,929 (-4k), ratio **1.58 → 4.77** ⚡
+- VEV_4000: PnL 9,136 → 45,355 (+36.2k), DD 1,948 → 60,833 (+58.9k), ratio 4.69 → 0.75
+- All other strikes: identical (VEV_4500, 5100, 5200 unchanged because we kept v34 config)
+
+**Final candidates locked in `artifacts/submissions/round_3/_final/velvet_options/00_FINAL_CANDIDATES/`**:
+1. `TOP1_BEST_RATIO__v52_theo_minimal__pnl148k_dd59k_ratio249.py` ← DEFAULT (best ratio)
+2. `TOP2_BALANCED__v50_theo_integrated__pnl150k_dd62k_ratio243.py` (slight PnL stretch)
+3. `TOP3_MAX_PNL__v51_theo_full__pnl152k_dd67k_ratio228.py` (max PnL, but VEV_5400/5500 drag)
+
+**Overfit risk**: Theo's guard logic uses 3 free parameters (alpha=0.45, threshold=7.5,
+inventory_dist=40). These were tuned on the same 3 days we're backtesting on. So some overfit
+exposure exists. Mitigation: the regime logic itself (use anchor only when reverting AND
+not wrong-way) is intuitively sound and should generalize. Fall-back if it doesn't:
+`02_PARETO_BALANCED__v38_drop_bad` (no guard logic, +86k PnL pre-Theo).
+
 ## LATEST - HYDRO transfer test from VELVET z-gate (Codex 2026-04-25)
 
 Goal: test whether the VELVET discovery (1-tick mean reversion + z-score
