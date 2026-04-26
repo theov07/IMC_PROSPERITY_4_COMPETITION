@@ -1,0 +1,4 @@
+variant,day,avg_delta,max_abs_delta,avg_gamma,avg_vega,avg_theta
+v38_drop_bad,0,310.0,493.5,0.679,1758508.0,-1495.9
+v38_drop_bad,1,252.3,625.8,0.2744,590025.0,-587.2
+v38_drop_bad,2,351.5,687.2,0.4743,872302.0,-1035.6

@@ -517,6 +517,20 @@ class BacktestEngine:
         return max_drawdown
 
     @staticmethod
+    def _max_drawdown_full(equity_curve: List[Tuple[int, float]]) -> tuple[float, float]:
+        """Return (max_drawdown_abs, peak_at_max_drawdown)."""
+        peak: float | None = None
+        max_drawdown = 0.0
+        peak_at_dd = 0.0
+        for _, value in equity_curve:
+            peak = value if peak is None else max(peak, value)
+            dd = peak - value
+            if dd > max_drawdown:
+                max_drawdown = dd
+                peak_at_dd = peak
+        return max_drawdown, peak_at_dd
+
+    @staticmethod
     def _build_robustness_summary(
         *,
         submitted_volume: int,
@@ -1552,6 +1566,33 @@ def _format_results_table(summaries: List[DaySummary], aggregate: Dict[str, obje
     return "\n".join(lines)
 
 
+def _format_drawdown_summary(summaries: List[DaySummary], aggregate: Dict[str, object]) -> str:
+    """Format max-drawdown lines (absolute + %) for each day and overall."""
+    lines: list[str] = []
+    width = 62
+
+    lines.append("─" * width)
+    lines.append(f"  {'Drawdown summary':30s}  {'abs':>10}   {'%':>7}")
+    lines.append("─" * width)
+
+    for s in summaries:
+        dd_abs, peak = BacktestEngine._max_drawdown_full(s.equity_curve)
+        pct = (dd_abs / peak * 100) if peak > 0 else float("nan")
+        pct_str = f"{pct:6.1f}%" if not (pct != pct) else "   n/a"
+        lines.append(f"  Day {s.day}  {'':24s}  {dd_abs:>10,.0f}   {pct_str}")
+
+    # Total drawdown on chained equity curve (peak-to-trough across all days)
+    chained = _chain_equity_curves(summaries)
+    total_dd, total_peak = BacktestEngine._max_drawdown_full(chained)
+    total_pct = (total_dd / total_peak * 100) if total_peak > 0 else float("nan")
+    total_pct_str = f"{total_pct:6.1f}%" if not (total_pct != total_pct) else "   n/a"
+    lines.append("─" * width)
+    lines.append(f"  {'TOTAL (chained equity)':30s}  {total_dd:>10,.0f}   {total_pct_str}")
+    lines.append("─" * width)
+
+    return "\n".join(lines)
+
+
 def run_cli(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prosperity backtest runner (any round)")
     parser.add_argument("--strategy", required=True, help="Module or alias: champion/leo/theo/pietro")
@@ -1589,6 +1630,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
 
     aggregate = aggregate_day_summaries(summaries)
     print(_format_results_table(summaries, aggregate, display_product=args.display_product))
+    print(_format_drawdown_summary(summaries, aggregate))
 
     if args.json_out:
         payload = {
