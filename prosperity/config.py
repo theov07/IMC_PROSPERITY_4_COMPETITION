@@ -14670,6 +14670,59 @@ MEMBER_OVERRIDES["r4_v6_M14_w06"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14":
 MEMBER_OVERRIDES["r4_v6_M14_w07"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.7, "Mark 01": -0.2})
 
 
+# v7 — Volume-conditional firing for Mark 49
+# Idea: only apply Mark 49 fade when his rolling-window |volume| > z*std above mean.
+# When Mark 49 is silent or trading small → 0 contribution (instead of -0.8 always).
+# When Mark 49 dumps big (informed flow) → full -0.8 fade applies.
+def _v7_conditional(cond_traders, zthresh=2.0, weights=None, baseline=0.0,
+                    stats_window_ts=50000, min_samples=50):
+    if weights is None:
+        weights = {"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2}
+    return {
+        4: {
+            sym: (
+                _override(
+                    cfg,
+                    **dict(cfg.params),
+                    obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                    obi_size_levels=3, obi_size_threshold=0.005,
+                    obi_size_boost_factor=1.5, obi_size_reduce_factor=0.7,
+                    counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                    cp_window_ts=10000, cp_signal_threshold=1.0,
+                    cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                    cp_trader_weights=weights,
+                    cp_conditional_traders=list(cond_traders),
+                    cp_conditional_zthresh=zthresh,
+                    cp_conditional_stats_window_ts=stats_window_ts,
+                    cp_conditional_min_samples=min_samples,
+                    cp_conditional_baseline_weight=baseline,
+                ) if cfg is not None else None
+            ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+        },
+    }
+
+
+# Conditional fire on Mark 49 only (the strongest signal, weight -0.8)
+MEMBER_OVERRIDES["r4_v7_M49cond_z15"] = _v7_conditional(["Mark 49"], zthresh=1.5)
+MEMBER_OVERRIDES["r4_v7_M49cond_z20"] = _v7_conditional(["Mark 49"], zthresh=2.0)
+MEMBER_OVERRIDES["r4_v7_M49cond_z25"] = _v7_conditional(["Mark 49"], zthresh=2.5)
+
+# Conditional fire on Mark 49 with longer history window (1000 ticks)
+MEMBER_OVERRIDES["r4_v7_M49cond_z20_w100k"] = _v7_conditional(
+    ["Mark 49"], zthresh=2.0, stats_window_ts=100000
+)
+
+# Conditional fire on Mark 14 too (in case Mark 14 also has bursts)
+MEMBER_OVERRIDES["r4_v7_M49M14cond_z20"] = _v7_conditional(
+    ["Mark 49", "Mark 14"], zthresh=2.0
+)
+
+# Conditional with soft baseline (z below threshold → -0.2 instead of 0)
+MEMBER_OVERRIDES["r4_v7_M49cond_z20_soft"] = _v7_conditional(
+    ["Mark 49"], zthresh=2.0, baseline=-0.2
+)
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {

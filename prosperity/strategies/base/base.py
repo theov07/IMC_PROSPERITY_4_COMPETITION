@@ -455,23 +455,26 @@ class BaseStrategy(ABC):
         state: TradingState,
         memory: Dict[str, Any],
     ) -> float:
-        """Counterparty-flow weighted signal.
+        """Counterparty-flow weighted signal with optional volume-conditional gating.
 
         Maintains a rolling buffer of (timestamp, trader_id, signed_qty) for the last
         `cp_window_ts` timestamp units. Signed qty = +qty when trader is buyer, -qty
         when trader is seller. Aggregates per trader, applies a per-trader weight,
         returns weighted sum.
 
-        Default weights (from R4 D1+D2+D3 lead-lag analysis on VELVET):
-          Mark 55 = +1.0  (high-vol MM, +0.14 rho with next-50-tick return, 60% hit rate)
-          Mark 67 = +1.0  (directional buyer, +0.12 rho, 54% hit rate)
-          Mark 01 = -1.0  (MM, -0.17 rho — FADE its flow)
-          Mark 14 = -1.0  (MM, -0.15 rho — FADE)
-        Other traders default to 0 weight.
+        Conditional gating (opt-in): for traders listed in `cp_conditional_traders`,
+        only apply their full weight when their current rolling-window |net_volume|
+        exceeds historical mean by `cp_conditional_zthresh` standard deviations.
+        Otherwise apply `cp_conditional_baseline_weight` (default 0).
 
         Params:
-          cp_window_ts        : rolling window in timestamp units (default 10000 = 100 ticks)
-          cp_trader_weights   : dict trader_id -> weight (default = R4 VELVET weights)
+          cp_window_ts                    : rolling window in timestamp units (default 10000)
+          cp_trader_weights               : dict trader_id -> weight
+          cp_conditional_traders          : list of traders to gate (default [])
+          cp_conditional_zthresh          : z-score threshold (default 2.0)
+          cp_conditional_stats_window_ts  : history window for stats (default 50000 = 500 ticks)
+          cp_conditional_min_samples      : min samples before gating activates (default 50)
+          cp_conditional_baseline_weight  : weight applied when below threshold (default 0.0)
 
         Returns: weighted signed signal (units = contracts).
         """
@@ -480,6 +483,11 @@ class BaseStrategy(ABC):
             "Mark 55": +1.0, "Mark 67": +1.0,
             "Mark 01": -1.0, "Mark 14": -1.0,
         })
+        cond_traders = set(self.params.get("cp_conditional_traders", []) or [])
+        cond_zthresh = float(self.params.get("cp_conditional_zthresh", 2.0))
+        cond_stats_ts = int(self.params.get("cp_conditional_stats_window_ts", 50000))
+        cond_min_samples = int(self.params.get("cp_conditional_min_samples", 50))
+        cond_baseline = float(self.params.get("cp_conditional_baseline_weight", 0.0))
 
         ts_now = int(getattr(state, "timestamp", 0))
 
@@ -509,15 +517,45 @@ class BaseStrategy(ABC):
                 i += 1
             del buf[:i]
 
-        # Aggregate per trader, apply weights
-        signal = 0.0
+        # Aggregate per trader
         per_trader = {}
         for _, trader, signed in buf:
             per_trader[trader] = per_trader.get(trader, 0.0) + signed
+
+        # Conditional gating: maintain stats history for designated traders
+        gates = {}  # trader -> effective weight multiplier (1.0 = full, baseline/w otherwise)
+        if cond_traders:
+            stats_buf = memory.setdefault("_cp_stats_buf", {})
+            cond_cut = ts_now - cond_stats_ts
+            for trader in cond_traders:
+                cur_abs = abs(per_trader.get(trader, 0.0))
+                hist = stats_buf.setdefault(trader, [])
+                hist.append([ts_now, cur_abs])
+                while hist and hist[0][0] < cond_cut:
+                    hist.pop(0)
+                if len(hist) < cond_min_samples:
+                    gates[trader] = 1.0  # not enough data → behave as v5 (always-on)
+                    continue
+                vols = [s[1] for s in hist]
+                n = len(vols)
+                mean = sum(vols) / n
+                var = sum((v - mean) ** 2 for v in vols) / n
+                std = math.sqrt(var) if var > 0 else 0.0
+                z = (cur_abs - mean) / std if std > 0 else (cond_zthresh + 1 if cur_abs > 0 else 0.0)
+                gates[trader] = 1.0 if z >= cond_zthresh else 0.0
+
+        # Apply weights (with conditional gating where applicable)
+        signal = 0.0
         for trader, net in per_trader.items():
             w = weights.get(trader, 0.0)
+            if trader in cond_traders:
+                # Linearly blend full-weight and baseline based on gate
+                g = gates.get(trader, 1.0)
+                w = g * w + (1.0 - g) * cond_baseline
             signal += w * net
 
         memory["_cp_signal"] = signal
         memory["_cp_per_trader"] = per_trader
+        if cond_traders:
+            memory["_cp_gates"] = gates
         return signal

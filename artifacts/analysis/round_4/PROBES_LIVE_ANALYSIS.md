@@ -96,16 +96,36 @@ Size doesn't change WHO trades, just HOW MUCH.
 
 ## Action items for v6
 
-### High priority
-- [ ] **Add Mark 55 fade** with weight -0.3 → A/B vs v5
-- [ ] **Re-tune Mark 14** with finer grid (-0.3, -0.4, -0.5, -0.6, -0.7)
-- [ ] **Test Mark 67 follow** with +0.2 to +0.4 → may help on uptrend days
+### High priority — DONE (all 11 variants LOSE vs v5 — see d0e479a)
+- [x] **Add Mark 55 fade** -0.3 → -7,621 PnL vs v5 (LOSES)
+- [x] **Re-tune Mark 14** finer grid → all worse than -0.5 (LOSES)
+- [x] **Test Mark 67 follow** +0.2 → -2,490 vs v5 (closest, but LOSES)
 
-### Medium priority
-- [ ] **Volume-conditional firing**: only fade Mark 49 when his sell volume > 2σ above mean
-- [ ] **Mark 14 conditional**: maybe Mark 14 buys = INFORMED when winning queue (test inverse weight)
+### Medium priority — DONE (all 6 variants LOSE vs v5)
+- [x] **Volume-conditional firing M49** (z=1.5/2.0/2.5/wider): all -8k to -10k vs v5 (LOSES)
+- [x] **Mark 14 conditional** combined with M49 → LOSES too
+- [x] **Soft baseline** (z below threshold → -0.2 instead of 0) → -10,887 (LOSES)
 
-### Research
+  **Result table (VELVET 3-day, realistic fill):**
+  | Variant                 |    PnL | Δ vs v5 |
+  |-------------------------|-------:|--------:|
+  | **v5 baseline always-on** | **100,087** |       — |
+  | v7 z=1.5                |  91,200 |  -8,887 |
+  | v7 z=2.0                |  91,132 |  -8,955 |
+  | v7 z=2.5                |  90,323 |  -9,764 |
+  | v7 z=2.0 w=1000ticks    |  87,858 | -12,229 |
+  | v7 M49+M14 cond z=2.0   |  89,484 | -10,603 |
+  | v7 z=2.0 soft (-0.2)    |  89,200 | -10,887 |
+
+  **Why conditional fails**: Mark 49 trades RARELY but each trade is informative.
+  Always-on -0.8 captures every signal; gating misses 60-80% of them depending on z.
+  The "rare-but-big" pattern is ALREADY anomalous → no benefit from extra anomaly filter.
+
+### Research — pending (no actionable next step from backtest perspective)
 - [ ] Why Mark 55 net sells in live but not in historical 3-day data?
 - [ ] Why Mark 14 BUY bias in live but balanced historical?
 - [ ] Are Mark patterns persistent across multiple live runs (sample size limited)?
+
+## Final decision (D0 of R4 submission window)
+
+**KEEP v5 for primary upload.** All 17 variants tested (11 weight + 6 conditional) lost on backtest 3-day. Live preview window data is too small (D3 first 10%) to override 3-day backtest. Conditional firing infrastructure preserved in `_counterparty_signal()` for future use (e.g., regime-detection scenarios where we explicitly KNOW we want to gate signals).
