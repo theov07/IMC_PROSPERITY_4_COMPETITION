@@ -219,6 +219,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "hydro_mm_v201_influenced":    ("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201Influenced"),
     "hydro_mm_v201_cancel_against":("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201CancelAgainst"),
     "live_alpha_probe":            ("prosperity/strategies/round_4/live_alpha_probe.py", "LiveAlphaProbeStrategy"),
+    "live_alpha_probe_extreme":    ("prosperity/strategies/round_4/live_alpha_probe_extreme.py", "LiveAlphaProbeExtremeStrategy"),
     "forced_long_buyer":           ("prosperity/strategies/round_4/forced_long_buyer.py", "ForcedLongBuyerStrategy"),
     # ── smile IV scalper ──
     "smile_iv_scalper":          ("prosperity/strategies/round_3/tibo/smile_iv_scalper.py", "SmileIVScalerStrategy"),
