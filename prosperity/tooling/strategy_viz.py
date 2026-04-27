@@ -253,39 +253,56 @@ def _merge_equity(bt_days: List[Dict], round_num: int, days: List[str], data_dir
 # ── Feature extraction ────────────────────────────────────────────────────────
 
 def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -> Dict[str, Any]:
-    """Extract v5-specific time series from feature_ticks and quotes."""
-    # From feature_ticks: FairValue, DevSmooth, M14Signal
-    fv_ts, fv_vals, dev_ts, dev_vals, m14_ts, m14_vals = [], [], [], [], [], []
+    """Extract v5/v6-specific time series from feature_ticks and quotes."""
+    (fv_ts, fv_vals, dev_ts, dev_vals, m14_ts, m14_vals,
+     anc_ts, anc_vals, mom_ts, mom_vals,
+     guard_ts, guard_vals, tsell_ts, tsell_vals, tbuy_ts, tbuy_vals,
+     fsz_ts, f_bid_sz, f_ask_sz) = ([] for _ in range(19))
+
     for ft in features:
         if ft.get("symbol") != product:
             continue
         ts = ft["timestamp"]
-        fv = _to_float(ft.get("FairValue"))
-        dv = _to_float(ft.get("DevSmooth"))
-        m14 = _to_float(ft.get("M14Signal"))
-        if fv is not None:
-            fv_ts.append(ts);  fv_vals.append(fv)
-        if dv is not None:
-            dev_ts.append(ts); dev_vals.append(dv)
-        if m14 is not None:
-            m14_ts.append(ts); m14_vals.append(m14)
+        fv   = _to_float(ft.get("FairValue"))
+        dv   = _to_float(ft.get("DevSmooth"))
+        m14  = _to_float(ft.get("M14Signal"))
+        anc  = _to_float(ft.get("Anchor"))
+        mom  = _to_float(ft.get("ar_mom"))
+        grd  = _to_float(ft.get("guard"))
+        ts_  = _to_float(ft.get("taker_sell"))
+        tb_  = _to_float(ft.get("taker_buy"))
+        bsz  = _to_float(ft.get("bid_size"))
+        asz  = _to_float(ft.get("ask_size"))
+        if fv  is not None: fv_ts.append(ts);     fv_vals.append(fv)
+        if dv  is not None: dev_ts.append(ts);    dev_vals.append(dv)
+        if m14 is not None: m14_ts.append(ts);    m14_vals.append(m14)
+        if anc is not None: anc_ts.append(ts);    anc_vals.append(anc)
+        if mom is not None: mom_ts.append(ts);    mom_vals.append(mom)
+        if grd is not None: guard_ts.append(ts);  guard_vals.append(grd)
+        if ts_ is not None: tsell_ts.append(ts);  tsell_vals.append(ts_)
+        if tb_ is not None: tbuy_ts.append(ts);   tbuy_vals.append(tb_)
+        if bsz is not None and asz is not None:
+            fsz_ts.append(ts); f_bid_sz.append(bsz); f_ask_sz.append(asz)
 
-    # From quotes: bid_size, ask_size (inventory bias) — subsample every 5th
-    qts, q_bid_sz, q_ask_sz = [], [], []
-    for i, q in enumerate(quotes):
-        if q.get("symbol") != product:
-            continue
-        if i % 5 != 0:
-            continue
-        qts.append(q["ts"])
-        q_bid_sz.append(q.get("bid_size", 0))
-        q_ask_sz.append(q.get("ask_size", 0))
+    # sizes: prefer quote-trace from features; fall back to quotes buffer
+    if not fsz_ts:
+        for i, q in enumerate(quotes):
+            if q.get("symbol") != product or i % 5 != 0:
+                continue
+            fsz_ts.append(q["ts"])
+            f_bid_sz.append(q.get("bid_size", 0))
+            f_ask_sz.append(q.get("ask_size", 0))
 
     return {
-        "fv_ts":     fv_ts,    "fv":        fv_vals,
-        "dev_ts":    dev_ts,   "dev":        dev_vals,
-        "m14_ts":    m14_ts,   "m14":        m14_vals,
-        "size_ts":   qts,      "bid_size":   q_bid_sz,  "ask_size":  q_ask_sz,
+        "fv_ts":      fv_ts,    "fv":         fv_vals,
+        "dev_ts":     dev_ts,   "dev":         dev_vals,
+        "m14_ts":     m14_ts,   "m14":         m14_vals,
+        "anc_ts":     anc_ts,   "anc":         anc_vals,
+        "mom_ts":     mom_ts,   "mom":         mom_vals,
+        "guard_ts":   guard_ts, "guard":       guard_vals,
+        "tsell_ts":   tsell_ts, "tsell":       tsell_vals,
+        "tbuy_ts":    tbuy_ts,  "tbuy":        tbuy_vals,
+        "size_ts":    fsz_ts,   "bid_size":    f_bid_sz,  "ask_size": f_ask_sz,
     }
 
 
@@ -469,6 +486,8 @@ def _parse_lambdalog_entries(runtime_logs: list, default_product: str = "") -> L
                 trace = obj.get("trace")
                 columns = obj.get("columns")
                 if trace == "quote_trace" or (trace is None and columns):
+                    _META = {"timestamp", "bid_price", "ask_price",
+                             "trace", "columns", "chunk_end", "product"}
                     for tick in obj.get("log", []):
                         if not isinstance(columns, list) or len(tick) < 3:
                             continue
@@ -478,10 +497,12 @@ def _parse_lambdalog_entries(runtime_logs: list, default_product: str = "") -> L
                         if ts_val is None:
                             continue
                         feat: Dict[str, Any] = {"timestamp": ts_val, "symbol": product}
-                        for k in ("FairValue", "DevSmooth", "M14Signal",
-                                  "ZsMean", "ZsStd", "MidSmooth", "Z"):
-                            if k in mapped:
-                                feat[k] = _to_float(mapped[k])
+                        # Dynamically extract every non-metadata column
+                        for k, v in mapped.items():
+                            if k not in _META and v is not None:
+                                fv = _to_float(v)
+                                if fv is not None:
+                                    feat[k] = fv
                         features.append(feat)
 
     return features
@@ -597,6 +618,14 @@ def _price_chart_js_v5(
           line:{{color:'#f9e2af',width:1.5}},
           hovertemplate:'FV: %{{y:.2f}}<extra></extra>'}}""",
         ]
+
+    # Anchor — shows where the dynamic anchor is tracking (v6+)
+    if v5.get("anc_ts"):
+        anc_ts = _json_list(v5["anc_ts"])
+        anc_v  = _json_list(v5["anc"])
+        traces.append(f"""{{x:{anc_ts},y:{anc_v},name:'Anchor',mode:'lines',
+          line:{{color:'#fab387',width:1.2,dash:'dash'}},opacity:0.8,
+          hovertemplate:'Anchor: %{{y:.2f}}<extra></extra>'}}""")
 
     # Our submitted passive quotes (subsample every 5th for file size)
     q_prod = [q for q in quotes if q.get("symbol") == product]
@@ -833,6 +862,88 @@ def _m14_chart_js(product: str, v5: Dict) -> str:
         {{type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:-1,y1:-1,
           line:{{color:'#f38ba8',width:1,dash:'dot'}}}},
       ],
+      margin:{{t:30,b:36,l:65,r:20}},
+    }}),{{responsive:true}});
+  }}"""
+
+
+# ── Chart: AR Momentum + Taker Activity (v6) ─────────────────────────────────
+
+def _ar_momentum_chart_js(product: str, v5: Dict) -> str:
+    """AR momentum + per-tick taker sell/buy bar chart.
+
+    ar_mom positive → fair_value pulled DOWN → dev grows → taker sells fire.
+    This chart makes it visually obvious when takers fire and why.
+    """
+    safe = _jsid(product)
+    has_mom   = bool(v5.get("mom_ts"))
+    has_taker = bool(v5.get("tsell_ts") or v5.get("tbuy_ts"))
+    if not has_mom and not has_taker:
+        return f"""
+  function plot_mom_{safe}() {{
+    document.getElementById('mom_{safe}').innerHTML =
+      '<p style="color:#6c7086;padding:1em">No AR momentum / taker data (v6+ logging required).</p>';
+  }}"""
+
+    traces = []
+    if has_mom:
+        mom_ts = _json_list(v5["mom_ts"])
+        mom_v  = _json_list(v5["mom"])
+        # Guard state as background shading: guard=0 → taker blocked (red tint)
+        guard_shapes = ""
+        if v5.get("guard_ts"):
+            # Build contiguous blocked regions
+            pairs = sorted(zip(v5["guard_ts"], v5["guard"]))
+            in_block = False
+            start_ts = 0
+            for ts, g in pairs:
+                if g == 0 and not in_block:
+                    in_block = True; start_ts = ts
+                elif g != 0 and in_block:
+                    in_block = False
+                    guard_shapes += f"""{{type:'rect',xref:'x',yref:'paper',
+                      x0:{start_ts},x1:{ts},y0:0,y1:1,
+                      fillcolor:'rgba(243,139,168,0.08)',line:{{width:0}}}},"""
+            if in_block:
+                guard_shapes += f"""{{type:'rect',xref:'x',yref:'paper',
+                  x0:{start_ts},x1:{pairs[-1][0]},y0:0,y1:1,
+                  fillcolor:'rgba(243,139,168,0.08)',line:{{width:0}}}},"""
+
+        traces.append(f"""{{
+      x:{mom_ts},y:{mom_v},name:'AR momentum',mode:'lines',fill:'tozeroy',
+      fillcolor:'rgba(249,226,175,0.15)',
+      line:{{color:'#f9e2af',width:1.5}},
+      hovertemplate:'ar_mom: %{{y:.4f}}<extra></extra>'
+    }}""")
+
+    if has_taker:
+        if v5.get("tsell_ts"):
+            traces.append(f"""{{
+      x:{_json_list(v5["tsell_ts"])},y:{_json_list([-v for v in v5["tsell"]])},
+      name:'Taker SELL (neg)',mode:'markers+lines',
+      marker:{{color:'#f38ba8',size:5,symbol:'triangle-down'}},
+      line:{{color:'#f38ba8',width:1}},
+      hovertemplate:'sell qty: %{{text}}<extra></extra>',
+      text:{_json_list(v5["tsell"])}
+    }}""")
+        if v5.get("tbuy_ts"):
+            traces.append(f"""{{
+      x:{_json_list(v5["tbuy_ts"])},y:{_json_list(v5["tbuy"])},
+      name:'Taker BUY',mode:'markers+lines',
+      marker:{{color:'#a6e3a1',size:5,symbol:'triangle-up'}},
+      line:{{color:'#a6e3a1',width:1}},
+      hovertemplate:'buy qty: %{{y}}<extra></extra>'
+    }}""")
+
+    guard_shapes_js = guard_shapes if has_mom and v5.get("guard_ts") else ""
+    traces_js = ",\n    ".join(traces)
+    return f"""
+  function plot_mom_{safe}() {{
+    Plotly.newPlot('mom_{safe}',[{traces_js}],
+    Object.assign({{}},{_layout_js()},{{
+      title:'{product} — AR Momentum (yellow) + Taker Activity (red shading = guard blocked)',
+      yaxis:{{title:'momentum / qty',gridcolor:'#313244',zeroline:true}},
+      shapes:[{guard_shapes_js}],
       margin:{{t:30,b:36,l:65,r:20}},
     }}),{{responsive:true}});
   }}"""
@@ -1080,7 +1191,7 @@ function showProductPanel(safe) {
   var btn = document.getElementById('prod_btn_' + safe);
   if (btn) btn.classList.add('active');
   if (panel && !panel.dataset.plotted) {
-    ['plot_price_','plot_dev_','plot_z_','plot_pos_','plot_m14_'].forEach(fn => {
+    ['plot_price_','plot_dev_','plot_mom_','plot_z_','plot_pos_','plot_m14_'].forEach(fn => {
       var f = window[fn + safe]; if (f) f();
     });
     var pnl = window['plot_pnl']; if (pnl && !window['_pnl_plotted']) { pnl(); window['_pnl_plotted']=1; }
@@ -1175,11 +1286,13 @@ def generate_html(
     <span class="legend-item">● pink = MAKER SELL</span>
     <span class="legend-item">■ = other trader</span>
     <span class="legend-item">yellow = AR FairValue</span>
+    <span class="legend-item">orange dashed = Anchor (v6)</span>
     <span class="legend-item">green band = BUY entry zone (FV - {taker_edge})</span>
     <span class="legend-item">red band = SELL entry zone (FV + {taker_edge})</span>
   </div>
   <div class="chart-container"><div id="price_{safe}" class="chart-tall"></div></div>
   <div class="chart-container"><div id="dev_{safe}"   class="chart-med"></div></div>
+  <div class="chart-container"><div id="mom_{safe}"   class="chart-med"></div></div>
   <div class="chart-container"><div id="pos_{safe}"   class="chart-med"></div></div>
   <div class="chart-container"><div id="m14_{safe}"   class="chart-short"></div></div>
 </div>"""
@@ -1187,6 +1300,7 @@ def generate_html(
             js_fns += _price_chart_js_v5(prod, prod_mkt, our_fills, prod_quotes,
                                           v5, market_trades, trader_index, taker_edge)
             js_fns += _deviation_chart_js(prod, v5, taker_edge)
+            js_fns += _ar_momentum_chart_js(prod, v5)
             js_fns += _position_sizing_chart_js(prod, our_fills, v5, day_boundaries)
             js_fns += _m14_chart_js(prod, v5)
 

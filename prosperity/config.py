@@ -10256,6 +10256,54 @@ MEMBER_OVERRIDES["hydro_mv_v5_best"] = {
         })}
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# mv_v6: Dynamic anchor — inv_protected mode
+# Anchor only updates when |position| < pos_threshold × limit (flat or light).
+# Once we're heavily positioned the anchor freezes, preventing fair_value from
+# drifting further in the wrong direction and amplifying the taker signal.
+# quote_trace_enabled=True: full per-tick log of FairValue/Anchor/DevSmooth/etc,
+# flushed every log_flush_ts ticks so the visualizer sees dense data.
+# ─────────────────────────────────────────────────────────────────────────────
+_V6_BASE_PARAMS = {
+    "anchor_price":          10000,
+    "anchor_alpha":          0.02,      # overridden per variant
+    "anchor_drift_bound":    1.5,       # only used by "fixed" mode
+    "ar_gain":               8.0,
+    "ar_smooth_half_life":   5,
+    "mid_smooth_half_life":  20,
+    "dev_smooth_half_life":  5,
+    "passive_quoting":       True,
+    "maker_size_base_pct":   0.25,
+    "pct_kept_for_takers":   0.2,
+    "use_inventory_bias":    True,
+    "use_ar_taker":          True,
+    "ar_taker_edge":         12.0,
+    "ar_taker_size_pct":     0.3,
+    "use_gap_exploit":       False,
+    "use_m14_gate":          False,
+    "use_ar_quote_bias":     False,
+    "use_anchor_guard":      False,
+    "informed_trader_name":  "Mark 14",
+    "last_ts_value":         999900,
+    "quote_trace_enabled":   True,   # per-tick buffer, flushed every log_flush_ts
+    "log_flush_ts":          1000,   # flush ~100 rows per chunk (10 ticks × 100 chunks)
+}
+
+def _v6(anchor_mode: str, **extra) -> ProductConfig:
+    return ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v6", position_limit=200,
+        params={**_V6_BASE_PARAMS, "anchor_mode": anchor_mode, **extra},
+    )
+
+# v6a: best backtest — pos_threshold=30% (60u), alpha=0.007 → 179,172 PnL, DD=20,136
+MEMBER_OVERRIDES["hydro_mv_v6a"] = {
+    4: {"HYDROGEL_PACK": _v6("inv_protected", anchor_pos_threshold=0.30, anchor_alpha=0.007)}
+}
+# v6b: conservative — pos_threshold=20% (40u), alpha=0.005 → 178,785 PnL, DD=20,130
+MEMBER_OVERRIDES["hydro_mv_v6b"] = {
+    4: {"HYDROGEL_PACK": _v6("inv_protected", anchor_pos_threshold=0.20, anchor_alpha=0.005)}
+}
+
 # ── mv_v1: z-score mean-reversion + Mark 14 gate ─────────────────────────────
 MEMBER_OVERRIDES["hydro_mv_v1"] = {
     4: {
