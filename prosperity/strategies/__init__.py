@@ -210,6 +210,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
     # ── Round 4 ──
     "oracle_replay_r4d3": ("prosperity.strategies.round_4.oracle_replay_d3", "OracleReplayR4D3Strategy"),
+    "forced_long_buyer": ("prosperity.strategies.round_4.forced_long_buyer", "ForcedLongBuyerStrategy"),
     # ── Tibo Round 3 ──
     "gamma_scalp_zgated":  ("prosperity.strategies.round_3.tibo.gamma_scalp_zgated", "GammaScalpZGatedStrategy"),
     "velvet_strat":        ("prosperity.strategies.round_3.tibo.velvet_strat",    "VelvetStratV1"),

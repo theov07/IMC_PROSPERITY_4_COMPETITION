@@ -72,29 +72,44 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             dh_saved_target = self.params.get("inventory_target", 0)
             self.params["inventory_target"] = scaled_target
 
-        # Counterparty bias layer (opt-in): shift anchor based on trader-flow signal.
-        # When Mark 55+67 net buying or Mark 01+14 net selling → bullish → anchor up.
-        # When opposite → bearish → anchor down.
-        cp_saved_anchor = None
+        # Counterparty bias layer (opt-in): compute trader-flow signal once,
+        # then SHIFT FINAL ORDER PRICES uniformly (bypass anchor on/off check).
+        # Bullish signal → shift quotes UP (more aggressive bid + less aggressive ask)
+        # Bearish signal → shift quotes DOWN
+        cp_offset = 0
         if bool(self.params.get("counterparty_bias_enabled", False)):
             cp_signal = self._counterparty_signal(state, memory)
-            cp_threshold = float(self.params.get("cp_signal_threshold", 30.0))
-            cp_max_offset = float(self.params.get("cp_max_anchor_offset", 5.0))
-            cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.05))
-            old_anchor = self.params.get("anchor_price")
-            if old_anchor is not None and abs(cp_signal) > cp_threshold:
-                offset = max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))
-                cp_saved_anchor = old_anchor
-                self.params["anchor_price"] = old_anchor + offset
-                memory["_cp_anchor_offset"] = offset
+            cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
+            cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
+            cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
+            if abs(cp_signal) > cp_threshold:
+                cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
+                memory["_cp_offset"] = cp_offset
 
         try:
-            return self._compute_orders_inner(state, book, order_depth, position, memory, mid)
+            orders, conv = self._compute_orders_inner(state, book, order_depth, position, memory, mid)
         finally:
             if dh_saved_target is not None:
                 self.params["inventory_target"] = dh_saved_target
-            if cp_saved_anchor is not None:
-                self.params["anchor_price"] = cp_saved_anchor
+
+        # Apply cp_bias as uniform price shift on all orders (after strategy logic)
+        if cp_offset != 0 and orders:
+            shifted = []
+            best_bid = book.best_bid
+            best_ask = book.best_ask
+            for o in orders:
+                new_price = int(o.price) + cp_offset
+                # Cap to avoid crossing the book:
+                # BUY (qty > 0) shouldn't cross at or above best_ask
+                # SELL (qty < 0) shouldn't cross at or below best_bid
+                if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
+                    new_price = int(best_ask) - 1
+                elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
+                    new_price = int(best_bid) + 1
+                shifted.append(Order(o.symbol, new_price, o.quantity))
+            return shifted, conv
+
+        return orders, conv
 
     def _compute_orders_inner(
         self,

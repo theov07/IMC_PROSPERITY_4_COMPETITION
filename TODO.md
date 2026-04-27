@@ -78,6 +78,26 @@ Tested and **rejected**:
 
 ---
 
+### ⏳ User's original ideas — pending items
+
+- **Trader analysis PER PRODUCT** (only VELVET done, need per-option Marks)
+  - Per-strike trader classification (who's MM on VEV_4000 vs VEV_5300?)
+  - Cross-trader correlation: does Mark X follow Mark Y? Inverse?
+- **Live IMC vs R4 D3 first 10% diff** — explain the gap
+  - Hypothesis: our impact moves the market (other traders react to us)
+  - Reverse-engineer best Marks' MM patterns (Mark 14, Mark 55) — how do they post quotes? sizes? speed?
+- **Hedging cost/benefit** formal analysis
+  - For each hedge type, compute (cost paid) / (DD reduction)
+  - Find the threshold where hedging is rentable
+- **Why deep OTM trades at 0.5?** investigation
+  - Mark 01 BUYS 911 of VEV_5400 at price 0.5 — why?
+  - Are they free options? Lottery tickets? Hedges?
+- **Final delivery polish**:
+  - Equity curve plot per variant
+  - Metrics dashboard (Sharpe-like, fill rates, markouts per product)
+  - Live kill-switches for unencountered scenarios (max DD, max position, fail-safe flatten)
+  - Generalize: parametrize EVERY hard-coded value
+
 ### LIVE-only alpha (untestable in backtest)
 
 - Time-of-session adaptive params (first 100 ticks = build, last 100 = harvest)

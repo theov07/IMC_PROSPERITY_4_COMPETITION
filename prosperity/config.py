@@ -13426,7 +13426,8 @@ MEMBER_OVERRIDES["r4_velvet_cond_unwind_all"] = {
 # Hit rates: Mark 55 BUY signal = 60% (n=57), Mark 67 BUY signal = 54% (n=59)
 # =============================================================================
 
-# r4_velvet_cp_bias_v1 — counterparty bias on VELVET only (anchor offset)
+# r4_velvet_cp_bias_v1 — counterparty bias via DIRECT PRICE SHIFT (post-orders)
+# Calibrated for actual signal magnitudes seen in data (5-30 typically per 100 ticks)
 MEMBER_OVERRIDES["r4_velvet_cp_bias_v1"] = {
     4: {
         sym: (
@@ -13434,10 +13435,10 @@ MEMBER_OVERRIDES["r4_velvet_cp_bias_v1"] = {
                 cfg,
                 **dict(cfg.params),
                 counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
-                cp_window_ts=10000,            # 100 tick rolling
-                cp_signal_threshold=30.0,      # min |signal| to fire
-                cp_max_anchor_offset=5.0,      # cap on anchor shift in ticks
-                cp_anchor_scale_per_unit=0.05, # ticks per signal-unit (signal up to 100)
+                cp_window_ts=10000,            # 100-tick rolling
+                cp_signal_threshold=5.0,       # fire on modest flow
+                cp_max_anchor_offset=2.0,      # cap shift at 2 ticks (avoid book crossing)
+                cp_anchor_scale_per_unit=0.10, # 10 signal units = 1 tick shift
             )
             if cfg is not None else None
         )
@@ -13446,7 +13447,7 @@ MEMBER_OVERRIDES["r4_velvet_cp_bias_v1"] = {
 }
 
 
-# r4_velvet_cp_bias_aggressive — wider offset cap, lower threshold
+# r4_velvet_cp_bias_aggressive — bigger shifts (3 ticks max)
 MEMBER_OVERRIDES["r4_velvet_cp_bias_aggressive"] = {
     4: {
         sym: (
@@ -13455,9 +13456,9 @@ MEMBER_OVERRIDES["r4_velvet_cp_bias_aggressive"] = {
                 **dict(cfg.params),
                 counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
                 cp_window_ts=10000,
-                cp_signal_threshold=15.0,
-                cp_max_anchor_offset=10.0,
-                cp_anchor_scale_per_unit=0.10,
+                cp_signal_threshold=3.0,       # fire on small flow
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.20, # 5 signal units = 1 tick shift
             )
             if cfg is not None else None
         )
@@ -13498,6 +13499,132 @@ MEMBER_OVERRIDES["r4_velvet_cp_bias_max"] = {
                 cp_signal_threshold=1.0,         # fire on any flow
                 cp_max_anchor_offset=20.0,       # huge offset
                 cp_anchor_scale_per_unit=1.0,    # 1 tick per unit signal
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_fade_mark01 — fade Mark 01 ONLY (strongest signal: rho=-0.17, 77% fade hit)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_mark01"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=3.0,
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.20,
+                cp_trader_weights={"Mark 01": -1.0},  # Only fade Mark 01
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_follow_mark55 — follow Mark 55 ONLY (rho=+0.14, 60% hit, n=57)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_follow_mark55"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=3.0,
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.20,
+                cp_trader_weights={"Mark 55": 1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_fade_mark49 — fade Mark 49 (DIRECTIONAL SELLER, counterparty of Mark 67 ρ=-0.78)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_mark49"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=3.0,
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.20,
+                cp_trader_weights={"Mark 49": -1.0},  # Mark 49 sell → bullish
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_fade_mark49_strong — same as fade_mark49 but bigger offset
+MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_mark49_strong"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=2.0,
+                cp_max_anchor_offset=5.0,         # bigger cap
+                cp_anchor_scale_per_unit=0.30,    # bigger scale
+                cp_trader_weights={"Mark 49": -1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_fade_mark49_long — longer window (300 ticks)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_mark49_long"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=30000,    # 300 ticks
+                cp_signal_threshold=5.0,
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_fade_sellers — fade BOTH Mark 49 + Mark 22 (directional sellers)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_sellers"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=3.0,
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.20,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 22": -1.0},
             )
             if cfg is not None else None
         )
@@ -13700,6 +13827,83 @@ MEMBER_OVERRIDES["r4_velvet_otm_hedge_small"] = {
 for k in (6000, 6500):
     MEMBER_OVERRIDES["r4_velvet_otm_hedge_small"][4][f"VEV_{k}"] = _override(
         ROUND_4[f"VEV_{k}"], position_limit=100, strike=k, **{kk: vv for kk, vv in _otm_hedge_params().items() if kk not in ("position_limit", "strike", "strategy")},
+    )
+
+
+# r4_velvet_otm_forced_v1 — FORCED-ENTRY OTM hedge (taker BUY at start of day)
+# Buys 100 long VEV_6000 + 100 long VEV_6500 in the first 1000 ticks each day
+# Asymmetric: cost ~50 per day per strike, wins +500 if VELVET drops 5%+
+MEMBER_OVERRIDES["r4_velvet_otm_forced_v1"] = {
+    4: {
+        **{
+            sym: cfg
+            for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+        },
+    },
+}
+for k in (6000, 6500):
+    MEMBER_OVERRIDES["r4_velvet_otm_forced_v1"][4][f"VEV_{k}"] = ProductConfig(
+        symbol=f"VEV_{k}",
+        strategy="forced_long_buyer",
+        position_limit=100,
+        params=dict(
+            target_long=100,
+            buy_chunk_size=5,
+            max_entry_ticks=2000,   # 20% of day to accumulate
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    )
+
+
+# r4_velvet_otm_forced_big — bigger OTM hedge (200 each + take 4500/5500 too)
+MEMBER_OVERRIDES["r4_velvet_otm_forced_big"] = {
+    4: {
+        **{
+            sym: cfg
+            for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+        },
+    },
+}
+for k in (6000, 6500):
+    MEMBER_OVERRIDES["r4_velvet_otm_forced_big"][4][f"VEV_{k}"] = ProductConfig(
+        symbol=f"VEV_{k}",
+        strategy="forced_long_buyer",
+        position_limit=200,
+        params=dict(
+            target_long=200,
+            buy_chunk_size=10,
+            max_entry_ticks=2000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    )
+
+
+# r4_velvet_otm_forced_5500 — also force long on VEV_5500 (price ~6, more sensitive)
+MEMBER_OVERRIDES["r4_velvet_otm_forced_5500"] = {
+    4: {
+        **{
+            sym: cfg
+            for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+        },
+    },
+}
+for k in (5500, 6000, 6500):
+    MEMBER_OVERRIDES["r4_velvet_otm_forced_5500"][4][f"VEV_{k}"] = ProductConfig(
+        symbol=f"VEV_{k}",
+        strategy="forced_long_buyer",
+        position_limit=100,
+        params=dict(
+            target_long=100,
+            buy_chunk_size=5,
+            max_entry_ticks=2000,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
     )
 
 

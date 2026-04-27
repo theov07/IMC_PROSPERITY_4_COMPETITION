@@ -895,6 +895,50 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
         position: int,
         memory: Dict[str, Any],
     ) -> Tuple[List[Order], int]:
+        # Counterparty bias layer (opt-in via params): compute trader-flow signal
+        # Mark 55+67 follow / Mark 01+14 fade → returns weighted net flow signal
+        cp_offset = 0
+        if bool(self.params.get("counterparty_bias_enabled", False)):
+            cp_signal = self._counterparty_signal(state, memory)
+            cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
+            cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
+            cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
+            # Diagnostics: count fires
+            memory["_cp_total_calls"] = memory.get("_cp_total_calls", 0) + 1
+            if abs(cp_signal) > cp_threshold:
+                cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
+                memory["_cp_offset"] = cp_offset
+                memory["_cp_fires"] = memory.get("_cp_fires", 0) + 1
+                memory["_cp_signal_max"] = max(abs(cp_signal), memory.get("_cp_signal_max", 0))
+            memory["_cp_buf_size"] = len(memory.get("_cp_buf", []))
+
+        # Original guard logic
+        orders, conv = self._compute_guarded(state, book, order_depth, position, memory)
+
+        # Apply cp_bias as uniform price shift on all orders (post-strategy)
+        if cp_offset != 0 and orders:
+            shifted = []
+            best_bid = book.best_bid
+            best_ask = book.best_ask
+            for o in orders:
+                new_price = int(o.price) + cp_offset
+                # Cap to avoid crossing the book
+                if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
+                    new_price = int(best_ask) - 1
+                elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
+                    new_price = int(best_bid) + 1
+                shifted.append(Order(o.symbol, new_price, o.quantity))
+            return shifted, conv
+        return orders, conv
+
+    def _compute_guarded(
+        self,
+        state: TradingState,
+        book: BookSnapshot,
+        order_depth: OrderDepth,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> Tuple[List[Order], int]:
         mid    = book.mid_price
         anchor = self.params.get("anchor_price")
         if mid is None or anchor is None:
@@ -952,6 +996,11 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
         if (d := memory.get("_guard_dist"))       is not None: out["GuardDist"]  = float(d)
         if (t := memory.get("_guard_trend"))      is not None: out["GuardTrend"] = float(t)
         if (u := memory.get("_guard_use_anchor")) is not None: out["GuardOn"]    = float(u)
+        if (n := memory.get("_cp_total_calls"))   is not None: out["CPCalls"]    = float(n)
+        if (n := memory.get("_cp_fires"))         is not None: out["CPFires"]    = float(n)
+        if (s := memory.get("_cp_signal_max"))    is not None: out["CPSigMax"]   = float(s)
+        if (b := memory.get("_cp_buf_size"))      is not None: out["CPBufSize"]  = float(b)
+        if (o := memory.get("_cp_offset"))        is not None: out["CPOffset"]   = float(o)
         return out
 
 
