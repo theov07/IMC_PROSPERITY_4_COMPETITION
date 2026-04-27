@@ -308,17 +308,34 @@ def _sigma_bands_from_features(features: List[Dict], product: str) -> Dict[str, 
             "s2u": s2u, "s2d": s2d, "mid_smooth": mid_smooth, "z": z_vals}
 
 
-def _position_curve(our_fills: List[Dict], product: str) -> Tuple[List[int], List[int]]:
+def _position_curve(
+    our_fills: List[Dict], product: str, day_boundaries: Optional[List[int]] = None,
+) -> Tuple[List[int], List[int]]:
+    """Compute position over time, resetting to 0 at each day boundary."""
     events = sorted(
         [f for f in our_fills if f.get("symbol") == product],
         key=lambda x: x["ts"],
     )
+    # Day reset timestamps: all offsets except the very first (position already 0)
+    resets = sorted(b for b in (day_boundaries or []) if b > 0)
+    ri = 0  # pointer into resets
+
     ts_list, pos_list = [], []
     pos = 0
     for f in events:
+        ts = f["ts"]
+        # Cross any day boundaries before this fill
+        while ri < len(resets) and ts >= resets[ri]:
+            if ts_list:                          # draw down to 0 at boundary
+                ts_list.append(resets[ri] - 1)
+                pos_list.append(pos)
+            ts_list.append(resets[ri])           # reset point
+            pos_list.append(0)
+            pos = 0
+            ri += 1
         sign = 1 if f.get("side") == "BUY" else -1
         pos += sign * f.get("qty", f.get("quantity", 0))
-        ts_list.append(f["ts"])
+        ts_list.append(ts)
         pos_list.append(pos)
     return ts_list, pos_list
 
@@ -355,22 +372,28 @@ def _parse_imclog(path: Path) -> Optional[Dict[str, Any]]:
             "ask1": [r[2] for r in rows], "mid":  [r[3] for r in rows],
         }
 
-    trade_text = raw.get("tradeHistory") or raw.get("tradeLog") or ""
+    trade_raw = raw.get("tradeHistory") or raw.get("tradeLog") or ""
     own_trades: List[Dict] = []
-    if trade_text:
-        for row in csv.DictReader(trade_text.strip().splitlines(), delimiter=";"):
-            ts = _to_int(row.get("timestamp", ""))
-            px = _to_float(row.get("price", ""))
-            qty = _to_int(row.get("quantity", ""))
-            buyer  = (row.get("buyer",  "") or "").strip()
-            seller = (row.get("seller", "") or "").strip()
-            sym    = (row.get("symbol", "") or row.get("product", "") or "").strip()
-            if ts is None or px is None or qty is None:
-                continue
-            if buyer == "SUBMISSION":
-                own_trades.append({"ts": ts, "symbol": sym, "side": "BUY", "price": px, "qty": qty})
-            elif seller == "SUBMISSION":
-                own_trades.append({"ts": ts, "symbol": sym, "side": "SELL", "price": px, "qty": qty})
+    # tradeHistory is either a CSV string or a list of dicts depending on IMC log version
+    if isinstance(trade_raw, list):
+        trade_rows = trade_raw
+    elif isinstance(trade_raw, str) and trade_raw.strip():
+        trade_rows = list(csv.DictReader(trade_raw.strip().splitlines(), delimiter=";"))
+    else:
+        trade_rows = []
+    for row in trade_rows:
+        ts     = _to_int(row.get("timestamp", ""))
+        px     = _to_float(row.get("price", ""))
+        qty    = _to_int(row.get("quantity", ""))
+        buyer  = str(row.get("buyer",  "") or "").strip()
+        seller = str(row.get("seller", "") or "").strip()
+        sym    = str(row.get("symbol", "") or row.get("product", "") or "").strip()
+        if ts is None or px is None or qty is None:
+            continue
+        if buyer == "SUBMISSION":
+            own_trades.append({"ts": ts, "symbol": sym, "side": "BUY", "price": px, "qty": qty})
+        elif seller == "SUBMISSION":
+            own_trades.append({"ts": ts, "symbol": sym, "side": "SELL", "price": px, "qty": qty})
 
     runtime_logs = raw.get("logs", [])
     quote_traces: List[Dict] = []
@@ -648,9 +671,12 @@ def _deviation_chart_js(product: str, v5: Dict, taker_edge: float) -> str:
 
 # ── Chart: Position + Inventory Bias sizing ────────────────────────────────────
 
-def _position_sizing_chart_js(product: str, our_fills: List[Dict], v5: Dict) -> str:
+def _position_sizing_chart_js(
+    product: str, our_fills: List[Dict], v5: Dict,
+    day_boundaries: Optional[List[int]] = None,
+) -> str:
     safe = _jsid(product)
-    ts_list, pos_list = _position_curve(our_fills, product)
+    ts_list, pos_list = _position_curve(our_fills, product, day_boundaries)
 
     if not ts_list:
         return f"""
@@ -740,19 +766,46 @@ def _m14_chart_js(product: str, v5: Dict) -> str:
 
 # ── Chart: PnL ────────────────────────────────────────────────────────────────
 
-def _pnl_chart_js(equity: Dict) -> str:
+def _pnl_chart_js(equity: Dict, day_boundaries: Optional[List[int]] = None) -> str:
     if not equity["ts"]:
         return "function plot_pnl() {}"
+
+    pnl_vals = equity["pnl"]
+
+    # Drawdown: running peak − current (always ≤ 0)
+    peak = 0.0
+    dd_vals = []
+    for p in pnl_vals:
+        if p > peak:
+            peak = p
+        dd_vals.append(p - peak)
+
+    # Vertical day-separator lines
+    boundary_shapes = ""
+    for b in (day_boundaries or [])[1:]:
+        boundary_shapes += f"""
+      {{type:'line',xref:'x',yref:'paper',x0:{b},x1:{b},y0:0,y1:1,
+        line:{{color:'#45475a',width:1,dash:'dot'}}}},"""
+
+    ts_js  = json.dumps(equity["ts"])
+    pnl_js = _json_list(pnl_vals)
+    dd_js  = _json_list(dd_vals)
+
     return f"""
   function plot_pnl() {{
-    Plotly.newPlot('pnl_chart',[{{
-      x:{json.dumps(equity['ts'])},y:{_json_list(equity['pnl'])},
-      name:'PnL',mode:'lines',fill:'tozeroy',
-      line:{{color:'#cba6f7',width:2}},
-      hovertemplate:'PnL: %{{y:,.0f}}<extra></extra>'
-    }}], Object.assign({{}},{_layout_js()},{{
-      title:'Portfolio Equity Curve',
-      yaxis:{{title:'PnL (SeaShells)',gridcolor:'#313244',zeroline:true}},
+    Plotly.newPlot('pnl_chart',[
+      {{x:{ts_js},y:{pnl_js},name:'PnL',mode:'lines',fill:'tozeroy',
+        fillcolor:'rgba(203,166,247,0.15)',
+        line:{{color:'#cba6f7',width:2}},
+        hovertemplate:'PnL: %{{y:,.0f}}<extra></extra>'}},
+      {{x:{ts_js},y:{dd_js},name:'Drawdown',mode:'lines',fill:'tozeroy',
+        fillcolor:'rgba(243,139,168,0.15)',
+        line:{{color:'#f38ba8',width:1.5}},
+        hovertemplate:'DD: %{{y:,.0f}}<extra></extra>'}}
+    ], Object.assign({{}},{_layout_js()},{{
+      title:'Portfolio Equity Curve + Drawdown',
+      yaxis:{{title:'PnL / DD (SeaShells)',gridcolor:'#313244',zeroline:true}},
+      shapes:[{boundary_shapes}],
       margin:{{t:30,b:36,l:75,r:20}},
     }}),{{responsive:true}});
   }}"""
@@ -887,9 +940,11 @@ def _zscore_chart_js(product: str, sigma_bands: Dict) -> str:
   }}"""
 
 
-def _position_chart_js_generic(product: str, our_fills: List[Dict]) -> str:
+def _position_chart_js_generic(
+    product: str, our_fills: List[Dict], day_boundaries: Optional[List[int]] = None,
+) -> str:
     safe = _jsid(product)
-    ts_list, pos_list = _position_curve(our_fills, product)
+    ts_list, pos_list = _position_curve(our_fills, product, day_boundaries)
     if not ts_list:
         return f"""
   function plot_pos_{safe}() {{
@@ -975,6 +1030,7 @@ def generate_html(
     title: str = "",
     product_filter: Optional[str] = None,
     taker_edge: float = 12.0,
+    day_boundaries: Optional[List[int]] = None,
 ) -> None:
     products = sorted(market_prices.keys())
     if product_filter:
@@ -1057,7 +1113,7 @@ def generate_html(
             js_fns += _price_chart_js_v5(prod, prod_mkt, our_fills, prod_quotes,
                                           v5, market_trades, trader_index, taker_edge)
             js_fns += _deviation_chart_js(prod, v5, taker_edge)
-            js_fns += _position_sizing_chart_js(prod, our_fills, v5)
+            js_fns += _position_sizing_chart_js(prod, our_fills, v5, day_boundaries)
             js_fns += _m14_chart_js(prod, v5)
 
         else:
@@ -1075,10 +1131,10 @@ def generate_html(
             js_fns += _price_chart_js_generic(prod, prod_mkt, our_fills, prod_quotes,
                                                sigma_bands, market_trades, trader_index)
             js_fns += _zscore_chart_js(prod, sigma_bands)
-            js_fns += _position_chart_js_generic(prod, our_fills)
+            js_fns += _position_chart_js_generic(prod, our_fills, day_boundaries)
 
     tab_bar += "</div>"
-    js_fns  += _pnl_chart_js(equity)
+    js_fns  += _pnl_chart_js(equity, day_boundaries)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1163,13 +1219,18 @@ def main() -> None:
         log_data = _parse_imclog(log_path)
         if log_data:
             if log_data["market_prices"]:
+                print(f"  Using market prices from log ({len(log_data['market_prices'])} products)")
                 market_prices = log_data["market_prices"]
             if log_data["own_trades"]:
+                print(f"  Using {len(log_data['own_trades'])} own trades from log")
                 our_fills = [{"ts": t["ts"], "symbol": t["symbol"], "side": t["side"],
                                "price": t["price"], "qty": t["qty"],
                                "aggressive": False, "gap_exploit": False}
                              for t in log_data["own_trades"]]
+            else:
+                print("  No own trades in log — keeping backtest fills")
             if log_data["quote_traces"]:
+                print(f"  Using {len(log_data['quote_traces'])} quote traces from log")
                 quotes = [{"ts": q["timestamp"], "symbol": q["product"],
                            "bid": q.get("bid_price"), "ask": q.get("ask_price"),
                            "bid_size": q.get("bid_size", 0),
@@ -1198,12 +1259,16 @@ def main() -> None:
     title_parts.append(bt.get("strategy", bt_path.stem))
     title = " | ".join(title_parts)
 
+    # Day boundaries: timestamp offset of each day's start (position resets here)
+    ts_offsets     = _build_day_offsets(round_num, days, data_dir / f"round_{round_num}")
+    day_boundaries = sorted(ts_offsets.values())
+
     print("Generating HTML ...")
     generate_html(
         bt=bt, market_prices=market_prices, market_trades=market_trades,
         our_fills=our_fills, quotes=quotes, features=features, equity=equity,
         output_path=out_path, title=title, product_filter=args.product,
-        taker_edge=args.ar_taker_edge,
+        taker_edge=args.ar_taker_edge, day_boundaries=day_boundaries,
     )
     print("Done.")
 

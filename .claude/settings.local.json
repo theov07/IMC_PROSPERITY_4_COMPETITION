@@ -242,7 +242,10 @@
       "Bash(python backtest.py --strategy hydro_mv_v2 --round 4 --days 3 --match-trades realistic)",
       "Bash(python scripts/export_submission.py --member hydro_mv_v5_best --round 4)",
       "Bash(python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v5_best.json --ar-taker-edge 12 --product HYDROGEL_PACK --out artifacts/viz/hydro_mv_v5_best.html)",
-      "Bash(open artifacts/viz/hydro_mv_v5_best.html)"
+      "Bash(open artifacts/viz/hydro_mv_v5_best.html)",
+      "Bash(python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v5_best.json --log logs/round_4/tibo/hydro_mv_v5.json --ar-taker-edge 12 --out artifacts/viz/hydro_mv_v5_live.html)",
+      "Bash(python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v5_best.json --log logs/round_4/tibo/hydro_mv_v5.log --ar-taker-edge 12 --out artifacts/viz/hydro_mv_v5_live.html)",
+      "Bash(open artifacts/viz/hydro_mv_v5_live.html)"
     ]
   }
 }
