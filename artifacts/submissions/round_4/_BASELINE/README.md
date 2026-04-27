@@ -5,6 +5,9 @@
 **`R4_CHAMPION_v5__obi_fade_M49w08_M14_M01__pnl175k_dd67k_ratio259.py`** — **174,751 / 67,465 / 2.59**
 **+17,039 PnL vs previous baseline** (was 157,712, +10.8% absolute).
 
+**File size: 91,174 bytes (89 KB)** ✅ under IMC 100 KB limit. (Slimmed by removing
+unused alpha overlays from `base.py` to fit; PnL/DD identical to pre-slim version.)
+
 ### Optimal weights (after weight scan)
 - Mark 49 = **-0.8** (was -1.0; lower weight = better)
 - Mark 14 = -0.5

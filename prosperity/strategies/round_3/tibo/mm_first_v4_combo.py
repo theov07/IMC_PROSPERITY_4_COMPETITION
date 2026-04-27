@@ -906,14 +906,8 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
             cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
             cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
-            # Diagnostics: count fires
-            memory["_cp_total_calls"] = memory.get("_cp_total_calls", 0) + 1
             if abs(cp_signal) > cp_threshold:
                 cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
-                memory["_cp_offset"] = cp_offset
-                memory["_cp_fires"] = memory.get("_cp_fires", 0) + 1
-                memory["_cp_signal_max"] = max(abs(cp_signal), memory.get("_cp_signal_max", 0))
-            memory["_cp_buf_size"] = len(memory.get("_cp_buf", []))
 
         # Original guard logic
         orders, conv = self._compute_guarded(state, book, order_depth, position, memory)
@@ -999,11 +993,6 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
         if (d := memory.get("_guard_dist"))       is not None: out["GuardDist"]  = float(d)
         if (t := memory.get("_guard_trend"))      is not None: out["GuardTrend"] = float(t)
         if (u := memory.get("_guard_use_anchor")) is not None: out["GuardOn"]    = float(u)
-        if (n := memory.get("_cp_total_calls"))   is not None: out["CPCalls"]    = float(n)
-        if (n := memory.get("_cp_fires"))         is not None: out["CPFires"]    = float(n)
-        if (s := memory.get("_cp_signal_max"))    is not None: out["CPSigMax"]   = float(s)
-        if (b := memory.get("_cp_buf_size"))      is not None: out["CPBufSize"]  = float(b)
-        if (o := memory.get("_cp_offset"))        is not None: out["CPOffset"]   = float(o)
         return out
 
 
