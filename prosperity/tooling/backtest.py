@@ -31,6 +31,8 @@ def _resolve_strategy_alias(name: str) -> str:
         f"submissions.round_3.leo.{name}",
         f"submissions.round_3.theo.{name}",
         f"submissions.round_3.tibo.{name}",
+        f"submissions.round_4.{name}",
+        f"submissions.round_4.tibo.{name}",
     ]
     for candidate in candidates:
         try:

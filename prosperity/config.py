@@ -2419,6 +2419,9 @@ MEMBER_OVERRIDES["r3_velvet_options_v3_hydro_optionblend"] = {
         "VEV_5500": None,
         "VEV_6000": None,
         "VEV_6500": None,
+    },
+}
+
 
 # ── CHAMPION FINAL v7 : OSM full_capacity + IPR v7_continuous ──
 MEMBER_OVERRIDES["champion_final_v7"] = {
@@ -2775,14 +2778,11 @@ MEMBER_OVERRIDES["champion_osm_v4only"] = {
 }
 
 
-<<<<<<< HEAD
-=======
 # ──────────────────────────────────────────────────────────────────────────────
 # R3 HEDGED CHAMPION — naive_tight_mm on HYDROGEL + velvet_delta_hedger on
 # VELVETFRUIT (reads option positions from coordinator to offset delta) +
 # option_mm_bs on vouchers (default ROUND_3 config).
 # ──────────────────────────────────────────────────────────────────────────────
->>>>>>> origin/main
 _THEO_R3_ACTIVE_OPTION_STRIKES = (5400, 5500)
 
 _THEO_R3_UNDERLYING = _override(
@@ -2873,6 +2873,8 @@ _R3_LIVE_DEFENSIVE_PARAMS = dict(
     inventory_reduce_ratio=0.35,
     inventory_stop_ratio=0.62,
     unwind_boost=1.45,
+)
+
 MEMBER_OVERRIDES["r3_hedged_champion"] = {
     3: {
         "HYDROGEL_PACK": _override(
@@ -5515,6 +5517,9 @@ MEMBER_OVERRIDES["r3_live_defensive_v1"] = {
             **_R3_LIVE_DEFENSIVE_PARAMS,
         ),
         # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
+    },
+}
+
 # v12: passive-only hedger (taker_edge huge → never fires), small size skew
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v12_dh_passive"] = {
     3: {
@@ -5537,7 +5542,8 @@ MEMBER_OVERRIDES["r3_velvet_options_max3d_v12_dh_passive"] = {
 # HYDROGEL historically likes the pure book-following naive MM, while VELVET
 # benefits from defensive trend/inventory throttling. Options remain the stable
 # passive BS MM.
-MEMBER_OVERRIDES["r3_live_hybrid_v1"] = {
+MEMBER_OVERRIDES["r3_live_hybrid_v1"] = {}  # content removed — was incomplete
+
 # v13: low-freq hedger — taker only on huge imbalance + bigger passive bias
 MEMBER_OVERRIDES["r3_velvet_options_max3d_v13_dh_lowfreq"] = {
     3: {
@@ -7711,28 +7717,6 @@ MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
             position_limit=200,
             **_R3_LIVE_DEFENSIVE_PARAMS,
         ),
-        # Vouchers: use ROUND_3 default option_mm_bs (penny-improve, no takers).
-            strategy="velvet_delta_hedger",
-            position_limit=200,
-            underlying_symbol="VELVETFRUIT_EXTRACT",
-            hedge_strikes=[4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500],
-            strike_prefix="VEV_",
-            tte_days_initial=5.0,
-            timestamp_units_per_day=1000000,
-            historical_tte_by_day={0: 8.0, 1: 7.0, 2: 6.0},
-            target_delta=0.0,
-            hedge_taker_edge=30.0,
-            max_hedge_size=50,
-            passive_base_size=30,
-            passive_skew_per_delta=0.5,
-            quote_inside_book=True,
-            sigma_floor=0.005,
-            sigma_cap=0.10,
-            prior_vol=0.0215,
-            log_flush_ts=1000,
-            ts_increment=100,
-            last_ts_value=999900,
-        ),
         **{
             f"VEV_{k}": ProductConfig(
                 symbol=f"VEV_{k}",
@@ -7781,6 +7765,8 @@ _R3_GUARDED_VELVET_PARAMS = {
     "guard_max_dist": 80.0,
     "guard_reversion_threshold": 0.0,
     "guard_inventory_dist": 40.0,
+}
+
 # Live-only alpha probes. These intentionally use event/flow/book-state rules,
 # not day/timestamp fingerprints. They are meant for IMC live discovery runs.
 _R3_LIVE_PROBE_VELVET_BASE = {
@@ -8571,6 +8557,9 @@ MEMBER_OVERRIDES["theo_r3_vol_arb_v2"] = {
         ),
         # Options: no override → inherits ROUND_3 default option_mm_bs on all 10 strikes.
         # VEV_5400/5500 vol_arb layer dropped (was getting 0 fills in live + backtest).
+    },
+}
+
 _R3_LIVE_PROBE_OPTION_BASE = dict(
     strategy="option_live_probe_mm",
     quote_trace_enabled=True,
@@ -8672,6 +8661,10 @@ MEMBER_OVERRIDES["theo_r3_vol_arb_v3"] = {
             position_limit=200,
             maker_size=30,
             tighten_ticks=1,
+        ),
+    },
+}
+
 MEMBER_OVERRIDES["r3_live_probe_all_gap_flow_follow"] = {
     3: {
         "HYDROGEL_PACK": _r3_delta_live_probe(
@@ -10173,6 +10166,207 @@ MEMBER_OVERRIDES["hydro_v200"] = {
         "VEV_4000": None, "VEV_4500": None, "VEV_5000": None, "VEV_5100": None,
         "VEV_5200": None, "VEV_5300": None, "VEV_5400": None, "VEV_5500": None,
         "VEV_6000": None, "VEV_6500": None,
+    }
+}
+
+MEMBER_OVERRIDES["hydro_v200_r4"] = {
+    3: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v200_r4",
+            position_limit=200, params=_HYDRO_V7B_PARAMS),
+        "VELVETFRUIT_EXTRACT": None,
+        "VEV_4000": None, "VEV_4500": None, "VEV_5000": None, "VEV_5100": None,
+        "VEV_5200": None, "VEV_5300": None, "VEV_5400": None, "VEV_5500": None,
+        "VEV_6000": None, "VEV_6500": None,
+    }
+}
+
+# ── Hydro MV strategies (directional mean-reversion + passive MM) ────────────
+# v4_best: AR directional MR, 22,060 PnL (beats spread-paying taker baseline)
+# v5_best: Passive MM + selective AR taker, 153,117 PnL (34% above v201 MM)
+
+# BEST v4: AR directional MR — 22,060 PnL, DD 3,751 (3-day realistic).
+# Signal: deviation of smoothed mid from AR fair value. M14 scale mode amplifies size.
+# Only beneficial feature from ablation: dev_size_scale (larger dev → bigger position).
+MEMBER_OVERRIDES["hydro_mv_v4_best"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v4",
+        position_limit=200,
+        params={
+            "anchor_price":           10000.0,
+            "anchor_alpha":           0.02,
+            "anchor_drift_bound":     1.5,
+            "ar_gain":                8.0,
+            "ar_smooth_half_life":    5,
+            "mid_smooth_half_life":   20,
+            "dev_smooth_half_life":   5,
+            "entry_threshold":        20.0,
+            "exit_threshold":         2.0,
+            "entry_size":             20,
+            "informed_trader_name":   "Mark 14",
+            "mark14_mode":            "scale",
+            "m14_agree_factor":       3.0,
+            "m14_lookback_ticks":     20,
+            "trend_guard_threshold":  0.0,
+            "stop_loss_mult":         0.0,
+            "toxic_flow_threshold":   0.0,
+            "dev_size_scale":         2.0,
+            "dev_size_max_mult":      5.0,
+            "vol_thresh_scale":       0.0,
+            "last_ts_value":          999900,
+            "log_flush_ts":           1000,
+            "ts_increment":           100,
+        })}
+}
+
+# BEST v5: Passive MM + selective AR taker — 153,117 PnL, DD 20,086 (3-day realistic).
+# 34% above v201 (114,350 PnL). Core insight: passive quoting earns the spread;
+# high ar_taker_edge (12) fires selectively → balanced position → more passive fill room.
+MEMBER_OVERRIDES["hydro_mv_v5_best"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v5",
+        position_limit=200,
+        params={
+            # AR model
+            "anchor_price":             10000,
+            "anchor_alpha":             0.02,
+            "anchor_drift_bound":       1.5,
+            "ar_gain":                  8.0,
+            "ar_smooth_half_life":      5,
+            "mid_smooth_half_life":     20,
+            "dev_smooth_half_life":     5,
+            # Passive MM
+            "passive_quoting":          True,
+            "maker_size_base_pct":      0.25,   # 50 units base per side
+            "pct_kept_for_takers":      0.2,
+            "use_inventory_bias":       True,
+            # AR taker (selective: only fires when deviation > 12 ticks from fair)
+            "use_ar_taker":             True,
+            "ar_taker_edge":            12.0,
+            "ar_taker_size_pct":        0.3,
+            # All other features off
+            "use_gap_exploit":          False,
+            "use_m14_gate":             False,
+            "use_ar_quote_bias":        False,
+            "use_anchor_guard":         False,
+            "informed_trader_name":     "Mark 14",
+            "last_ts_value":            999900,
+            "log_flush_ts":             1000,
+            "diag_enabled":             True,
+        })}
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# mv_v6: Dynamic anchor — inv_protected mode
+# Anchor only updates when |position| < pos_threshold × limit (flat or light).
+# Once we're heavily positioned the anchor freezes, preventing fair_value from
+# drifting further in the wrong direction and amplifying the taker signal.
+# quote_trace_enabled=True: full per-tick log of FairValue/Anchor/DevSmooth/etc,
+# flushed every log_flush_ts ticks so the visualizer sees dense data.
+# ─────────────────────────────────────────────────────────────────────────────
+_V6_BASE_PARAMS = {
+    "anchor_price":          10000,
+    "anchor_alpha":          0.02,      # overridden per variant
+    "anchor_drift_bound":    1.5,       # only used by "fixed" mode
+    "ar_gain":               8.0,
+    "ar_smooth_half_life":   5,
+    "mid_smooth_half_life":  20,
+    "dev_smooth_half_life":  5,
+    "passive_quoting":       True,
+    "maker_size_base_pct":   0.25,
+    "pct_kept_for_takers":   0.2,
+    "use_inventory_bias":    True,
+    "use_ar_taker":          True,
+    "ar_taker_edge":         12.0,
+    "ar_taker_size_pct":     0.3,
+    "use_gap_exploit":       False,
+    "use_m14_gate":          False,
+    "use_ar_quote_bias":     False,
+    "use_anchor_guard":      False,
+    "informed_trader_name":  "Mark 14",
+    "last_ts_value":         999900,
+    "quote_trace_enabled":   True,   # per-tick buffer, flushed every log_flush_ts
+    "log_flush_ts":          1000,   # flush ~100 rows per chunk (10 ticks × 100 chunks)
+}
+
+def _v6(anchor_mode: str, **extra) -> ProductConfig:
+    return ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v6", position_limit=200,
+        params={**_V6_BASE_PARAMS, "anchor_mode": anchor_mode, **extra},
+    )
+
+# v6a: best backtest — pos_threshold=30% (60u), alpha=0.007 → 179,172 PnL, DD=20,136
+MEMBER_OVERRIDES["hydro_mv_v6a"] = {
+    4: {"HYDROGEL_PACK": _v6("inv_protected", anchor_pos_threshold=0.30, anchor_alpha=0.007)}
+}
+# v6b: conservative — pos_threshold=20% (40u), alpha=0.005 → 178,785 PnL, DD=20,130
+MEMBER_OVERRIDES["hydro_mv_v6b"] = {
+    4: {"HYDROGEL_PACK": _v6("inv_protected", anchor_pos_threshold=0.20, anchor_alpha=0.005)}
+}
+
+# ── mv_v1: z-score mean-reversion + Mark 14 gate ─────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v1"] = {
+    4: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mv_v1",
+            position_limit=200,
+            params=dict(
+                # z-score signal
+                zscore_window=50,
+                mid_smooth_half_life=10,
+                entry_z_threshold=2.0,
+                exit_z_threshold=0.5,
+                entry_size=20,
+                # Mark 14 gate
+                informed_trader_name="Mark 14",
+                m14_lookback_ticks=10,
+                m14_wait_ticks=10,
+                # logging (quote_trace emitted to stdout in live; features via feature_prices() in backtest)
+                quote_trace_enabled=True,
+                last_ts_value=999900,
+                log_flush_ts=1000,
+                ts_increment=100,
+            )),
+    },
+}
+
+# ── v201: Mark 14 informed-trader gate (3 variants) ───────────────────────────
+_HYDRO_V201_BASE_PARAMS = dict(
+    **_HYDRO_V7B_PARAMS,
+    informed_trader_name="Mark 14",
+)
+
+_HYDRO_V201_NONE_PRODS = {
+    "VELVETFRUIT_EXTRACT": None,
+    "VEV_4000": None, "VEV_4500": None, "VEV_5000": None, "VEV_5100": None,
+    "VEV_5200": None, "VEV_5300": None, "VEV_5400": None, "VEV_5500": None,
+    "VEV_6000": None, "VEV_6500": None,
+}
+
+
+# Variant 2: Influenced — suppress opposing, scale agreeing sizes ×2
+MEMBER_OVERRIDES["hydro_v201_influenced"] = {
+    3: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_influenced",
+            position_limit=200,
+            params=dict(**_HYDRO_V201_BASE_PARAMS, mark14_agree_factor=2.0)),
+        **_HYDRO_V201_NONE_PRODS,
+    },
+    4: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_influenced",
+            position_limit=200,
+            params=dict(**_HYDRO_V201_BASE_PARAMS, mark14_agree_factor=2.0)),
+    },
+}
+
+# Baseline v200 round 4 reference
+MEMBER_OVERRIDES["hydro_v200_r4_ref"] = {
+    4: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mm_v200_r4",
+            position_limit=200, params=_HYDRO_V7B_PARAMS),
     }
 }
 

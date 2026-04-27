@@ -24,7 +24,7 @@ python scripts/analyze_log.py --log logs/round_1/tibo_mm/182179.json --outdir ar
 
 ### `Backtesting`
 ```bash
-python -m prosperity.tooling.backtest --strategy tibo_AvSt --round 0 --data-dir data --json-out artifacts/backtest_results/new_AvSt.json 
+python -m prosperity.tooling.backtest --strategy tibo_AvSt --round 0 --data-dir data --json-out artifacts/backtest_results/round_4/new_AvSt.json 
 ```
 
 `--data-dir data` stays correct with the new layout: the framework now resolves round files automatically from `data/round_0/`, `data/round_1/`, etc.
