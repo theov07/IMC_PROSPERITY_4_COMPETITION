@@ -2,37 +2,99 @@
 
 Priority list for turning this repository from a solid framework into a competition-winning platform.
 
-## Round 4 — Baseline locked, next iterations
+## Round 4 — Baseline locked at 157,712 / DD 72,582 / Ratio 2.17
 
-### Default upload (decided)
-- ★ `R4_v57_best_ratio__pnl152k_dd62k_ratio246.py` — best risk-adjusted (Ratio 2.46, PnL 152k, DD 62k, CV 47.8%)
-- Backup aggressive: `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py` (157k PnL, +11k DD)
+### Default upload (decided — Leo3 territory: VELVET + options)
+- ★ **`R4_BASELINE__r4_velvet_options_only`** — 157,712 / 72,582 / 2.17
+- Backup défensif (lower DD): `R4_v57_best_ratio` — 151,596 / 61,560 / 2.46
+- HYDROGEL = territoire Tibo/Theo, pas notre périmètre
 
-### High-priority R4 ideas (testable)
-- **Re-tune HYDROGEL for R4** — current R3 config bleeds -104k on D3.
-  - Anchor at 10000 over-trades and gets adversely picked
-  - Try pure passive small-size (live-confirmed +5.78 markout in tiny passive mode)
-  - Possibly anchor-free + z-score skew only
-- **Counterparty / "Mark" tracker** — R4 exposes buyer/seller names live.
-  - Map participant IDs to alpha (e.g., "Caesar" trades like X, "Penelope" like Y)
-  - Build per-counterparty toxic flow detector
-  - Enable side-aware passive size decisions
-- **Faster gamma_scalp warm-up** — current `zscore_window=500` = 50 ticks dead time.
-  - Reduce to 100-200 to start trading earlier on D3 (10000 ticks total)
-  - Test on R4 D3 only since D1/D2 are already saturated
-- **Re-test VEV_5400 with stricter z gate** — v55 with z=1.0 bleeds, but z=2.0+ might unlock +500
-- **VEV_5300 size optimization** — currently +1,535, might be 2-3x with proper sizing
+---
+
+### ✅ DONE — wave 1 (D3 root-cause + risk-mgmt, 16 variants)
+
+D3 baseline crash diagnosed: VELVET drops -0.86% in last 5%, our long inventory bleeds, z-velvet flips oversold → strategy buys the crash.
+
+Tested and **rejected** (none beat baseline):
+- `eod_v1/aggressive/conservative/v4/v5` — time-based EOD unwind: overfit to D3, kills D2 rebound
+- `eod_v1_trend` — EOD + EMA trend: same as eod_v1
+- `trend_only` / `trend_aggressive` — EMA trend gate: never fires (threshold too high)
+- `stoploss_v1` (30k) / `stoploss_tight` (15k): never hits or fires on D2 dip
+- `dhedge_v1` / `dhedge_partial` — delta hedge via inventory_target: lever too weak
+- `vwap_gate` / `vwap_gate_tight` — passive VWAP gate: doesn't unwind existing 199 long
+- `cond_unwind_v3` / `cond_unwind_strict` — VWAP-triggered active unwind: signal too noisy
+
+### ✅ DONE — wave 2 (signal exploration, 13 variants)
+
+Major **data discoveries**:
+- **OBI alpha** (88% hit rate, +7.8 next 50 ticks for L3 OBI > 0.005) — real but spread cost erases edge for taker
+- **Trader clustering**: Mark 67 = pure buyer (+27k 3d), Mark 49 = pure seller (-15k), Mark 55+14+01 = MMs
+- **Trader lead-lag**: Mark 55 +0.14 rho, Mark 67 +0.12, Mark 01 -0.17 (FADE), Mark 14 -0.15 (FADE)
+- TICK rule (Lee-Ready) — moderate ~65%
+- Smile residual — weak/inconsistent
+- HYDRO ↔ VELVET correlation = ZERO
+
+Tested and **rejected**:
+- `cp_bias_v1/aggressive/long_window/pure_followers/max` — counterparty anchor offset: 0 effect (signal magnitude too small or anchor disabled)
+- `obi_v1/aggressive/strict/l1` — OBI taker overlay: -16k to -42k (spread cost > alpha)
+- `obi_passive` / `obi_passive_aggressive` — OBI quote-shift: -190k / -334k (crosses book)
+- `otm_hedge_small` (VEV_6000/6500 long passive): -300 (deep-OTM stays at 0.5, hedge inactive)
+- `VEV_5300_z=0.5` (vs 0.8): -59 marginal
+
+---
+
+### ⏳ PENDING — high-conviction next iterations (nuit3+)
+
+**🥇 1. OBI as SIZE tilt** (not price tilt — avoid spread cost)
+   - When OBI > +0.005: increase passive bid SIZE (capture more long when bullish)
+   - When OBI < -0.005: increase passive ask SIZE
+   - Key: don't change quote prices, just sizes. No book crossing. No spread cost.
+   - Implementation: extend `_microprice_size_tilt` in MMFirstV4Combo with OBI weight
+
+**🥈 2. cp_bias via fair_value injection** (bypass anchor on/off check)
+   - Current `cp_bias` modifies `anchor_price`, but anchor gets disabled by `_use_anchor` when wrong-way
+   - Instead modify `mid_smooth` directly (used by quote pricing regardless of anchor)
+   - Magnitude: signal=+30, scale=0.1 → fair_value shift +3 ticks → meaningful
+
+**🥉 3. Composite OBI ∩ trader-bias signal** (high precision)
+   - Only fire when BOTH OBI bullish AND Mark 55/67 net flow bullish (or both bearish)
+   - Lower frequency but higher hit rate (likely 90%+)
+   - Per-trade edge: bigger filter → bigger move
+
+**🏅 4. Forced-entry cheap OTM hedge** (not passive MM)
+   - HARDCODE buying 100 long VEV_6000 + 100 long VEV_6500 in first 100 ticks of each day
+   - Cost: ~100 cash. Crash protection: +500 each if VELVET drops 5%+
+   - Asymmetric payoff. Pure insurance.
+
+**5. Anti-Mark 49 fade strategy**
+   - Mark 49 = directional seller, -15k 3d PnL
+   - When Mark 49 SELL volume > X in last 50 ticks: BUY (fade their wrong direction)
+   - Direct trader-flow trade
+
+**6. Self-closing OBI signal**
+   - When OBI > 0 AND we're SHORT: BUY back via taker (close losing short)
+   - When OBI < 0 AND we're LONG: SELL back via taker (close losing long)
+   - Lower risk than opening new positions
+
+---
 
 ### LIVE-only alpha (untestable in backtest)
-- Informed vs uninformed trader detection on skew deformation
-- Gap exploit on thin option strikes (live order book required)
-- Time-of-session adaptive params (first 100 ticks = build, last 100 = harvest)
-- End-of-session unwind dynamics for large positions
 
-### Manual challenge (separate game)
-- AETHER_CRYSTAL exotics: chooser, binary put, knock-out put.
-- Underlying: GBM, 251% annualized vol, 4-step grid per day.
-- Solve independently from algo (manual ticket entry).
+- Time-of-session adaptive params (first 100 ticks = build, last 100 = harvest)
+- Live participant patterns might differ from R4 historical Marks
+- Gap exploit on thin option strikes (live order book required)
+
+---
+
+### Manual challenge (separate game, NOT TOUCHED YET)
+
+- AETHER_CRYSTAL: GBM 251% annualized vol, 4-step grid/day, 252 days/year
+- Vanilla 2w/3w calls + puts
+- Chooser option (3w expiry, choose call/put after 2w)
+- Binary put (all-or-nothing if S < K at expiry)
+- Knock-out put (worthless if S ever < barrier)
+- TODO: design positions to maximize expected PnL with risk control
+- Submit via UI directly, separate from algo
 
 ---
 
