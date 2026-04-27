@@ -53,213 +53,79 @@ class BaseStrategy(ABC):
             memory=memory,
         )
 
-        # Alpha overlay used by champion v5: OBI size tilt
         orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
-        # Position-skewed ask/bid (force unwind when position > threshold)
-        orders = self._apply_position_skew(state, position, orders, book, memory)
-        # Counterparty bias overlay (per-product trader weights — opt-in)
         orders = self._apply_cp_bias(state, position, orders, book, memory)
-        # Inventory-based unwind (add takers when |pos| > threshold * limit)
         orders = self._apply_inventory_unwind(state, position, orders, book, memory)
-
         return orders, conversions
 
-    def _apply_inventory_unwind(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> List[Order]:
-        """Inventory-based forced unwind.
-
-        NON-OVERFIT: triggered by INVENTORY level (not time). Pure risk management.
-        When |position| exceeds threshold * limit, add unwind orders.
-
-        Two modes (controlled by inv_unwind_mode):
-          "taker"   — taker at best opposite (pays spread, fills fast)
-          "passive" — passive at best opposite ± 1 (captures spread, fills slow)
-          "both"    — taker for max_per_tick, plus passive at penny-improve
-
-        Solves the "stuck-long-+300" problem.
-
-        Params:
-          inv_unwind_enabled         : turn on (default False)
-          inv_unwind_threshold_pct   : abs(pos)/limit ratio to fire (default 0.8)
-          inv_unwind_target_pct      : abs(pos)/limit ratio to stop (default 0.5)
-          inv_unwind_max_per_tick    : cap fill rate per tick (default 10)
-          inv_unwind_mode            : "taker"|"passive"|"both" (default "taker")
-          inv_unwind_passive_size    : size for passive unwind order (default 20)
-          inv_unwind_passive_offset  : ticks past best to post (default 0 = at best)
-        """
-        if not bool(self.params.get("inv_unwind_enabled", False)):
+    def _apply_inventory_unwind(self, state, position, orders, book, memory):
+        """Inventory-based unwind. Triggers when |pos|>threshold*limit, reduces toward target."""
+        p = self.params
+        if not bool(p.get("inv_unwind_enabled", False)):
             return orders
-
         limit = self.position_limit()
         if limit <= 0:
             return orders
-
-        thresh_pct = float(self.params.get("inv_unwind_threshold_pct", 0.8))
-        target_pct = float(self.params.get("inv_unwind_target_pct", 0.5))
-        max_per_tick = int(self.params.get("inv_unwind_max_per_tick", 10))
-        mode = str(self.params.get("inv_unwind_mode", "taker")).lower()
-        passive_size = int(self.params.get("inv_unwind_passive_size", 20))
-        passive_offset = int(self.params.get("inv_unwind_passive_offset", 0))
-
-        abs_pos = abs(position)
-        if abs_pos < thresh_pct * limit:
+        if abs(position) < float(p.get("inv_unwind_threshold_pct", 0.8)) * limit:
             return orders
-
-        target_abs = int(target_pct * limit)
-        excess = abs_pos - target_abs
+        excess = abs(position) - int(float(p.get("inv_unwind_target_pct", 0.5)) * limit)
         if excess <= 0:
             return orders
-
+        mode = str(p.get("inv_unwind_mode", "taker")).lower()
         new_orders = list(orders)
-
-        # Taker mode (or both): aggressive fill at best opposite
         if mode in ("taker", "both"):
-            delta = min(excess, max_per_tick)
+            delta = min(excess, int(p.get("inv_unwind_max_per_tick", 10)))
             if position > 0 and book.best_bid is not None:
-                avail = int(book.best_bid_volume or 0)
-                qty = -min(delta, avail) if avail > 0 else 0
+                qty = -min(delta, int(book.best_bid_volume or 0))
                 if qty < 0:
                     new_orders.append(Order(self.product, int(book.best_bid), qty))
-                    memory["_inv_unwind"] = ("TAKER_SELL", -qty)
             elif position < 0 and book.best_ask is not None:
-                avail = int(book.best_ask_volume or 0)
-                qty = min(delta, avail) if avail > 0 else 0
+                qty = min(delta, int(book.best_ask_volume or 0))
                 if qty > 0:
                     new_orders.append(Order(self.product, int(book.best_ask), qty))
-                    memory["_inv_unwind"] = ("TAKER_BUY", qty)
-
-        # Passive mode (or both): post at opposite-side best ± offset (capture spread)
         if mode in ("passive", "both"):
-            psize = min(passive_size, excess)
+            psize = min(int(p.get("inv_unwind_passive_size", 20)), excess)
+            offset = int(p.get("inv_unwind_passive_offset", 0))
             if position > 0 and book.best_ask is not None:
-                # Long → post SELL at best_ask + offset (or best_ask - 1 to penny-improve)
-                # offset=0 means AT best_ask, offset=-1 means improve (1 tick lower)
-                price = int(book.best_ask) + passive_offset
+                price = int(book.best_ask) + offset
                 if book.best_bid is not None and price <= int(book.best_bid):
-                    price = int(book.best_bid) + 1  # don't cross
+                    price = int(book.best_bid) + 1
                 new_orders.append(Order(self.product, price, -psize))
-                memory["_inv_unwind_passive"] = ("PASSIVE_SELL", psize, price)
             elif position < 0 and book.best_bid is not None:
-                price = int(book.best_bid) - passive_offset
+                price = int(book.best_bid) - offset
                 if book.best_ask is not None and price >= int(book.best_ask):
                     price = int(book.best_ask) - 1
                 new_orders.append(Order(self.product, price, psize))
-                memory["_inv_unwind_passive"] = ("PASSIVE_BUY", psize, price)
-
         return new_orders
 
-    def _apply_cp_bias(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> List[Order]:
-        """Generic cp_bias overlay — applies per-product trader weights.
-
-        Same logic as the cp_bias hook embedded in mm_first_v4_combo, but applies
-        to ALL products opt-in via params (not just VELVET).
-
-        If `_cp_bias_handled_internally` flag is set by the strategy itself,
-        skip (avoid double-application on VELVET).
-
-        Params:
-          counterparty_bias_enabled       : turn on (default False)
-          cp_trader_weights               : dict trader_id -> weight (PER-PRODUCT)
-          cp_signal_threshold             : minimum |signal| to fire (default 5.0)
-          cp_max_anchor_offset            : max ticks to shift (default 3.0)
-          cp_anchor_scale_per_unit        : signal -> ticks scaling (default 0.10)
-        """
-        if not bool(self.params.get("counterparty_bias_enabled", False)):
+    def _apply_cp_bias(self, state, position, orders, book, memory):
+        """Per-product cp_bias overlay."""
+        p = self.params
+        if not bool(p.get("counterparty_bias_enabled", False)):
             return orders
-        if bool(self.params.get("_cp_bias_handled_internally", False)):
+        if bool(p.get("_cp_bias_handled_internally", False)):
             return orders
         if not orders:
             return orders
-
         cp_signal = self._counterparty_signal(state, memory)
-        cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
-        cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
-        cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
-
+        cp_threshold = float(p.get("cp_signal_threshold", 5.0))
         if abs(cp_signal) <= cp_threshold:
             return orders
-
-        cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
+        cp_max = float(p.get("cp_max_anchor_offset", 3.0))
+        cp_scale = float(p.get("cp_anchor_scale_per_unit", 0.10))
+        cp_offset = int(round(max(-cp_max, min(cp_max, cp_signal * cp_scale))))
         if cp_offset == 0:
             return orders
-
-        # Apply uniform price shift on all orders (no-cross safety)
-        shifted: List[Order] = []
-        best_bid = book.best_bid
-        best_ask = book.best_ask
+        shifted = []
+        bb, ba = book.best_bid, book.best_ask
         for o in orders:
-            new_price = int(o.price) + cp_offset
-            if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
-                new_price = int(best_ask) - 1
-            elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
-                new_price = int(best_bid) + 1
-            shifted.append(Order(o.symbol, new_price, o.quantity))
-        memory["_cp_bias_offset"] = cp_offset
+            np_ = int(o.price) + cp_offset
+            if o.quantity > 0 and ba is not None and np_ >= ba:
+                np_ = int(ba) - 1
+            elif o.quantity < 0 and bb is not None and np_ <= bb:
+                np_ = int(bb) + 1
+            shifted.append(Order(o.symbol, np_, o.quantity))
         return shifted
-
-    def _apply_position_skew(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> List[Order]:
-        """Skew quotes more aggressively to unwind when position is over threshold.
-
-        Fixes R3 stuck-long-+300 issue on options.
-        When position > +threshold: shift SELL orders DOWN by `skew_offset` (more aggressive ask
-                                    → faster fills → unwind long).
-        When position < -threshold: shift BUY orders UP by `skew_offset` (more aggressive bid).
-
-        Params:
-          pos_skew_enabled    : turn on (default False — must opt-in per product)
-          pos_skew_threshold  : abs position to fire (default 100)
-          pos_skew_offset     : ticks to shift on the unwind side (default 1)
-        """
-        if not bool(self.params.get("pos_skew_enabled", False)):
-            return orders
-
-        threshold = int(self.params.get("pos_skew_threshold", 100))
-        offset = int(self.params.get("pos_skew_offset", 1))
-
-        if abs(position) < threshold:
-            return orders
-
-        adjusted: List[Order] = []
-        best_bid = book.best_bid
-        best_ask = book.best_ask
-        for o in orders:
-            new_price = int(o.price)
-            if position > 0 and o.quantity < 0:
-                # Long → make ask more aggressive (lower)
-                new_price = int(o.price) - offset
-                # Don't cross the bid
-                if best_bid is not None and new_price <= best_bid:
-                    new_price = int(best_bid) + 1
-            elif position < 0 and o.quantity > 0:
-                # Short → make bid more aggressive (higher)
-                new_price = int(o.price) + offset
-                # Don't cross the ask
-                if best_ask is not None and new_price >= best_ask:
-                    new_price = int(best_ask) - 1
-            adjusted.append(Order(o.symbol, new_price, o.quantity))
-
-        memory["_pos_skew_active"] = 1
-        return adjusted
 
     @abstractmethod
     def compute_orders(
@@ -273,35 +139,16 @@ class BaseStrategy(ABC):
         """Produce orders and conversion request for this product."""
         ...
 
-    # ------------------------------------------------------------------
-    # Shared price utilities (call from any strategy)
-    # ------------------------------------------------------------------
     def _microprice(self, book: "BookSnapshot") -> float:
-        """Volume-weighted microprice using all available book levels.
-
-        bid_vwap = Σ(price × vol) / Σvol  across all bid levels
-        ask_vwap = same for asks
-        microprice = (bid_vwap × ask_total + ask_vwap × bid_total) / (bid_total + ask_total)
-
-        One side empty OR both sides empty → returns the previous microprice
-        stored in self._memory["_microprice_last"] (or 0.0 on the very first tick).
-
-        Stores result in self._memory["_microprice_last"].
-        Requires self._memory to be set (done automatically by on_tick).
-        """
+        """Volume-weighted microprice across all book levels."""
         bid_total = sum(v for _, v in book.bid_levels)
         ask_total = sum(v for _, v in book.ask_levels)
-
         prev = self._memory.get("_microprice_last", 0.0)
-
         if bid_total == 0 or ask_total == 0:
-            # One or both sides empty: can't compute a meaningful cross-side price
             return float(prev)
-
         bid_vwap = sum(p * v for p, v in book.bid_levels) / bid_total
         ask_vwap = sum(p * v for p, v in book.ask_levels) / ask_total
         result = (bid_vwap * ask_total + ask_vwap * bid_total) / (bid_total + ask_total)
-
         self._memory["_microprice_last"] = result
         return result
 
