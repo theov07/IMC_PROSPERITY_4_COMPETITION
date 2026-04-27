@@ -14841,6 +14841,101 @@ MEMBER_OVERRIDES["r4_v9_M22cond_z15_w025"] = _v7_conditional(
 )
 
 
+# v10 — REDUCED position_limits on stuck-long options (structural fix, non-overfit).
+# Day 3 PnL on options is -7,335 because all option positions end LONG.
+# Reducing limit from 300 to 150 on the most-stuck options halves the delta exposure.
+def _v10_with_options_limit(option_limit_overrides):
+    """v9 config + override position_limit on specific options."""
+    base = MEMBER_OVERRIDES["r4_v9_M22cond_z15_w04"][4]
+    return {
+        4: {
+            sym: (
+                _override(
+                    cfg,
+                    **{k: v for k, v in cfg.params.items() if k != "position_limit"},
+                    position_limit=option_limit_overrides.get(sym, cfg.position_limit),
+                ) if cfg is not None else None
+            ) for sym, cfg in base.items()
+        }
+    }
+
+
+# Reduce the worst-stuck options (5100, 5200) from 300 → 150
+MEMBER_OVERRIDES["r4_v10_lim150_5100_5200"] = _v10_with_options_limit({
+    "VEV_5100": 150, "VEV_5200": 150,
+})
+
+# More aggressive: reduce to 100 for all VEV_5xxx
+MEMBER_OVERRIDES["r4_v10_lim100_all5xxx"] = _v10_with_options_limit({
+    "VEV_5000": 100, "VEV_5100": 100, "VEV_5200": 100,
+    "VEV_5300": 100, "VEV_5400": 100,
+})
+
+# Conservative: just lower VEV_5100/5200 to 200 (the most stuck)
+MEMBER_OVERRIDES["r4_v10_lim200_5100_5200"] = _v10_with_options_limit({
+    "VEV_5100": 200, "VEV_5200": 200,
+})
+
+# Full options reduction to 200
+MEMBER_OVERRIDES["r4_v10_lim200_all5xxx"] = _v10_with_options_limit({
+    "VEV_5000": 200, "VEV_5100": 200, "VEV_5200": 200,
+    "VEV_5300": 200, "VEV_5400": 200,
+})
+
+
+# v11 — Add TINY live-tune weights (M55=-0.05, M67=+0.05) — neutrality check.
+# Live data showed M55 net seller, M67 pure buyer. Backtest data is balanced.
+# If tiny weights don't impact backtest PnL, keep them as "ready to scale" for live.
+MEMBER_OVERRIDES["r4_v11_v9_plus_M55_M67_tiny"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 55": -0.05, "Mark 67": +0.05}
+)
+MEMBER_OVERRIDES["r4_v11_v9_plus_M55_only_tiny"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 55": -0.1}
+)
+MEMBER_OVERRIDES["r4_v11_v9_plus_M67_only_tiny"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 67": +0.1}
+)
+
+# v11b — Conditional with HIGH zthresh on M55/M67 — should be near-neutral on backtest
+# but ready to fire if LIVE shows different (rarer) anomalies than historical.
+MEMBER_OVERRIDES["r4_v11_M22_M55cond_z30"] = _v7_conditional(
+    ["Mark 22", "Mark 55"], zthresh=3.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 55": -0.5}
+)
+MEMBER_OVERRIDES["r4_v11_M22_M67cond_z30"] = _v7_conditional(
+    ["Mark 22", "Mark 67"], zthresh=3.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 67": +0.5}
+)
+# Note: this requires v7 conditional with PER-TRADER zthresh (not implemented yet).
+# For now, both M22 and M55 share zthresh=3.0 which is too strict for M22 (was 1.5).
+# So this variant LIKELY underperforms even v9. Need per-trader thresholds.
+
+# Cleaner: set very small absolute weights (1/10 of "tiny")
+MEMBER_OVERRIDES["r4_v11_M22_M55_M67_micro"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 55": -0.01, "Mark 67": +0.01}
+)
+MEMBER_OVERRIDES["r4_v11_M22_M55_micro"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 55": -0.01}
+)
+MEMBER_OVERRIDES["r4_v11_M22_M67_micro"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 67": +0.01}
+)
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
