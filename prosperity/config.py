@@ -15236,6 +15236,142 @@ MEMBER_OVERRIDES["r4_v15_deep_otm_edge2"] = _v15_with_deep_otm(
 )
 
 
+# ═══════════════════════════════════════════════════════════════
+# v16 — INVENTORY-BASED UNWIND on options (non-overfit risk mgmt)
+# ═══════════════════════════════════════════════════════════════
+# Issue: VEV_5100/5200/4000 stuck at +300 (max) on all 3 days.
+# Solution: when |pos| > 80% limit, add takers to reduce toward 50%.
+# This is RISK-management, not time-tuning.
+
+def _v16_with_inv_unwind(threshold_pct=0.8, target_pct=0.5, max_per_tick=10,
+                          apply_to_velvet=False):
+    """v9 base + inventory unwind on all options (and optionally VELVET)."""
+    base = MEMBER_OVERRIDES["r4_v9_M22cond_z15_w04"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None
+            continue
+        if sym.startswith("VEV_") or (apply_to_velvet and sym == "VELVETFRUIT_EXTRACT"):
+            params = {k: v for k, v in cfg.params.items()
+                      if k not in ("position_limit", "inv_unwind_enabled",
+                                   "inv_unwind_threshold_pct", "inv_unwind_target_pct",
+                                   "inv_unwind_max_per_tick")}
+            out[sym] = _override(
+                cfg,
+                **params,
+                inv_unwind_enabled=True,
+                inv_unwind_threshold_pct=threshold_pct,
+                inv_unwind_target_pct=target_pct,
+                inv_unwind_max_per_tick=max_per_tick,
+            )
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+# v16a — moderate: fire at 80%, target 50%, 10/tick
+MEMBER_OVERRIDES["r4_v16_unwind_80_50_10"] = _v16_with_inv_unwind(0.8, 0.5, 10)
+
+# v16b — earlier kick-in (70%)
+MEMBER_OVERRIDES["r4_v16_unwind_70_50_10"] = _v16_with_inv_unwind(0.7, 0.5, 10)
+
+# v16c — aggressive: fire at 60%, target 30%, 20/tick
+MEMBER_OVERRIDES["r4_v16_unwind_60_30_20"] = _v16_with_inv_unwind(0.6, 0.3, 20)
+
+# v16d — very late kick-in (90%) — only avoid hitting limit
+MEMBER_OVERRIDES["r4_v16_unwind_90_70_5"] = _v16_with_inv_unwind(0.9, 0.7, 5)
+
+# v16e — soft: 80%/60%/5 (gentle, low fill rate)
+MEMBER_OVERRIDES["r4_v16_unwind_80_60_5"] = _v16_with_inv_unwind(0.8, 0.6, 5)
+
+# v16f — ALSO apply on VELVET (shouldn't matter, VELVET balanced already)
+MEMBER_OVERRIDES["r4_v16_unwind_all_80_50_10"] = _v16_with_inv_unwind(
+    0.8, 0.5, 10, apply_to_velvet=True
+)
+
+
+# ═══════════════════════════════════════════════════════════════
+# v17 — PASSIVE INVENTORY UNWIND (capture spread instead of pay)
+# ═══════════════════════════════════════════════════════════════
+# v16 used takers (pay spread) → DD reduced but PnL chute too.
+# v17: post a PASSIVE order on the unwind side. If filled → unwind at gain.
+# If not filled → no cost. Best of both worlds (in theory).
+
+def _v17_with_passive_unwind(threshold_pct=0.7, target_pct=0.5,
+                               passive_size=30, passive_offset=0):
+    """v9 base + passive inventory unwind on options."""
+    base = MEMBER_OVERRIDES["r4_v9_M22cond_z15_w04"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None
+            continue
+        if sym.startswith("VEV_"):
+            params = {k: v for k, v in cfg.params.items()
+                      if k not in ("position_limit", "inv_unwind_enabled",
+                                   "inv_unwind_threshold_pct", "inv_unwind_target_pct",
+                                   "inv_unwind_max_per_tick", "inv_unwind_mode",
+                                   "inv_unwind_passive_size", "inv_unwind_passive_offset")}
+            out[sym] = _override(
+                cfg,
+                **params,
+                inv_unwind_enabled=True,
+                inv_unwind_threshold_pct=threshold_pct,
+                inv_unwind_target_pct=target_pct,
+                inv_unwind_max_per_tick=10,
+                inv_unwind_mode="passive",
+                inv_unwind_passive_size=passive_size,
+                inv_unwind_passive_offset=passive_offset,
+            )
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+# v17a — passive unwind at best_opposite (no improve)
+MEMBER_OVERRIDES["r4_v17_passive_70_50"] = _v17_with_passive_unwind(0.7, 0.5)
+
+# v17b — passive at best_opposite-1 (penny-improve, more aggressive but capture spread)
+MEMBER_OVERRIDES["r4_v17_passive_70_50_pi"] = _v17_with_passive_unwind(0.7, 0.5, passive_offset=-1)
+
+# v17c — earlier kick-in 60%
+MEMBER_OVERRIDES["r4_v17_passive_60_40"] = _v17_with_passive_unwind(0.6, 0.4)
+
+# v17d — both modes (taker + passive in same tick)
+def _v17_both_mode(threshold_pct=0.8, target_pct=0.5, max_taker=5, passive_size=30):
+    base = MEMBER_OVERRIDES["r4_v9_M22cond_z15_w04"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None
+            continue
+        if sym.startswith("VEV_"):
+            params = {k: v for k, v in cfg.params.items()
+                      if k not in ("position_limit", "inv_unwind_enabled",
+                                   "inv_unwind_threshold_pct", "inv_unwind_target_pct",
+                                   "inv_unwind_max_per_tick", "inv_unwind_mode",
+                                   "inv_unwind_passive_size", "inv_unwind_passive_offset")}
+            out[sym] = _override(
+                cfg,
+                **params,
+                inv_unwind_enabled=True,
+                inv_unwind_threshold_pct=threshold_pct,
+                inv_unwind_target_pct=target_pct,
+                inv_unwind_max_per_tick=max_taker,
+                inv_unwind_mode="both",
+                inv_unwind_passive_size=passive_size,
+                inv_unwind_passive_offset=0,
+            )
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v17_both_80_50"] = _v17_both_mode(0.8, 0.5, max_taker=5, passive_size=30)
+MEMBER_OVERRIDES["r4_v17_both_70_50"] = _v17_both_mode(0.7, 0.5, max_taker=5, passive_size=30)
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {

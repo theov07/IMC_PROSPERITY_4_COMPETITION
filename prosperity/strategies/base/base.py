@@ -59,8 +59,100 @@ class BaseStrategy(ABC):
         orders = self._apply_position_skew(state, position, orders, book, memory)
         # Counterparty bias overlay (per-product trader weights — opt-in)
         orders = self._apply_cp_bias(state, position, orders, book, memory)
+        # Inventory-based unwind (add takers when |pos| > threshold * limit)
+        orders = self._apply_inventory_unwind(state, position, orders, book, memory)
 
         return orders, conversions
+
+    def _apply_inventory_unwind(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """Inventory-based forced unwind.
+
+        NON-OVERFIT: triggered by INVENTORY level (not time). Pure risk management.
+        When |position| exceeds threshold * limit, add unwind orders.
+
+        Two modes (controlled by inv_unwind_mode):
+          "taker"   — taker at best opposite (pays spread, fills fast)
+          "passive" — passive at best opposite ± 1 (captures spread, fills slow)
+          "both"    — taker for max_per_tick, plus passive at penny-improve
+
+        Solves the "stuck-long-+300" problem.
+
+        Params:
+          inv_unwind_enabled         : turn on (default False)
+          inv_unwind_threshold_pct   : abs(pos)/limit ratio to fire (default 0.8)
+          inv_unwind_target_pct      : abs(pos)/limit ratio to stop (default 0.5)
+          inv_unwind_max_per_tick    : cap fill rate per tick (default 10)
+          inv_unwind_mode            : "taker"|"passive"|"both" (default "taker")
+          inv_unwind_passive_size    : size for passive unwind order (default 20)
+          inv_unwind_passive_offset  : ticks past best to post (default 0 = at best)
+        """
+        if not bool(self.params.get("inv_unwind_enabled", False)):
+            return orders
+
+        limit = self.position_limit()
+        if limit <= 0:
+            return orders
+
+        thresh_pct = float(self.params.get("inv_unwind_threshold_pct", 0.8))
+        target_pct = float(self.params.get("inv_unwind_target_pct", 0.5))
+        max_per_tick = int(self.params.get("inv_unwind_max_per_tick", 10))
+        mode = str(self.params.get("inv_unwind_mode", "taker")).lower()
+        passive_size = int(self.params.get("inv_unwind_passive_size", 20))
+        passive_offset = int(self.params.get("inv_unwind_passive_offset", 0))
+
+        abs_pos = abs(position)
+        if abs_pos < thresh_pct * limit:
+            return orders
+
+        target_abs = int(target_pct * limit)
+        excess = abs_pos - target_abs
+        if excess <= 0:
+            return orders
+
+        new_orders = list(orders)
+
+        # Taker mode (or both): aggressive fill at best opposite
+        if mode in ("taker", "both"):
+            delta = min(excess, max_per_tick)
+            if position > 0 and book.best_bid is not None:
+                avail = int(book.best_bid_volume or 0)
+                qty = -min(delta, avail) if avail > 0 else 0
+                if qty < 0:
+                    new_orders.append(Order(self.product, int(book.best_bid), qty))
+                    memory["_inv_unwind"] = ("TAKER_SELL", -qty)
+            elif position < 0 and book.best_ask is not None:
+                avail = int(book.best_ask_volume or 0)
+                qty = min(delta, avail) if avail > 0 else 0
+                if qty > 0:
+                    new_orders.append(Order(self.product, int(book.best_ask), qty))
+                    memory["_inv_unwind"] = ("TAKER_BUY", qty)
+
+        # Passive mode (or both): post at opposite-side best ± offset (capture spread)
+        if mode in ("passive", "both"):
+            psize = min(passive_size, excess)
+            if position > 0 and book.best_ask is not None:
+                # Long → post SELL at best_ask + offset (or best_ask - 1 to penny-improve)
+                # offset=0 means AT best_ask, offset=-1 means improve (1 tick lower)
+                price = int(book.best_ask) + passive_offset
+                if book.best_bid is not None and price <= int(book.best_bid):
+                    price = int(book.best_bid) + 1  # don't cross
+                new_orders.append(Order(self.product, price, -psize))
+                memory["_inv_unwind_passive"] = ("PASSIVE_SELL", psize, price)
+            elif position < 0 and book.best_bid is not None:
+                price = int(book.best_bid) - passive_offset
+                if book.best_ask is not None and price >= int(book.best_ask):
+                    price = int(book.best_ask) - 1
+                new_orders.append(Order(self.product, price, psize))
+                memory["_inv_unwind_passive"] = ("PASSIVE_BUY", psize, price)
+
+        return new_orders
 
     def _apply_cp_bias(
         self,
