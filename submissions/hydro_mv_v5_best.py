@@ -1,4 +1,9 @@
-"""Backtester entrypoint — tibo_velvet_v29."""
+"""Backtester entrypoint — hydro_mv_v5_best.
+
+Local backtesting wrapper only.
+DO NOT upload this file to Prosperity/IMC.
+Upload the generated artifact under artifacts/submissions instead.
+"""
 
 from prosperity.config import get_round_config
 from prosperity.persistence import dump_state, load_state
@@ -11,7 +16,7 @@ from typing import Dict, List
 
 class Trader:
     def __init__(self):
-        config = get_round_config(3, "tibo_velvet_v29")
+        config = get_round_config(4, "hydro_mv_v5_best")
         self.strategies: Dict[str, BaseStrategy] = {}
         for symbol, pc in config.items():
             merged = {"position_limit": pc.position_limit, **pc.params}

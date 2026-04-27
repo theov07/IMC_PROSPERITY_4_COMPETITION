@@ -206,6 +206,12 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydro_mv_v1":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v1", "HydroMVV1"),
     # mv_v2: AR model mean-reversion
     "hydro_mv_v2":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v2", "HydroMVV2"),
+    # mv_v3: AR + Mark 14 integration (4 modes)
+    "hydro_mv_v3":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v3", "HydroMVV3"),
+    # mv_v4: best v3 + optional v200 features
+    "hydro_mv_v4":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v4", "HydroMVV4"),
+    # mv_v5: passive MM core + v201 features ablation
+    "hydro_mv_v5":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v5", "HydroMVV5"),
     # v201: Mark 14 informed-trader gate (3 variants)
     "hydro_mm_v201_ruled":         ("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201Ruled"),
     "hydro_mm_v201_influenced":    ("prosperity.strategies.round_4.tibo.hydro_strat_v201_influenced", "HydroMMV201Influenced"),

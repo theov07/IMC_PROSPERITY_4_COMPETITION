@@ -10181,38 +10181,78 @@ MEMBER_OVERRIDES["hydro_v200_r4"] = {
     }
 }
 
-# ── mv_v2: AR model mean-reversion ───────────────────────────────────────────
-_MV_V2_BASE = dict(
-    # AR signal
-    anchor_price=10000.0,
-    anchor_alpha=0.02,
-    anchor_drift_bound=1.5,
-    ar_gain=1.0,
-    ar_smooth_half_life=5,
-    mid_smooth_half_life=20,
-    dev_smooth_half_life=10,
-    # entry / exit
-    entry_threshold=12.0,
-    exit_threshold=3.0,
-    entry_size=20,
-    # logging / backtest bookkeeping
-    quote_trace_enabled=True,
-    last_ts_value=999900,
-    log_flush_ts=1000,
-    ts_increment=100,
-)
+# ── Hydro MV strategies (directional mean-reversion + passive MM) ────────────
+# v4_best: AR directional MR, 22,060 PnL (beats spread-paying taker baseline)
+# v5_best: Passive MM + selective AR taker, 153,117 PnL (34% above v201 MM)
 
-MEMBER_OVERRIDES["hydro_mv_v2"] = {
+# BEST v4: AR directional MR — 22,060 PnL, DD 3,751 (3-day realistic).
+# Signal: deviation of smoothed mid from AR fair value. M14 scale mode amplifies size.
+# Only beneficial feature from ablation: dev_size_scale (larger dev → bigger position).
+MEMBER_OVERRIDES["hydro_mv_v4_best"] = {
     4: {"HYDROGEL_PACK": ProductConfig(
-        symbol="HYDROGEL_PACK", strategy="hydro_mv_v2",
-        position_limit=200, params=dict(**_MV_V2_BASE,
-            # best from grid search (2 rounds, 156 combos)
-            ar_gain=8.0,
-            entry_threshold=20.0,
-            exit_threshold=2.0,
-            dev_smooth_half_life=5,
-            ar_smooth_half_life=5,
-        ))},
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v4",
+        position_limit=200,
+        params={
+            "anchor_price":           10000.0,
+            "anchor_alpha":           0.02,
+            "anchor_drift_bound":     1.5,
+            "ar_gain":                8.0,
+            "ar_smooth_half_life":    5,
+            "mid_smooth_half_life":   20,
+            "dev_smooth_half_life":   5,
+            "entry_threshold":        20.0,
+            "exit_threshold":         2.0,
+            "entry_size":             20,
+            "informed_trader_name":   "Mark 14",
+            "mark14_mode":            "scale",
+            "m14_agree_factor":       3.0,
+            "m14_lookback_ticks":     20,
+            "trend_guard_threshold":  0.0,
+            "stop_loss_mult":         0.0,
+            "toxic_flow_threshold":   0.0,
+            "dev_size_scale":         2.0,
+            "dev_size_max_mult":      5.0,
+            "vol_thresh_scale":       0.0,
+            "last_ts_value":          999900,
+            "log_flush_ts":           1000,
+            "ts_increment":           100,
+        })}
+}
+
+# BEST v5: Passive MM + selective AR taker — 153,117 PnL, DD 20,086 (3-day realistic).
+# 34% above v201 (114,350 PnL). Core insight: passive quoting earns the spread;
+# high ar_taker_edge (12) fires selectively → balanced position → more passive fill room.
+MEMBER_OVERRIDES["hydro_mv_v5_best"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v5",
+        position_limit=200,
+        params={
+            # AR model
+            "anchor_price":             10000,
+            "anchor_alpha":             0.02,
+            "anchor_drift_bound":       1.5,
+            "ar_gain":                  8.0,
+            "ar_smooth_half_life":      5,
+            "mid_smooth_half_life":     20,
+            "dev_smooth_half_life":     5,
+            # Passive MM
+            "passive_quoting":          True,
+            "maker_size_base_pct":      0.25,   # 50 units base per side
+            "pct_kept_for_takers":      0.2,
+            "use_inventory_bias":       True,
+            # AR taker (selective: only fires when deviation > 12 ticks from fair)
+            "use_ar_taker":             True,
+            "ar_taker_edge":            12.0,
+            "ar_taker_size_pct":        0.3,
+            # All other features off
+            "use_gap_exploit":          False,
+            "use_m14_gate":             False,
+            "use_ar_quote_bias":        False,
+            "use_anchor_guard":         False,
+            "informed_trader_name":     "Mark 14",
+            "last_ts_value":            999900,
+            "log_flush_ts":             1000,
+        })}
 }
 
 # ── mv_v1: z-score mean-reversion + Mark 14 gate ─────────────────────────────

@@ -214,10 +214,13 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "velvet_mm_v200":     ("prosperity/strategies/round_3/tibo/velvet_strat_v200.py", "VelvetMMV200"),
     "gamma_scalp_v200":   ("prosperity/strategies/round_3/tibo/velvet_strat_v200.py", "GammaScalpV200"),
     "hydro_mm_v200":               ("prosperity/strategies/round_4/tibo/hydro_strat_v200.py", "HydroMMV200"),
+    # ── Round 4 tibo ──
     "hydro_mm_v200_r4":            ("prosperity/strategies/round_4/tibo/hydro_strat_v200.py", "HydroMMV200"),
     "hydro_mm_v201_ruled":         ("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201Ruled"),
     "hydro_mm_v201_influenced":    ("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201Influenced"),
     "hydro_mm_v201_cancel_against":("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201CancelAgainst"),
+    "hydro_mv_v4":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v4.py", "HydroMVV4"),
+    "hydro_mv_v5":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v5.py", "HydroMVV5"),
     # ── smile IV scalper ──
     "smile_iv_scalper":          ("prosperity/strategies/round_3/tibo/smile_iv_scalper.py", "SmileIVScalerStrategy"),
     # ── Theo v7 ──
@@ -871,13 +874,19 @@ def main() -> int:
     print(f"Wrote {output_path} ({len(output):,} bytes)")
     print(f"Inlined : {', '.join(module_files)}")
     print(f"Strategies: {', '.join(sorted(needed))}")
+    print(f"UPLOAD THIS FILE TO PROSPERITY: {output_path}")
 
     _validate(output_path, products)
 
     # Write the submissions/ wrapper so the backtester can import it directly.
     wrapper_path = ROOT / "submissions" / f"{args.member}.py"
     wrapper = dedent(f'''\
-        """Backtester entrypoint — {args.member}."""
+        """Backtester entrypoint — {args.member}.
+
+        Local backtesting wrapper only.
+        DO NOT upload this file to Prosperity/IMC.
+        Upload the generated artifact under artifacts/submissions instead.
+        """
 
         from prosperity.config import get_round_config
         from prosperity.persistence import dump_state, load_state
@@ -919,7 +928,7 @@ def main() -> int:
                 return result, convs, dump_state(saved), features
         ''')
     wrapper_path.write_text(wrapper, encoding="utf-8")
-    print(f"Wrote {wrapper_path}")
+    print(f"Wrote local backtest wrapper: {wrapper_path}")
 
     return 0
 
