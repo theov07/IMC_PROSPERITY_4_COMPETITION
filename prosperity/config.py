@@ -14723,6 +14723,124 @@ MEMBER_OVERRIDES["r4_v7_M49cond_z20_soft"] = _v7_conditional(
 )
 
 
+# v8 — ADD Mark 67 follow conditionally on top of v5 weights
+# Hypothesis: Mark 67 is PURE BUYER. Most of the time he doesn't trade.
+# When he does trade BIG, that's informed flow worth following.
+# Approach: weight +1.0 (conditional) — fires only when |vol| > z*sigma above mean.
+MEMBER_OVERRIDES["r4_v8_M67cond_z20"] = _v7_conditional(
+    ["Mark 67"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 67": +1.0}
+)
+MEMBER_OVERRIDES["r4_v8_M67cond_z15"] = _v7_conditional(
+    ["Mark 67"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 67": +1.0}
+)
+MEMBER_OVERRIDES["r4_v8_M67cond_z25"] = _v7_conditional(
+    ["Mark 67"], zthresh=2.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 67": +1.0}
+)
+
+# v8b — ADD Mark 22 fade conditionally (Mark 22 is PURE SELLER)
+# When he dumps anomalously hard, fade with -0.5
+MEMBER_OVERRIDES["r4_v8_M22cond_z20"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.5}
+)
+
+# v8c — Combine M67 follow + M22 fade, both conditional
+MEMBER_OVERRIDES["r4_v8_M67M22cond_z20"] = _v7_conditional(
+    ["Mark 67", "Mark 22"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2,
+             "Mark 67": +1.0, "Mark 22": -0.5}
+)
+
+# v8d — Lower weight for follow signal (less aggressive)
+MEMBER_OVERRIDES["r4_v8_M67cond_z20_w05"] = _v7_conditional(
+    ["Mark 67"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 67": +0.5}
+)
+
+# v8e — M22 fade variants (M22cond_z20 was +581 vs v5)
+MEMBER_OVERRIDES["r4_v8_M22cond_z15"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.5}
+)
+MEMBER_OVERRIDES["r4_v8_M22cond_z25"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.5}
+)
+MEMBER_OVERRIDES["r4_v8_M22cond_z20_w03"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.3}
+)
+MEMBER_OVERRIDES["r4_v8_M22cond_z20_w07"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.7}
+)
+MEMBER_OVERRIDES["r4_v8_M22cond_z20_w10"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -1.0}
+)
+# Soft baseline: M22 weight = -0.2 always, ramps to -0.5 when anomalous
+MEMBER_OVERRIDES["r4_v8_M22cond_z20_soft"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.0, baseline=-0.2,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.5}
+)
+# Always-on M22 fade (no conditional) — does the conditional matter?
+MEMBER_OVERRIDES["r4_v8_M22_always"] = _v4_with_extras({
+    "Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.5
+})
+
+# v9 — Fine-tune around the M22cond_z20_w03 winner (+1,281 PnL)
+# Best so far: cond_traders=["Mark 22"] z=2.0 weight={M22:-0.3}
+MEMBER_OVERRIDES["r4_v9_M22cond_z15_w03"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.3}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z18_w03"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.8,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.3}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z25_w03"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.3}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z20_w025"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.25}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z20_w035"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.35}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z20_w04"] = _v7_conditional(
+    ["Mark 22"], zthresh=2.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4}
+)
+
+# v9b — Even looser threshold variants (z=1.5 w=-0.3 was the new best)
+MEMBER_OVERRIDES["r4_v9_M22cond_z10_w03"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.0,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.3}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z12_w03"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.2,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.3}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z15_w035"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.35}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z15_w04"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4}
+)
+MEMBER_OVERRIDES["r4_v9_M22cond_z15_w025"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.25}
+)
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
