@@ -94,13 +94,7 @@ class BaseStrategy(ABC):
             position=position,
             memory=memory,
         )
-        orders = self._apply_obi_passive_bias(state, position, orders, book, memory)
-        orders = self._apply_obi_taker_overlay(state, position, orders, book, memory)
-        if not bool(self.params.get("_cp_bias_handled_internally", False)):
-            orders = self._apply_counterparty_bias(state, position, orders, book, memory)
-        orders = self._apply_intraday_stop_loss(state, position, orders, book, memory)
-        orders = self._apply_conditional_unwind(state, position, orders, book, memory)
-        orders = self._apply_eod_unwind(state, position, orders, book)
+        orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
         return orders, conversions
     @abstractmethod
     def compute_orders(
@@ -255,47 +249,7 @@ class BaseStrategy(ABC):
         return max(0, self.position_limit() - position)
     def sell_capacity(self, position: int) -> int:
         return max(0, self.position_limit() + position)
-    def _apply_eod_unwind(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-    ) -> List[Order]:
-        eod_start = float(self.params.get("eod_unwind_start_pct", 0.0))
-        if eod_start <= 0 or eod_start >= 1.0:
-            return orders  # disabled
-        last_ts = float(self.params.get("last_ts_value", 999900))
-        progress = float(state.timestamp) / max(last_ts, 1.0)
-        if progress < eod_start:
-            return orders
-        eod_agg = float(self.params.get("eod_unwind_aggressive_pct", 0.95))
-        eod_full = float(self.params.get("eod_unwind_full_flat_pct", 0.99))
-        if progress >= eod_full:
-            target_pos = 0
-        else:
-            ramp = (progress - eod_start) / max(eod_full - eod_start, 1e-9)
-            target_pos = int(round(position * (1.0 - ramp)))
-        filtered: List[Order] = []
-        for o in orders:
-            new_pos = position + o.quantity
-            if abs(new_pos) > abs(position):
-                continue  # would grow inventory — drop
-            filtered.append(o)
-        delta = target_pos - position
-        if progress >= eod_agg and delta != 0:
-            if delta > 0 and book.best_ask is not None:
-                avail = book.best_ask_volume or abs(delta)
-                qty = min(int(delta), int(avail))
-                if qty > 0:
-                    filtered.append(Order(self.product, int(book.best_ask), qty))
-            elif delta < 0 and book.best_bid is not None:
-                avail = book.best_bid_volume or abs(delta)
-                qty = max(int(delta), -int(avail))
-                if qty < 0:
-                    filtered.append(Order(self.product, int(book.best_bid), qty))
-        return filtered
-    def _apply_intraday_stop_loss(
+    def _apply_obi_size_tilt(
         self,
         state: TradingState,
         position: int,
@@ -303,199 +257,42 @@ class BaseStrategy(ABC):
         book: BookSnapshot,
         memory: Dict[str, Any],
     ) -> List[Order]:
-        threshold = float(self.params.get("stop_loss_drawdown_pnl", 0.0))
-        if threshold <= 0:
-            return orders  # disabled
-        min_peak = float(self.params.get("stop_loss_min_peak", 5000.0))
-        cum_cash = memory.get("_stop_cum_cash", 0.0)
-        prev_pos = memory.get("_stop_prev_pos", 0)
-        mid = book.mid_price
-        if mid is None:
-            mid = book.best_bid or book.best_ask or 0
-        if prev_pos != position:
-            cum_cash -= float(position - prev_pos) * float(mid)
-        current_pnl = cum_cash + float(position) * float(mid)
-        memory["_stop_cum_cash"] = cum_cash
-        memory["_stop_prev_pos"] = position
-        memory["_stop_current_pnl"] = current_pnl
-        peak_pnl = float(memory.get("_stop_peak_pnl", 0.0))
-        if current_pnl > peak_pnl:
-            peak_pnl = current_pnl
-        memory["_stop_peak_pnl"] = peak_pnl
-        triggered = bool(memory.get("_stop_triggered", False))
-        if not triggered:
-            drawdown = peak_pnl - current_pnl
-            if peak_pnl >= min_peak and drawdown >= threshold:
-                triggered = True
-                memory["_stop_triggered"] = True
-        if not triggered:
+        if not bool(self.params.get("obi_size_enabled", False)):
             return orders
-        filtered: List[Order] = []
-        for o in orders:
-            new_pos = position + o.quantity
-            if abs(new_pos) > abs(position):
-                continue
-            filtered.append(o)
-        if position > 0 and book.best_bid is not None:
-            avail = book.best_bid_volume or position
-            qty = min(position, avail)
-            if qty > 0:
-                filtered.append(Order(self.product, int(book.best_bid), -qty))
-        elif position < 0 and book.best_ask is not None:
-            avail = book.best_ask_volume or abs(position)
-            qty = min(abs(position), avail)
-            if qty > 0:
-                filtered.append(Order(self.product, int(book.best_ask), qty))
-        return filtered
-    def _apply_conditional_unwind(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> List[Order]:
-        if not bool(self.params.get("cond_unwind_enabled", False)):
-            return orders
-        min_pos = int(self.params.get("cond_unwind_min_pos", 50))
-        if abs(position) < min_pos:
-            return orders
-        signal = 0
-        mid = book.mid_price
-        if mid is not None and bool(self.params.get("cond_unwind_use_vwap", True)):
-            signal = self._vwap_signal(state, float(mid), memory)
-        unwind_now = (signal == -1 and position > 0) or (signal == +1 and position < 0)
-        if not unwind_now:
-            return orders
-        memory["_cond_unwind_active"] = 1
-        chunk_pct = float(self.params.get("cond_unwind_chunk_pct", 0.05))
-        chunk_size = max(1, int(round(abs(position) * chunk_pct)))
-        filtered: List[Order] = []
-        for o in orders:
-            new_pos = position + o.quantity
-            if abs(new_pos) > abs(position):
-                continue
-            filtered.append(o)
-        if position > 0 and book.best_bid is not None:
-            avail = book.best_bid_volume or chunk_size
-            qty = min(chunk_size, avail, position)
-            if qty > 0:
-                filtered.append(Order(self.product, int(book.best_bid), -qty))
-        elif position < 0 and book.best_ask is not None:
-            avail = book.best_ask_volume or chunk_size
-            qty = min(chunk_size, avail, abs(position))
-            if qty > 0:
-                filtered.append(Order(self.product, int(book.best_ask), qty))
-        return filtered
-    def _apply_obi_passive_bias(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> List[Order]:
-        if not bool(self.params.get("obi_passive_enabled", False)):
-            return orders
-        levels = int(self.params.get("obi_passive_levels", 3))
-        threshold = float(self.params.get("obi_passive_threshold", 0.005))
-        tick_pro = int(self.params.get("obi_passive_tick_offset", 1))
-        tick_anti = int(self.params.get("obi_passive_anti_offset", 1))
+        levels = int(self.params.get("obi_size_levels", 3))
+        threshold = float(self.params.get("obi_size_threshold", 0.005))
+        boost = float(self.params.get("obi_size_boost_factor", 1.5))
+        reduce = float(self.params.get("obi_size_reduce_factor", 0.7))
         bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
         ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
         total = bid_total + ask_total
         if total == 0:
             return orders
         obi = (bid_total - ask_total) / total
-        memory["_obi_passive"] = obi
+        memory["_obi_size"] = obi
         if abs(obi) < threshold:
             return orders
         bullish = obi > 0
         adjusted: List[Order] = []
         for o in orders:
-            if o.quantity > 0:  # BUY (passive bid or taker buy)
-                shift = +tick_pro if bullish else -tick_anti
-                new_price = int(o.price) + shift
-                adjusted.append(Order(self.product, new_price, o.quantity))
-            elif o.quantity < 0:  # SELL (passive ask or taker sell)
-                shift = +tick_anti if bullish else -tick_pro
-                new_price = int(o.price) + shift
-                adjusted.append(Order(self.product, new_price, o.quantity))
+            if o.quantity > 0:  # BUY
+                factor = boost if bullish else reduce
+            elif o.quantity < 0:  # SELL
+                factor = reduce if bullish else boost
             else:
                 adjusted.append(o)
-        memory["_obi_passive_dir"] = "BULL" if bullish else "BEAR"
+                continue
+            new_qty = int(o.quantity * factor)
+            if new_qty > 0:
+                cap = max(0, self.position_limit() - position)
+                new_qty = min(new_qty, cap) if cap >= 0 else new_qty
+            elif new_qty < 0:
+                cap = max(0, self.position_limit() + position)
+                new_qty = max(new_qty, -cap)
+            if new_qty != 0:
+                adjusted.append(Order(o.symbol, o.price, new_qty))
+        memory["_obi_size_dir"] = "BULL" if bullish else "BEAR"
         return adjusted
-    def _apply_obi_taker_overlay(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> List[Order]:
-        if not bool(self.params.get("obi_taker_enabled", False)):
-            return orders
-        levels = int(self.params.get("obi_taker_levels", 3))
-        threshold = float(self.params.get("obi_taker_threshold", 0.005))
-        size = int(self.params.get("obi_taker_size", 5))
-        cooldown = int(self.params.get("obi_taker_cooldown_ticks", 10))
-        ts_now = int(getattr(state, "timestamp", 0))
-        last_fire_ts = memory.get("_obi_last_fire_ts", -10**9)
-        if ts_now - last_fire_ts < cooldown * 100:
-            return orders
-        bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
-        ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
-        total = bid_total + ask_total
-        if total == 0:
-            return orders
-        obi = (bid_total - ask_total) / total
-        memory["_obi"] = obi
-        if obi > threshold and book.best_ask is not None:
-            cap = max(0, self.position_limit() - position)
-            qty = min(size, cap, book.best_ask_volume or size)
-            if qty > 0:
-                orders.append(Order(self.product, int(book.best_ask), int(qty)))
-                memory["_obi_last_fire_ts"] = ts_now
-                memory["_obi_last_dir"] = "BUY"
-        elif obi < -threshold and book.best_bid is not None:
-            cap = max(0, self.position_limit() + position)
-            qty = min(size, cap, book.best_bid_volume or size)
-            if qty > 0:
-                orders.append(Order(self.product, int(book.best_bid), -int(qty)))
-                memory["_obi_last_fire_ts"] = ts_now
-                memory["_obi_last_dir"] = "SELL"
-        return orders
-    def _apply_counterparty_bias(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> List[Order]:
-        if not bool(self.params.get("counterparty_bias_enabled", False)):
-            return orders
-        cp_signal = self._counterparty_signal(state, memory)
-        cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
-        if abs(cp_signal) <= cp_threshold:
-            return orders
-        cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
-        cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
-        cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
-        if cp_offset == 0:
-            return orders
-        memory["_cp_offset_applied"] = cp_offset
-        shifted: List[Order] = []
-        best_bid = book.best_bid
-        best_ask = book.best_ask
-        for o in orders:
-            new_price = int(o.price) + cp_offset
-            if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
-                new_price = int(best_ask) - 1
-            elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
-                new_price = int(best_bid) + 1
-            shifted.append(Order(o.symbol, new_price, o.quantity))
-        return shifted
     def _counterparty_signal(
         self,
         state: TradingState,
@@ -539,73 +336,6 @@ class BaseStrategy(ABC):
         memory["_cp_signal"] = signal
         memory["_cp_per_trader"] = per_trader
         return signal
-    def _vwap_signal(
-        self,
-        state: TradingState,
-        mid: float,
-        memory: Dict[str, Any],
-    ) -> int:
-        threshold = float(self.params.get("vwap_threshold", 8.0))
-        min_vol = float(self.params.get("vwap_min_volume", 20.0))
-        window_ts = int(self.params.get("vwap_window_ts", 100000))
-        ts_now = int(getattr(state, "timestamp", 0))
-        trades = []
-        try:
-            mt = state.market_trades
-            if mt:
-                trades = mt.get(self.product, []) or []
-        except Exception:
-            pass
-        buf = memory.setdefault("_vwap_buf", [])  # list of [ts, dollars, qty]
-        for t in trades:
-            qty = float(getattr(t, "quantity", 0))
-            price = float(getattr(t, "price", 0))
-            if qty > 0 and price > 0:
-                buf.append([ts_now, price * qty, qty])
-        cutoff = ts_now - window_ts
-        if buf and buf[0][0] < cutoff:
-            i = 0
-            while i < len(buf) and buf[i][0] < cutoff:
-                i += 1
-            del buf[:i]
-        total_qty = sum(b[2] for b in buf)
-        total_dol = sum(b[1] for b in buf)
-        if total_qty < min_vol or total_qty <= 0:
-            return 0
-        vwap = total_dol / total_qty
-        memory["_vwap"] = vwap
-        diff = mid - vwap
-        memory["_vwap_diff"] = diff
-        if diff > threshold:
-            return 1
-        if diff < -threshold:
-            return -1
-        return 0
-    def _trend_direction(self, mid: float, memory: Dict[str, Any]) -> int:
-        fast_alpha = float(self.params.get("trend_ema_fast_alpha", 0.05))
-        slow_alpha = float(self.params.get("trend_ema_slow_alpha", 0.005))
-        threshold = float(self.params.get("trend_threshold", 0.5))
-        ema_fast = memory.get("_trend_ema_fast")
-        ema_slow = memory.get("_trend_ema_slow")
-        if ema_fast is None:
-            ema_fast = mid
-            ema_slow = mid
-        else:
-            ema_fast = fast_alpha * mid + (1.0 - fast_alpha) * ema_fast
-            ema_slow = slow_alpha * mid + (1.0 - slow_alpha) * ema_slow
-        memory["_trend_ema_fast"] = ema_fast
-        memory["_trend_ema_slow"] = ema_slow
-        n_seen = memory.get("_trend_n_seen", 0) + 1
-        memory["_trend_n_seen"] = n_seen
-        warmup = int(self.params.get("trend_warmup_ticks", 200))
-        if n_seen < warmup:
-            return 0
-        diff = ema_fast - ema_slow
-        if diff > threshold:
-            return 1
-        elif diff < -threshold:
-            return -1
-        return 0
 DEFAULT_TIMESTAMP_UNITS_PER_DAY = 1_000_000.0
 DEFAULT_TS_INCREMENT = 100.0
 MIN_TTE_DAYS = 0.01
@@ -1681,13 +1411,8 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
             cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
             cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
-            memory["_cp_total_calls"] = memory.get("_cp_total_calls", 0) + 1
             if abs(cp_signal) > cp_threshold:
                 cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
-                memory["_cp_offset"] = cp_offset
-                memory["_cp_fires"] = memory.get("_cp_fires", 0) + 1
-                memory["_cp_signal_max"] = max(abs(cp_signal), memory.get("_cp_signal_max", 0))
-            memory["_cp_buf_size"] = len(memory.get("_cp_buf", []))
         orders, conv = self._compute_guarded(state, book, order_depth, position, memory)
         if cp_offset != 0 and orders:
             shifted = []
@@ -1765,11 +1490,6 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
         if (d := memory.get("_guard_dist"))       is not None: out["GuardDist"]  = float(d)
         if (t := memory.get("_guard_trend"))      is not None: out["GuardTrend"] = float(t)
         if (u := memory.get("_guard_use_anchor")) is not None: out["GuardOn"]    = float(u)
-        if (n := memory.get("_cp_total_calls"))   is not None: out["CPCalls"]    = float(n)
-        if (n := memory.get("_cp_fires"))         is not None: out["CPFires"]    = float(n)
-        if (s := memory.get("_cp_signal_max"))    is not None: out["CPSigMax"]   = float(s)
-        if (b := memory.get("_cp_buf_size"))      is not None: out["CPBufSize"]  = float(b)
-        if (o := memory.get("_cp_offset"))        is not None: out["CPOffset"]   = float(o)
         return out
 class DynamicAnchorMMStrategy(R3GuardedAnchorMMStrategy):
     def _get_dynamic_anchor(self, mid: float, memory: Dict[str, Any]) -> float:

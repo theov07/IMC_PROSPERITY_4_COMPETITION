@@ -131,13 +131,18 @@ class BaseStrategy(ABC):
         position = state.position.get(self.product, 0)
         book = snapshot_from_order_depth(self.product, order_depth)
 
-        return self.compute_orders(
+        orders, conversions = self.compute_orders(
             state=state,
             book=book,
             order_depth=order_depth,
             position=position,
             memory=memory,
         )
+
+        # Alpha overlay used by champion v5: OBI size tilt
+        orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
+
+        return orders, conversions
 
     @abstractmethod
     def compute_orders(
@@ -404,6 +409,151 @@ class BaseStrategy(ABC):
 
     def sell_capacity(self, position: int) -> int:
         return max(0, self.position_limit() + position)
+
+    # ------------------------------------------------------------------
+    # Trend gate (skip mean-rev BUY in downtrend, mean-rev SELL in uptrend)
+    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Order Book Imbalance (OBI) SIZE tilt — adjust own quote SIZES (not prices).
+    # Avoids spread cost from price tilt. Captures alpha through inventory shift.
+    # ------------------------------------------------------------------
+    def _apply_obi_size_tilt(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """When L3 OBI is extreme, increase the size of orders going in the predicted direction.
+
+        Bullish OBI (>+threshold):
+          - Multiply BUY orders by `obi_size_boost_factor` (e.g. 1.5x) — accumulate long
+          - Reduce SELL order sizes by `obi_size_reduce_factor` (e.g. 0.5x) — keep long longer
+
+        Bearish OBI (<-threshold): mirror.
+
+        Params:
+          obi_size_enabled         : turn on (default False)
+          obi_size_levels          : aggregation levels (default 3)
+          obi_size_threshold       : abs OBI to fire (default 0.005)
+          obi_size_boost_factor    : multiplier on favored side (default 1.5)
+          obi_size_reduce_factor   : multiplier on opposed side (default 0.7)
+        """
+        if not bool(self.params.get("obi_size_enabled", False)):
+            return orders
+
+        levels = int(self.params.get("obi_size_levels", 3))
+        threshold = float(self.params.get("obi_size_threshold", 0.005))
+        boost = float(self.params.get("obi_size_boost_factor", 1.5))
+        reduce = float(self.params.get("obi_size_reduce_factor", 0.7))
+
+        bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
+        ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
+        total = bid_total + ask_total
+        if total == 0:
+            return orders
+        obi = (bid_total - ask_total) / total
+        memory["_obi_size"] = obi
+
+        if abs(obi) < threshold:
+            return orders
+
+        bullish = obi > 0
+        adjusted: List[Order] = []
+        for o in orders:
+            if o.quantity > 0:  # BUY
+                factor = boost if bullish else reduce
+            elif o.quantity < 0:  # SELL
+                factor = reduce if bullish else boost
+            else:
+                adjusted.append(o)
+                continue
+            new_qty = int(o.quantity * factor)
+            # Respect position limits
+            if new_qty > 0:
+                cap = max(0, self.position_limit() - position)
+                new_qty = min(new_qty, cap) if cap >= 0 else new_qty
+            elif new_qty < 0:
+                cap = max(0, self.position_limit() + position)
+                new_qty = max(new_qty, -cap)
+            if new_qty != 0:
+                adjusted.append(Order(o.symbol, o.price, new_qty))
+
+        memory["_obi_size_dir"] = "BULL" if bullish else "BEAR"
+        return adjusted
+
+    def _counterparty_signal(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+    ) -> float:
+        """Counterparty-flow weighted signal.
+
+        Maintains a rolling buffer of (timestamp, trader_id, signed_qty) for the last
+        `cp_window_ts` timestamp units. Signed qty = +qty when trader is buyer, -qty
+        when trader is seller. Aggregates per trader, applies a per-trader weight,
+        returns weighted sum.
+
+        Default weights (from R4 D1+D2+D3 lead-lag analysis on VELVET):
+          Mark 55 = +1.0  (high-vol MM, +0.14 rho with next-50-tick return, 60% hit rate)
+          Mark 67 = +1.0  (directional buyer, +0.12 rho, 54% hit rate)
+          Mark 01 = -1.0  (MM, -0.17 rho — FADE its flow)
+          Mark 14 = -1.0  (MM, -0.15 rho — FADE)
+        Other traders default to 0 weight.
+
+        Params:
+          cp_window_ts        : rolling window in timestamp units (default 10000 = 100 ticks)
+          cp_trader_weights   : dict trader_id -> weight (default = R4 VELVET weights)
+
+        Returns: weighted signed signal (units = contracts).
+        """
+        window_ts = int(self.params.get("cp_window_ts", 10000))
+        weights = self.params.get("cp_trader_weights", {
+            "Mark 55": +1.0, "Mark 67": +1.0,
+            "Mark 01": -1.0, "Mark 14": -1.0,
+        })
+
+        ts_now = int(getattr(state, "timestamp", 0))
+
+        # Append this tick's trades to rolling buffer
+        buf = memory.setdefault("_cp_buf", [])  # list of [ts, trader, signed_qty]
+        try:
+            mt = state.market_trades
+            trades = (mt or {}).get(self.product, []) or []
+        except Exception:
+            trades = []
+        for t in trades:
+            buyer = getattr(t, "buyer", None) or ""
+            seller = getattr(t, "seller", None) or ""
+            qty = float(getattr(t, "quantity", 0))
+            if qty <= 0:
+                continue
+            if buyer:
+                buf.append([ts_now, buyer, qty])
+            if seller:
+                buf.append([ts_now, seller, -qty])
+
+        # Drop old entries
+        cutoff = ts_now - window_ts
+        if buf and buf[0][0] < cutoff:
+            i = 0
+            while i < len(buf) and buf[i][0] < cutoff:
+                i += 1
+            del buf[:i]
+
+        # Aggregate per trader, apply weights
+        signal = 0.0
+        per_trader = {}
+        for _, trader, signed in buf:
+            per_trader[trader] = per_trader.get(trader, 0.0) + signed
+        for trader, net in per_trader.items():
+            w = weights.get(trader, 0.0)
+            signal += w * net
+
+        memory["_cp_signal"] = signal
+        memory["_cp_per_trader"] = per_trader
+        return signal
 
 
 # ── prosperity/options/time.py ────────────────────────────────────────────────────
@@ -1603,6 +1753,47 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
     """
 
     def compute_orders(
+        self,
+        state: TradingState,
+        book: BookSnapshot,
+        order_depth: OrderDepth,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> Tuple[List[Order], int]:
+        # Counterparty bias layer (opt-in via params): compute trader-flow signal
+        # Mark 55+67 follow / Mark 01+14 fade → returns weighted net flow signal
+        # Mark this strategy as handling cp_bias internally — avoid double-application from on_tick
+        self.params["_cp_bias_handled_internally"] = True
+
+        cp_offset = 0
+        if bool(self.params.get("counterparty_bias_enabled", False)):
+            cp_signal = self._counterparty_signal(state, memory)
+            cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
+            cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
+            cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
+            if abs(cp_signal) > cp_threshold:
+                cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
+
+        # Original guard logic
+        orders, conv = self._compute_guarded(state, book, order_depth, position, memory)
+
+        # Apply cp_bias as uniform price shift on all orders (post-strategy)
+        if cp_offset != 0 and orders:
+            shifted = []
+            best_bid = book.best_bid
+            best_ask = book.best_ask
+            for o in orders:
+                new_price = int(o.price) + cp_offset
+                # Cap to avoid crossing the book
+                if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
+                    new_price = int(best_ask) - 1
+                elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
+                    new_price = int(best_bid) + 1
+                shifted.append(Order(o.symbol, new_price, o.quantity))
+            return shifted, conv
+        return orders, conv
+
+    def _compute_guarded(
         self,
         state: TradingState,
         book: BookSnapshot,
