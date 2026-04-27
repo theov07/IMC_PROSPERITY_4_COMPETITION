@@ -1,28 +1,71 @@
 # Round 4 Submissions — Final candidates
 
-## 🏆 NEW CHAMPION (2026-04-27 wave 3)
+## 🏆 BEST CHAMPION v5 (2026-04-27 wave 3 final final)
 
-**`R4_NEW_CHAMPION__fade_49_14__pnl168k_dd70k_ratio239.py`** — **167,860 / 70,277 / 2.39**
-**+10,148 PnL vs previous baseline** (was 157,712).
+**`R4_CHAMPION_v5__obi_fade_M49w08_M14_M01__pnl175k_dd67k_ratio259.py`** — **174,751 / 67,465 / 2.59**
+**+17,039 PnL vs previous baseline** (was 157,712, +10.8% absolute).
 
-Mechanism: counterparty fade signal. When Mark 49 (directional seller, -15k 3d PnL) and
-Mark 14 (balanced MM with -0.15 short-term correlation) net-sell over 100 ticks, we
-shift our VELVET quotes UP by up to 2 ticks. This captures the rebound after their selling.
+### Optimal weights (after weight scan)
+- Mark 49 = **-0.8** (was -1.0; lower weight = better)
+- Mark 14 = -0.5
+- Mark 01 = -0.2
+- OBI size tilt: 1.5x boost / 0.7x reduce, threshold 0.005, L3
+- threshold 1.0, max_offset 2.0, scale 0.15, window 100 ticks
 
-Per-day:
-- D1: +69,789 (+869 vs baseline)
-- D2: +82,262 (**+13,922** — HUGE win, Mark 49 selling into uptrend creates rebounds)
-- D3: +15,809 (-4,643 vs baseline — small loss on clear downtrend)
+### Per-day breakdown
+- D1: TBD (similar to v4)
+- D2: TBD (HUGE win on uptrend)
+- D3: TBD (small loss vs baseline)
+
+---
+
+## 🏆 PREVIOUS CHAMPION v4
+
+**`R4_CHAMPION_v4__combo_obi_fade_49_14_01__pnl173k_dd68k_ratio256.py`** — **172,771 / 67,502 / 2.56**
+**+15,059 PnL vs previous baseline** (was 157,712, +9.6% absolute).
+
+### Mechanism (combines 4 signals)
+
+1. **Mark 49 fade** (weight -1.0): when Mark 49 net-sells over 100 ticks, bias UP. Mark 49
+   is a directional seller that loses long-term (-15k 3d PnL). His sells precede rebounds.
+
+2. **Mark 14 fade** (weight -0.5): Mark 14 is a balanced MM but his short-term net flow has
+   ρ=-0.15 with future returns. Half-weight to avoid noise.
+
+3. **Mark 01 fade** (weight -0.20): NEW — discovered Mark 01's BUY volume spikes on D3
+   last 10% before the crash (+35 vs +6 D2). Small weight catches this without dominating.
+
+4. **OBI size tilt** (1.5x boost / 0.7x reduce, threshold 0.005, L3): when bid_volume vs
+   ask_volume imbalance is extreme, multiply our orders accordingly. Avoids spread cost
+   from price tilt.
+
+### Per-day breakdown
+- D1: +71,354 (+2,434 vs baseline)
+- D2: +85,064 (**+16,724** vs baseline — HUGE win on uptrend day)
+- D3: +16,353 (-4,099 vs baseline — small loss on clear downtrend)
+
+### Progressive wins
+| Stage | PnL gain | Mechanism added |
+|---|---:|---|
+| baseline | 0 | — |
+| fade_mark49 | +5,746 | Single Mark fade |
+| fade_49_14 | +10,148 | + Mark 14 fade -0.5 |
+| combo_obi_fade | +10,621 | + OBI size tilt |
+| combo_obi_fade_w01 | +12,297 | + Mark 01 fade -0.3 |
+| **★ combo_obi_fade_w01_w02** | **+15,059** | **Mark 01 weight tuned to -0.2** |
 
 ## Pareto frontier (R4 3-day backtest, realistic fill, HYDROGEL DISABLED)
 
-| Tier | File | PnL 3d | DD | Ratio | CV% | Pick if... |
-|---|---|---:|---:|---:|---:|---|
-| **🏆 NEW CHAMPION** | `R4_NEW_CHAMPION__fade_49_14__pnl168k_dd70k_ratio239.py` | **167,860** | **70,277** | **2.39** | TBD | **DEFAULT UPLOAD** |
-| OLD MAX PnL | `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py` | 157,712 | 72,582 | 2.17 | 52.9% | Without trader signal |
-| OLD BEST RATIO | `R4_v57_best_ratio__pnl152k_dd62k_ratio246.py` | 151,596 | 61,560 | 2.46 | 47.8% | Lower DD risk |
-| OLD BALANCED | `R4_v58_balanced__pnl153k_dd64k_ratio239.py` | 153,132 | 64,004 | 2.39 | 49.3% | Backup |
-| MINIMAL | `R4_v52_minimal__pnl140k_dd61k_ratio230.py` | 140,488 | 61,195 | 2.30 | 52.8% | No toxic/unwind |
+| Tier | File | PnL 3d | DD | Ratio | Notes |
+|---|---|---:|---:|---:|---|
+| **🏆 BEST** | `R4_CHAMPION_v4__combo_obi_fade_49_14_01__pnl173k_dd68k_ratio256.py` | **172,771** | **67,502** | **2.56** | **DEFAULT UPLOAD** |
+| v3 | `R4_CHAMPION_v3__combo_obi_fade_w01__pnl170k_dd67k_ratio253.py` | 170,009 | 67,301 | 2.53 | Mark 01 -0.3 |
+| v2 | `R4_CHAMPION_v2__combo_obi_fade__pnl168k_dd70k_ratio240.py` | 168,333 | 70,090 | 2.40 | OBI + fade_49_14 |
+| v1 | `R4_NEW_CHAMPION__fade_49_14__pnl168k_dd70k_ratio239.py` | 167,860 | 70,277 | 2.39 | fade_49_14 only |
+| OLD baseline | `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py` | 157,712 | 72,582 | 2.17 | No trader signal |
+| OLD ratio | `R4_v57_best_ratio__pnl152k_dd62k_ratio246.py` | 151,596 | 61,560 | 2.46 | Lower DD pre-trader |
+| OLD balanced | `R4_v58_balanced__pnl153k_dd64k_ratio239.py` | 153,132 | 64,004 | 2.39 | Backup |
+| MINIMAL | `R4_v52_minimal__pnl140k_dd61k_ratio230.py` | 140,488 | 61,195 | 2.30 | No toxic/unwind |
 
 ## Per-product 3-day PnL
 

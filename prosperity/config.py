@@ -14465,6 +14465,49 @@ _make_combo_variant("r4_velvet_combo_w01_w010", -0.10)
 _make_combo_variant("r4_velvet_combo_w01_w030", -0.30)
 
 
+# r4_velvet_v4_plus_M22 — add Mark 22 fade to v4
+def _v4_with_extras(weights):
+    return {
+        4: {
+            sym: (
+                _override(
+                    cfg,
+                    **dict(cfg.params),
+                    obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                    obi_size_levels=3, obi_size_threshold=0.005,
+                    obi_size_boost_factor=1.5, obi_size_reduce_factor=0.7,
+                    counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                    cp_window_ts=10000, cp_signal_threshold=1.0,
+                    cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                    cp_trader_weights=weights,
+                ) if cfg is not None else None
+            ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+        },
+    }
+
+
+MEMBER_OVERRIDES["r4_velvet_v4_plus_M22"] = _v4_with_extras({"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_plus_M55"] = _v4_with_extras({"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 55": +0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_plus_M67"] = _v4_with_extras({"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 67": +0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_M14_w03"] = _v4_with_extras({"Mark 49": -1.0, "Mark 14": -0.3, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_M14_w07"] = _v4_with_extras({"Mark 49": -1.0, "Mark 14": -0.7, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_M49_w08"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_M49_w12"] = _v4_with_extras({"Mark 49": -1.2, "Mark 14": -0.5, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_M49_w15"] = _v4_with_extras({"Mark 49": -1.5, "Mark 14": -0.5, "Mark 01": -0.2})
+
+
+# Tune Mark 49 weight more
+MEMBER_OVERRIDES["r4_velvet_v4_M49_w06"] = _v4_with_extras({"Mark 49": -0.6, "Mark 14": -0.5, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_M49_w07"] = _v4_with_extras({"Mark 49": -0.7, "Mark 14": -0.5, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v4_M49_w09"] = _v4_with_extras({"Mark 49": -0.9, "Mark 14": -0.5, "Mark 01": -0.2})
+
+# Combine M49=0.8 with other tunings
+MEMBER_OVERRIDES["r4_velvet_v5_M49w08_M14w03"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.3, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v5_M49w08_M14w07"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.7, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_velvet_v5_M49w08_M01w015"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.15})
+MEMBER_OVERRIDES["r4_velvet_v5_M49w08_M01w025"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.25})
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
