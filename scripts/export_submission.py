@@ -218,6 +218,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "hydro_mm_v201_ruled":         ("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201Ruled"),
     "hydro_mm_v201_influenced":    ("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201Influenced"),
     "hydro_mm_v201_cancel_against":("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201CancelAgainst"),
+    "live_alpha_probe":            ("prosperity/strategies/round_4/live_alpha_probe.py", "LiveAlphaProbeStrategy"),
+    "forced_long_buyer":           ("prosperity/strategies/round_4/forced_long_buyer.py", "ForcedLongBuyerStrategy"),
     # ── smile IV scalper ──
     "smile_iv_scalper":          ("prosperity/strategies/round_3/tibo/smile_iv_scalper.py", "SmileIVScalerStrategy"),
     # ── Theo v7 ──
@@ -1160,6 +1162,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
     # ── Round 4 ──
     "oracle_replay_r4d3": ("prosperity/strategies/round_4/oracle_replay_d3.py", "OracleReplayR4D3Strategy"),
+    "forced_long_buyer": ("prosperity/strategies/round_4/forced_long_buyer.py", "ForcedLongBuyerStrategy"),
+    "live_alpha_probe": ("prosperity/strategies/round_4/live_alpha_probe.py", "LiveAlphaProbeStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
