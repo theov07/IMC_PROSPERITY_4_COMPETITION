@@ -55,8 +55,61 @@ class BaseStrategy(ABC):
 
         # Alpha overlay used by champion v5: OBI size tilt
         orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
+        # Position-skewed ask/bid (force unwind when position > threshold)
+        orders = self._apply_position_skew(state, position, orders, book, memory)
 
         return orders, conversions
+
+    def _apply_position_skew(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """Skew quotes more aggressively to unwind when position is over threshold.
+
+        Fixes R3 stuck-long-+300 issue on options.
+        When position > +threshold: shift SELL orders DOWN by `skew_offset` (more aggressive ask
+                                    → faster fills → unwind long).
+        When position < -threshold: shift BUY orders UP by `skew_offset` (more aggressive bid).
+
+        Params:
+          pos_skew_enabled    : turn on (default False — must opt-in per product)
+          pos_skew_threshold  : abs position to fire (default 100)
+          pos_skew_offset     : ticks to shift on the unwind side (default 1)
+        """
+        if not bool(self.params.get("pos_skew_enabled", False)):
+            return orders
+
+        threshold = int(self.params.get("pos_skew_threshold", 100))
+        offset = int(self.params.get("pos_skew_offset", 1))
+
+        if abs(position) < threshold:
+            return orders
+
+        adjusted: List[Order] = []
+        best_bid = book.best_bid
+        best_ask = book.best_ask
+        for o in orders:
+            new_price = int(o.price)
+            if position > 0 and o.quantity < 0:
+                # Long → make ask more aggressive (lower)
+                new_price = int(o.price) - offset
+                # Don't cross the bid
+                if best_bid is not None and new_price <= best_bid:
+                    new_price = int(best_bid) + 1
+            elif position < 0 and o.quantity > 0:
+                # Short → make bid more aggressive (higher)
+                new_price = int(o.price) + offset
+                # Don't cross the ask
+                if best_ask is not None and new_price >= best_ask:
+                    new_price = int(best_ask) - 1
+            adjusted.append(Order(o.symbol, new_price, o.quantity))
+
+        memory["_pos_skew_active"] = 1
+        return adjusted
 
     @abstractmethod
     def compute_orders(

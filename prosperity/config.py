@@ -14598,6 +14598,78 @@ MEMBER_OVERRIDES["r4_LIVE_ALPHA_PROBE"] = {
 }
 
 
+# =============================================================================
+# v6 EXPERIMENTS — derived from live probe analysis (PROBES_LIVE_ANALYSIS.md)
+# =============================================================================
+
+# v6.1 — v5 + Mark 55 fade (-0.3) — Mark 55 is NET SELLER in live (61-64% sells)
+MEMBER_OVERRIDES["r4_v6_M55_fade"] = _v4_with_extras({
+    "Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 55": -0.3
+})
+
+# v6.2 — v5 + Mark 67 follow (+0.2) — Mark 67 NEVER sells (pure buyer)
+MEMBER_OVERRIDES["r4_v6_M67_follow"] = _v4_with_extras({
+    "Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 67": +0.2
+})
+
+# v6.3 — v5 + Mark 22 fade (-0.3) — confirmed pure seller in live
+MEMBER_OVERRIDES["r4_v6_M22_fade"] = _v4_with_extras({
+    "Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.3
+})
+
+# v6.4 — combine all live insights: M55 fade + M67 follow + M22 fade
+MEMBER_OVERRIDES["r4_v6_full_live"] = _v4_with_extras({
+    "Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2,
+    "Mark 55": -0.3, "Mark 67": +0.2, "Mark 22": -0.3,
+})
+
+# v6 with POSITION SKEW on options (fixes R3 stuck-long issue)
+# When option position > +100, ask is shifted -1 tick (more aggressive sell)
+# When position < -100, bid is shifted +1 tick (more aggressive buy)
+def _v6_with_pos_skew(weights, skew_threshold=100, skew_offset=1):
+    """v5 winning weights + position skew on ALL options (not VELVET)."""
+    base = MEMBER_OVERRIDES["r4_velvet_options_only"][4]
+    return {
+        4: {
+            sym: (
+                _override(
+                    cfg,
+                    **dict(cfg.params),
+                    obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                    obi_size_levels=3, obi_size_threshold=0.005,
+                    obi_size_boost_factor=1.5, obi_size_reduce_factor=0.7,
+                    counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                    cp_window_ts=10000, cp_signal_threshold=1.0,
+                    cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                    cp_trader_weights=weights,
+                    # Position skew ONLY on options
+                    pos_skew_enabled=(sym.startswith("VEV_")),
+                    pos_skew_threshold=skew_threshold,
+                    pos_skew_offset=skew_offset,
+                ) if cfg is not None else None
+            ) for sym, cfg in base.items()
+        },
+    }
+
+
+MEMBER_OVERRIDES["r4_v6_pos_skew_v5"] = _v6_with_pos_skew(
+    {"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2}, 100, 1
+)
+MEMBER_OVERRIDES["r4_v6_pos_skew_aggressive"] = _v6_with_pos_skew(
+    {"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2}, 50, 2
+)
+MEMBER_OVERRIDES["r4_v6_pos_skew_tight"] = _v6_with_pos_skew(
+    {"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2}, 150, 1
+)
+
+
+# v6.5-v6.8 — Mark 14 fine-grid around -0.5
+MEMBER_OVERRIDES["r4_v6_M14_w03"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.3, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_v6_M14_w04"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.4, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_v6_M14_w06"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.6, "Mark 01": -0.2})
+MEMBER_OVERRIDES["r4_v6_M14_w07"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.7, "Mark 01": -0.2})
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
