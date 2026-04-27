@@ -10252,6 +10252,7 @@ MEMBER_OVERRIDES["hydro_mv_v5_best"] = {
             "informed_trader_name":     "Mark 14",
             "last_ts_value":            999900,
             "log_flush_ts":             1000,
+            "diag_enabled":             True,
         })}
 }
 

@@ -340,30 +340,28 @@ def _position_curve(
     return ts_list, pos_list
 
 
-# ── Optional: parse IMC log file ───────────────────────────────────────────────
+# ── IMC log mode: load everything from an uploaded submission log ──────────────
 
-def _parse_imclog(path: Path) -> Optional[Dict[str, Any]]:
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        print(f"  Warning: could not parse log {path}: {e}")
-        return None
-
-    activities_text = (raw.get("activitiesLog") or raw.get("activityLog")
-                       or raw.get("activities") or "")
+def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict]:
+    """Parse activitiesLog CSV → market_prices per product + equity curve."""
     rows_by_prod: Dict[str, List[Tuple]] = defaultdict(list)
-    if activities_text:
-        for row in csv.DictReader(activities_text.strip().splitlines(), delimiter=";"):
-            prod = (row.get("product") or "").strip()
-            ts   = _to_int(row.get("timestamp", ""))
-            if not prod or ts is None:
-                continue
-            rows_by_prod[prod].append((
-                ts,
-                _to_float(row.get("bid_price_1", "")),
-                _to_float(row.get("ask_price_1", "")),
-                _to_float(row.get("mid_price", "")),
-            ))
+    pnl_by_ts: Dict[int, float] = {}
+
+    for row in csv.DictReader(activities_text.strip().splitlines(), delimiter=";"):
+        prod = (row.get("product") or "").strip()
+        ts   = _to_int(row.get("timestamp", ""))
+        if not prod or ts is None:
+            continue
+        rows_by_prod[prod].append((
+            ts,
+            _to_float(row.get("bid_price_1", "")),
+            _to_float(row.get("ask_price_1", "")),
+            _to_float(row.get("mid_price", "")),
+        ))
+        pnl = _to_float(row.get("profit_and_loss", ""))
+        if pnl is not None:
+            pnl_by_ts[ts] = pnl_by_ts.get(ts, 0.0) + pnl
+
     market_prices: Dict[str, Any] = {}
     for prod, rows in rows_by_prod.items():
         rows.sort(key=lambda x: x[0])
@@ -372,17 +370,24 @@ def _parse_imclog(path: Path) -> Optional[Dict[str, Any]]:
             "ask1": [r[2] for r in rows], "mid":  [r[3] for r in rows],
         }
 
-    trade_raw = raw.get("tradeHistory") or raw.get("tradeLog") or ""
-    own_trades: List[Dict] = []
-    # tradeHistory is either a CSV string or a list of dicts depending on IMC log version
+    ts_sorted = sorted(pnl_by_ts)
+    equity = {"ts": ts_sorted, "pnl": [pnl_by_ts[t] for t in ts_sorted]}
+    return market_prices, equity
+
+
+def _parse_trade_history(trade_raw) -> Tuple[List[Dict], List[Dict]]:
+    """Parse tradeHistory → (our_fills, market_trades)."""
     if isinstance(trade_raw, list):
-        trade_rows = trade_raw
+        rows = trade_raw
     elif isinstance(trade_raw, str) and trade_raw.strip():
-        trade_rows = list(csv.DictReader(trade_raw.strip().splitlines(), delimiter=";"))
+        rows = list(csv.DictReader(trade_raw.strip().splitlines(), delimiter=";"))
     else:
-        trade_rows = []
-    for row in trade_rows:
-        ts     = _to_int(row.get("timestamp", ""))
+        rows = []
+
+    our_fills: List[Dict] = []
+    market_trades: List[Dict] = []
+    for row in rows:
+        ts     = _to_int(row.get("timestamp", "") if isinstance(row, dict) else row.get("timestamp", ""))
         px     = _to_float(row.get("price", ""))
         qty    = _to_int(row.get("quantity", ""))
         buyer  = str(row.get("buyer",  "") or "").strip()
@@ -391,14 +396,28 @@ def _parse_imclog(path: Path) -> Optional[Dict[str, Any]]:
         if ts is None or px is None or qty is None:
             continue
         if buyer == "SUBMISSION":
-            own_trades.append({"ts": ts, "symbol": sym, "side": "BUY", "price": px, "qty": qty})
+            our_fills.append({"ts": ts, "symbol": sym, "side": "BUY",  "price": px, "qty": qty, "aggressive": True})
         elif seller == "SUBMISSION":
-            own_trades.append({"ts": ts, "symbol": sym, "side": "SELL", "price": px, "qty": qty})
+            our_fills.append({"ts": ts, "symbol": sym, "side": "SELL", "price": px, "qty": qty, "aggressive": True})
+        else:
+            market_trades.append({"ts": ts, "buyer": buyer, "seller": seller, "symbol": sym, "px": px, "qty": qty})
 
-    runtime_logs = raw.get("logs", [])
-    quote_traces: List[Dict] = []
-    taker_fills_log: List[Dict] = []
+    return our_fills, market_trades
+
+
+def _parse_lambdalog_entries(runtime_logs: list, default_product: str = "") -> List[Dict]:
+    """Parse lambdaLog entries from IMC logs.
+
+    Handles two formats:
+    1. Staggered block format (blk=A/B/C) produced by v5's diag_enabled logging
+    2. Buffered quote_trace / taker_fills format produced by log_quote_snapshot
+
+    default_product: fallback product name for blk entries that lack a "product" field
+    (happens when uploaded before the product field was added to the logging code).
+    """
+    features: List[Dict] = []
     decoder = json.JSONDecoder()
+
     for entry in runtime_logs:
         text = str(entry.get("lambdaLog", "") or "").strip()
         if not text:
@@ -420,41 +439,96 @@ def _parse_imclog(path: Path) -> Optional[Dict[str, Any]]:
                 continue
             if not isinstance(obj, dict):
                 continue
-            product = obj.get("product")
-            if not product:
+
+            product = obj.get("product", "") or default_product
+            blk = obj.get("blk")
+
+            # ── Staggered block format (v5 diag_enabled) ──────────────────────
+            if blk == "A":
+                ts = _to_int(obj.get("ts"))
+                if ts is not None and product:
+                    features.append({
+                        "timestamp": ts, "symbol": product,
+                        "FairValue": _to_float(obj.get("fv")),
+                        "DevSmooth": _to_float(obj.get("dev")),
+                        "Position":  _to_float(obj.get("pos")),
+                        "Guard":     _to_float(obj.get("guard")),
+                    })
+            elif blk == "C":
+                ts = _to_int(obj.get("ts"))
+                if ts is not None and product:
+                    features.append({
+                        "timestamp": ts, "symbol": product,
+                        "M14Signal": _to_float(obj.get("m14_signal")),
+                    })
+
+            # ── Buffered quote_trace format (log_quote_snapshot) ───────────────
+            elif not product:
                 continue
-            trace = obj.get("trace")
-            if trace == "taker_fills":
-                for entry_row in obj.get("log", []):
-                    if len(entry_row) >= 4:
-                        taker_fills_log.append({
-                            "ts": entry_row[0], "product": product,
-                            "side": entry_row[1], "price": entry_row[2], "qty": entry_row[3],
-                            "gap_exploit": len(entry_row) > 4 and entry_row[4] == 1,
-                        })
-            if trace == "quote_trace" or trace is None:
+            else:
+                trace = obj.get("trace")
                 columns = obj.get("columns")
-                for tick in obj.get("log", []):
-                    if not isinstance(columns, list) or len(tick) < 3:
-                        continue
-                    mapped = {str(col): (tick[i] if i < len(tick) else None)
-                              for i, col in enumerate(columns)}
-                    ts_val = _to_int(mapped.get("timestamp"))
-                    if ts_val is None:
-                        continue
-                    row_data: Dict[str, Any] = {
-                        "timestamp": ts_val, "product": product,
-                        "bid_price": mapped.get("bid_price"),
-                        "ask_price": mapped.get("ask_price"),
-                    }
-                    for k, v in mapped.items():
-                        if k not in ("timestamp", "bid_price", "ask_price"):
-                            row_data[k] = v
-                    quote_traces.append(row_data)
+                if trace == "quote_trace" or (trace is None and columns):
+                    for tick in obj.get("log", []):
+                        if not isinstance(columns, list) or len(tick) < 3:
+                            continue
+                        mapped = {str(col): (tick[i] if i < len(tick) else None)
+                                  for i, col in enumerate(columns)}
+                        ts_val = _to_int(mapped.get("timestamp"))
+                        if ts_val is None:
+                            continue
+                        feat: Dict[str, Any] = {"timestamp": ts_val, "symbol": product}
+                        for k in ("FairValue", "DevSmooth", "M14Signal",
+                                  "ZsMean", "ZsStd", "MidSmooth", "Z"):
+                            if k in mapped:
+                                feat[k] = _to_float(mapped[k])
+                        features.append(feat)
+
+    return features
+
+
+def _load_from_imclog(path: Path) -> Dict[str, Any]:
+    """Load ALL visualizer data from a single IMC log file.
+
+    Returns the same data shape as the backtest pipeline so generate_html()
+    works identically for both modes. No backtest data is mixed in.
+    """
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  Error reading log: {e}")
+        sys.exit(1)
+
+    activities_text = (raw.get("activitiesLog") or raw.get("activityLog") or "")
+    market_prices, equity = _parse_activities(activities_text)
+
+    trade_raw = raw.get("tradeHistory") or raw.get("tradeLog") or []
+    our_fills, market_trades = _parse_trade_history(trade_raw)
+
+    # Infer primary product from our fills so old logs (without "product" in blk
+    # dicts) still get their feature entries attributed to the right symbol.
+    _syms = [f["symbol"] for f in our_fills if f.get("symbol")]
+    primary_product = max(set(_syms), key=_syms.count) if _syms else ""
+    features = _parse_lambdalog_entries(raw.get("logs", []), default_product=primary_product)
+
+    strategy_name = raw.get("submissionId", path.stem)[:32]
+    n_feat = len([f for f in features if "FairValue" in f or "DevSmooth" in f])
+    n_m14  = len([f for f in features if "M14Signal"  in f])
+    print(f"  Products: {sorted(market_prices.keys())}")
+    print(f"  Own fills: {len(our_fills)}, market trades: {len(market_trades)}")
+    print(f"  Features: {n_feat} A-blocks (FairValue/DevSmooth), {n_m14} C-blocks (M14Signal)")
+    if n_feat == 0:
+        print("  ⚠  No FairValue/DevSmooth in lambdaLog — v5 chart will show price/fills only")
 
     return {
-        "market_prices": market_prices, "own_trades": own_trades,
-        "quote_traces": quote_traces, "taker_fills": taker_fills_log,
+        "market_prices":  market_prices,
+        "market_trades":  market_trades,
+        "our_fills":      our_fills,
+        "quotes":         [],          # passive quote prices not logged in live
+        "features":       features,
+        "equity":         equity,
+        "strategy_name":  strategy_name,
+        "day_boundaries": [],          # single-day live run — no resets
     }
 
 
@@ -1178,23 +1252,66 @@ def generate_html(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Strategy visualization HTML (backtest JSON + optional IMC log)",
+        description=(
+            "Strategy visualization HTML.\n\n"
+            "Mode A — backtest analysis:\n"
+            "  python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v5_best.json\n\n"
+            "Mode B — live IMC log analysis:\n"
+            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.log\n\n"
+            "The two modes are mutually exclusive. --log uses ONLY live data; no backtest\n"
+            "features are mixed in."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--backtest-json", required=True)
-    parser.add_argument("--log",           default=None)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--backtest-json", help="Path to backtest result JSON")
+    group.add_argument("--log",           help="Path to IMC submission log (.log file)")
     parser.add_argument("--product",       default=None)
     parser.add_argument("--out",           default=None)
     parser.add_argument("--data-dir",      default=None)
     parser.add_argument("--ar-taker-edge", type=float, default=12.0,
-                        help="AR taker edge threshold to show on deviation chart (default 12.0)")
+                        help="AR taker edge threshold shown on deviation chart (default 12.0)")
     args = parser.parse_args()
 
-    bt_path  = ROOT / args.backtest_json if not Path(args.backtest_json).is_absolute() else Path(args.backtest_json)
     data_dir = Path(args.data_dir) if args.data_dir else ROOT / "data"
 
-    print("Loading backtest JSON ...")
-    bt = _load_backtest_json(bt_path)
+    # ── Mode B: live IMC log ────────────────────────────────────────────────────
+    if args.log:
+        log_path = ROOT / args.log if not Path(args.log).is_absolute() else Path(args.log)
+        print(f"[Mode: IMC log] Loading {log_path} ...")
+        d = _load_from_imclog(log_path)
+
+        stem    = log_path.stem
+        title   = (args.product + " | " if args.product else "") + d["strategy_name"]
+        if args.out:
+            out_path = ROOT / args.out if not Path(args.out).is_absolute() else Path(args.out)
+        else:
+            prod_tag = f"_{args.product}" if args.product else ""
+            out_path = ROOT / f"artifacts/viz/{stem}{prod_tag}.html"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        print("Generating HTML ...")
+        generate_html(
+            bt={"strategy": d["strategy_name"], "days": [], "summary": {}},
+            market_prices=d["market_prices"],
+            market_trades=d["market_trades"],
+            our_fills=d["our_fills"],
+            quotes=d["quotes"],
+            features=d["features"],
+            equity=d["equity"],
+            output_path=out_path,
+            title=title,
+            product_filter=args.product,
+            taker_edge=args.ar_taker_edge,
+            day_boundaries=d["day_boundaries"],
+        )
+        print("Done.")
+        return
+
+    # ── Mode A: backtest JSON ───────────────────────────────────────────────────
+    bt_path = ROOT / args.backtest_json if not Path(args.backtest_json).is_absolute() else Path(args.backtest_json)
+    print(f"[Mode: backtest] Loading {bt_path} ...")
+    bt        = _load_backtest_json(bt_path)
     round_num = int(bt.get("round", 0))
     days      = [str(d["day"]) for d in bt.get("days", [])]
     print(f"  Round {round_num}, days: {days}")
@@ -1213,53 +1330,20 @@ def main() -> None:
           f"{sum(1 for f in our_fills if not f.get('aggressive',True))} maker), "
           f"quotes: {len(quotes)}, features: {len(features)}")
 
-    if args.log:
-        log_path = ROOT / args.log if not Path(args.log).is_absolute() else Path(args.log)
-        print(f"Parsing IMC log {log_path} ...")
-        log_data = _parse_imclog(log_path)
-        if log_data:
-            if log_data["market_prices"]:
-                print(f"  Using market prices from log ({len(log_data['market_prices'])} products)")
-                market_prices = log_data["market_prices"]
-            if log_data["own_trades"]:
-                print(f"  Using {len(log_data['own_trades'])} own trades from log")
-                our_fills = [{"ts": t["ts"], "symbol": t["symbol"], "side": t["side"],
-                               "price": t["price"], "qty": t["qty"],
-                               "aggressive": False, "gap_exploit": False}
-                             for t in log_data["own_trades"]]
-            else:
-                print("  No own trades in log — keeping backtest fills")
-            if log_data["quote_traces"]:
-                print(f"  Using {len(log_data['quote_traces'])} quote traces from log")
-                quotes = [{"ts": q["timestamp"], "symbol": q["product"],
-                           "bid": q.get("bid_price"), "ask": q.get("ask_price"),
-                           "bid_size": q.get("bid_size", 0),
-                           "ask_size": q.get("ask_size", 0)}
-                          for q in log_data["quote_traces"]]
-                features = []
-                for q in log_data["quote_traces"]:
-                    feat: Dict[str, Any] = {"timestamp": q["timestamp"], "symbol": q["product"]}
-                    for k in ("FairValue", "DevSmooth", "M14Signal",
-                              "ZsMean", "ZsStd", "MidSmooth", "Z"):
-                        if k in q:
-                            feat[k] = q[k]
-                    features.append(feat)
-
     if args.out:
         out_path = ROOT / args.out if not Path(args.out).is_absolute() else Path(args.out)
     else:
         stem     = bt_path.stem
         prod_tag = f"_{args.product}" if args.product else ""
         out_path = ROOT / f"artifacts/viz/{stem}{prod_tag}.html"
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
     title_parts = []
     if args.product:
         title_parts.append(args.product)
     title_parts.append(bt.get("strategy", bt_path.stem))
     title = " | ".join(title_parts)
 
-    # Day boundaries: timestamp offset of each day's start (position resets here)
     ts_offsets     = _build_day_offsets(round_num, days, data_dir / f"round_{round_num}")
     day_boundaries = sorted(ts_offsets.values())
 

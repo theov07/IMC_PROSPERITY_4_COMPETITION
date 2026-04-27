@@ -48,6 +48,7 @@ Self-contained (BaseStrategy only).
 
 from __future__ import annotations
 
+import json as _json
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from datamodel import Order, OrderDepth, TradingState
@@ -379,6 +380,8 @@ class HydroMVV5(BaseStrategy):
         limit    = self.position_limit()
         buy_cap  = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
+        sell_cap_init = sell_cap
+        buy_cap_init  = buy_cap
 
         bid_size, ask_size = self._passive_sizes(position)
 
@@ -417,9 +420,6 @@ class HydroMVV5(BaseStrategy):
             _FakeBook(), bid_size, ask_size, buy_cap, sell_cap, position, dev,
         )
 
-        # Combine
-        all_orders = taker_orders + gap_orders + passive_orders
-
         # Feature D: M14 gate (applied to passive orders only, like v201)
         passive_gated = self._apply_m14_gate(passive_orders, signal, position)
         all_orders    = taker_orders + gap_orders + passive_gated
@@ -438,6 +438,58 @@ class HydroMVV5(BaseStrategy):
                 "sigma":      round(sigma, 4),
             },
         )
+
+        # Staggered diagnostics — 3 blocks at different 10k-tick offsets so they
+        # never fire together. Only active when diag_enabled=True in config.
+        if self.runtime_trace_enabled() and self.params.get("diag_enabled", False):
+            ts = int(state.timestamp)
+            phase = ts % 10000
+
+            if phase == 1000:
+                # Block A: position + anchor state
+                anchor = float(self.params.get("anchor_price", 10000))
+                print(_json.dumps({
+                    "blk": "A", "product": self.product, "ts": ts,
+                    "pos": position,
+                    "mid": round(float(mid), 1),
+                    "dist": round(float(mid) - anchor, 1),
+                    "fv":   round(fair_value, 1),
+                    "dev":  round(dev, 2),
+                    "guard": int(guard_ok),
+                    "sell_cap": sell_cap_init,
+                    "buy_cap":  buy_cap_init,
+                }))
+
+            elif phase == 4000:
+                # Block B: taker activity + sizing
+                taker_sold = sum(-o.quantity for o in taker_orders if o.quantity < 0)
+                taker_bought = sum(o.quantity for o in taker_orders if o.quantity > 0)
+                print(_json.dumps({
+                    "blk": "B", "product": self.product, "ts": ts,
+                    "taker_sell": taker_sold,
+                    "taker_buy":  taker_bought,
+                    "bid_sz": int(bid_size),
+                    "ask_sz": int(ask_size),
+                    "sigma":  round(sigma, 4),
+                    "passive_bids": sum(o.quantity for o in passive_gated if o.quantity > 0),
+                    "passive_asks": sum(-o.quantity for o in passive_gated if o.quantity < 0),
+                }))
+
+            elif phase == 7000:
+                # Block C: market trader flow this tick
+                m38_net = m14_net = 0
+                for t in state.market_trades.get(self.product, []):
+                    if t.buyer == "Mark 38":   m38_net += t.quantity
+                    elif t.seller == "Mark 38": m38_net -= t.quantity
+                    if t.buyer == "Mark 14":   m14_net += t.quantity
+                    elif t.seller == "Mark 14": m14_net -= t.quantity
+                print(_json.dumps({
+                    "blk": "C", "product": self.product, "ts": ts,
+                    "m38_net":    m38_net,
+                    "m14_net":    m14_net,
+                    "m14_signal": signal,
+                }))
+
         return all_orders, 0
 
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
