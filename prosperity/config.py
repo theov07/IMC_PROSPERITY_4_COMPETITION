@@ -10304,6 +10304,44 @@ MEMBER_OVERRIDES["hydro_mv_v6b"] = {
     4: {"HYDROGEL_PACK": _v6("inv_protected", anchor_pos_threshold=0.20, anchor_alpha=0.005)}
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# mv_v7 — two-component passive MM
+#
+# Fix for v6 live failure: AR taker built runaway -200 short when price trended
+# up for hours. V7 splits inventory into two components:
+#   Anchor (40% = 80u): AR taker fires only when |pos| < 80. Same inv_protected
+#     anchor as v6b (alpha=0.005, freeze when |pos| >= 20% × 200).
+#   MM (remainder): always posts best_bid+1 / best_ask-1, inventory-adaptive
+#     sizing — reducing side gets more size, so position self-limits.
+#
+# 3-day backtest: 104,602 PnL | 9,067 abs DD | 25.3% | PnL/DD=11.5
+# vs v6b:         178,785 PnL | 20,130 abs DD | 88.9% | PnL/DD=8.9
+# ─────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v7"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v7", position_limit=200,
+        params=dict(
+            anchor_price=10000,
+            anchor_alpha=0.005,
+            anchor_pos_threshold=0.20,
+            ar_gain=8.0,
+            ar_smooth_half_life=5,
+            mid_smooth_half_life=20,
+            dev_smooth_half_life=5,
+            ar_taker_edge=15.0,
+            ar_taker_size_pct=0.30,
+            anchor_reserve_pct=0.40,
+            mm_mode="bestquote",
+            mm_base_size=20,
+            fast_mid_half_life=5,
+            mm_spread=1,
+            last_ts_value=999900,
+            quote_trace_enabled=True,
+            log_flush_ts=1000,
+        ),
+    )}
+}
+
 # ── mv_v1: z-score mean-reversion + Mark 14 gate ─────────────────────────────
 MEMBER_OVERRIDES["hydro_mv_v1"] = {
     4: {
