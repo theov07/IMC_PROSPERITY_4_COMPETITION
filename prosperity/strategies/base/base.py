@@ -54,9 +54,11 @@ class BaseStrategy(ABC):
         )
 
         # Alpha overlays (opt-in via params; no-op when params absent):
-        # 1a. OBI passive bias (shift quote prices based on L3 OBI — captures alpha without spread cost)
+        # 1a. OBI SIZE tilt (multiply order sizes — best balance of alpha vs spread cost)
+        orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
+        # 1b. OBI passive bias (shift quote prices based on L3 OBI — captures alpha without spread cost)
         orders = self._apply_obi_passive_bias(state, position, orders, book, memory)
-        # 1b. OBI taker overlay (directional alpha from L3 book imbalance, 88% hit rate)
+        # 1c. OBI taker overlay (directional alpha from L3 book imbalance, 88% hit rate)
         orders = self._apply_obi_taker_overlay(state, position, orders, book, memory)
         # 1c. Counterparty bias (Mark 49 fade etc) — works for ANY product (not just VELVET)
         # Note: VELVET strategy has cp_bias built into its compute_orders. This is for OPTIONS.
@@ -569,6 +571,76 @@ class BaseStrategy(ABC):
     # ------------------------------------------------------------------
     # Trend gate (skip mean-rev BUY in downtrend, mean-rev SELL in uptrend)
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Order Book Imbalance (OBI) SIZE tilt — adjust own quote SIZES (not prices).
+    # Avoids spread cost from price tilt. Captures alpha through inventory shift.
+    # ------------------------------------------------------------------
+    def _apply_obi_size_tilt(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """When L3 OBI is extreme, increase the size of orders going in the predicted direction.
+
+        Bullish OBI (>+threshold):
+          - Multiply BUY orders by `obi_size_boost_factor` (e.g. 1.5x) — accumulate long
+          - Reduce SELL order sizes by `obi_size_reduce_factor` (e.g. 0.5x) — keep long longer
+
+        Bearish OBI (<-threshold): mirror.
+
+        Params:
+          obi_size_enabled         : turn on (default False)
+          obi_size_levels          : aggregation levels (default 3)
+          obi_size_threshold       : abs OBI to fire (default 0.005)
+          obi_size_boost_factor    : multiplier on favored side (default 1.5)
+          obi_size_reduce_factor   : multiplier on opposed side (default 0.7)
+        """
+        if not bool(self.params.get("obi_size_enabled", False)):
+            return orders
+
+        levels = int(self.params.get("obi_size_levels", 3))
+        threshold = float(self.params.get("obi_size_threshold", 0.005))
+        boost = float(self.params.get("obi_size_boost_factor", 1.5))
+        reduce = float(self.params.get("obi_size_reduce_factor", 0.7))
+
+        bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
+        ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
+        total = bid_total + ask_total
+        if total == 0:
+            return orders
+        obi = (bid_total - ask_total) / total
+        memory["_obi_size"] = obi
+
+        if abs(obi) < threshold:
+            return orders
+
+        bullish = obi > 0
+        adjusted: List[Order] = []
+        for o in orders:
+            if o.quantity > 0:  # BUY
+                factor = boost if bullish else reduce
+            elif o.quantity < 0:  # SELL
+                factor = reduce if bullish else boost
+            else:
+                adjusted.append(o)
+                continue
+            new_qty = int(o.quantity * factor)
+            # Respect position limits
+            if new_qty > 0:
+                cap = max(0, self.position_limit() - position)
+                new_qty = min(new_qty, cap) if cap >= 0 else new_qty
+            elif new_qty < 0:
+                cap = max(0, self.position_limit() + position)
+                new_qty = max(new_qty, -cap)
+            if new_qty != 0:
+                adjusted.append(Order(o.symbol, o.price, new_qty))
+
+        memory["_obi_size_dir"] = "BULL" if bullish else "BEAR"
+        return adjusted
+
     # ------------------------------------------------------------------
     # Order Book Imbalance (OBI) PASSIVE bias — adjust own quote PRICES
     # to capture directional flow without paying spread.

@@ -14119,6 +14119,352 @@ MEMBER_OVERRIDES["r4_velvet_per_product_velvet_only"] = {
 }
 
 
+# r4_velvet_fade01_follow55 — based on PROPER short-term lead-lag analysis
+# Mark 01 rho=-0.11 (fade), Mark 55 rho=+0.11 (follow)
+MEMBER_OVERRIDES["r4_velvet_fade01_follow55"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 01": -1.0, "Mark 55": 1.0},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade01_follow55_vev5300 — also fade Mark 22 on VEV_5300 (rho -0.11)
+def _vev5300_fade(sym):
+    if sym == "VELVETFRUIT_EXTRACT":
+        return {"Mark 01": -1.0, "Mark 55": 1.0}
+    elif sym == "VEV_5300":
+        return {"Mark 22": -1.0}
+    return None
+
+
+MEMBER_OVERRIDES["r4_velvet_per_product_v2"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(_vev5300_fade(sym) is not None),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights=(_vev5300_fade(sym) or {}),
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_4_signals — combine fade_49_14 (which won) + fade_01 + follow_55
+MEMBER_OVERRIDES["r4_velvet_combo_4_signals"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={
+                    "Mark 49": -1.0,
+                    "Mark 14": -0.5,
+                    "Mark 01": -0.5,
+                    "Mark 55": +0.5,
+                },
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_obi_size_v1 — OBI size tilt on VELVET (not price)
+# When OBI > 0.005: BUY orders get 1.5x size, SELL get 0.7x
+# Captures alpha without spread cost from price tilt
+MEMBER_OVERRIDES["r4_velvet_obi_size_v1"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3,
+                obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5,
+                obi_size_reduce_factor=0.7,
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_obi_size_aggressive — bigger boost (2x), bigger reduce (0.4x)
+MEMBER_OVERRIDES["r4_velvet_obi_size_aggressive"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3,
+                obi_size_threshold=0.003,
+                obi_size_boost_factor=2.0,
+                obi_size_reduce_factor=0.4,
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade — combine OBI size tilt + fade_49_14 price shift
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                # OBI size tilt
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3,
+                obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5,
+                obi_size_reduce_factor=0.7,
+                # cp_bias fade_49_14 (kept from winning config)
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade_v2 — bigger OBI boost in combo
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade_v2"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3,
+                obi_size_threshold=0.003,        # lower threshold (more triggers)
+                obi_size_boost_factor=2.0,       # 2x size boost
+                obi_size_reduce_factor=0.5,      # 0.5x reduction
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade_options — also enable OBI on options
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade_options"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=True,  # ALL products
+                obi_size_levels=3,
+                obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5,
+                obi_size_reduce_factor=0.7,
+                # cp_bias only on VELVET (Mark 49 doesn't trade options)
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade_w01 — combo + add Mark 01 fade (predicts D3 crash)
+# Mark 01 BUYS heavily in D3 last 10% before the crash. Fade him.
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade_w01"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3,
+                obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5,
+                obi_size_reduce_factor=0.7,
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.3},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade_w01_strong — Mark 01 weight -0.5
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade_w01_strong"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3,
+                obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5,
+                obi_size_reduce_factor=0.7,
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.5},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade_w01_only_strong — only fade_01 + obi (drop 49+14)
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade_w01_only"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3,
+                obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5,
+                obi_size_reduce_factor=0.7,
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 01": -1.0},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade_w01_w02 — Mark 01 weight -0.2
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade_w01_w02"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3, obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5, obi_size_reduce_factor=0.7,
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.2},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade_w01_w04 — Mark 01 weight -0.4
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade_w01_w04"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3, obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5, obi_size_reduce_factor=0.7,
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.4},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_4marks — add Mark 67 follow (the smart buyer)
+MEMBER_OVERRIDES["r4_velvet_combo_4marks"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3, obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5, obi_size_reduce_factor=0.7,
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.3, "Mark 67": +0.3},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_obi_fade_w01_thresh2 — fire less often (threshold 2.0)
+MEMBER_OVERRIDES["r4_velvet_combo_obi_fade_w01_thresh2"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_size_levels=3, obi_size_threshold=0.005,
+                obi_size_boost_factor=1.5, obi_size_reduce_factor=0.7,
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000, cp_signal_threshold=2.0,
+                cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": -0.3},
+            ) if cfg is not None else None
+        ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_combo_w01_w015 / w025 — fine tune Mark 01 weight
+def _make_combo_variant(name, w01):
+    MEMBER_OVERRIDES[name] = {
+        4: {
+            sym: (
+                _override(
+                    cfg,
+                    **dict(cfg.params),
+                    obi_size_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                    obi_size_levels=3, obi_size_threshold=0.005,
+                    obi_size_boost_factor=1.5, obi_size_reduce_factor=0.7,
+                    counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                    cp_window_ts=10000, cp_signal_threshold=1.0,
+                    cp_max_anchor_offset=2.0, cp_anchor_scale_per_unit=0.15,
+                    cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 01": w01},
+                ) if cfg is not None else None
+            ) for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+        },
+    }
+
+
+_make_combo_variant("r4_velvet_combo_w01_w015", -0.15)
+_make_combo_variant("r4_velvet_combo_w01_w025", -0.25)
+_make_combo_variant("r4_velvet_combo_w01_w010", -0.10)
+_make_combo_variant("r4_velvet_combo_w01_w030", -0.30)
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
