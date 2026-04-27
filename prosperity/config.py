@@ -10181,6 +10181,40 @@ MEMBER_OVERRIDES["hydro_v200_r4"] = {
     }
 }
 
+# ── mv_v2: AR model mean-reversion ───────────────────────────────────────────
+_MV_V2_BASE = dict(
+    # AR signal
+    anchor_price=10000.0,
+    anchor_alpha=0.02,
+    anchor_drift_bound=1.5,
+    ar_gain=1.0,
+    ar_smooth_half_life=5,
+    mid_smooth_half_life=20,
+    dev_smooth_half_life=10,
+    # entry / exit
+    entry_threshold=12.0,
+    exit_threshold=3.0,
+    entry_size=20,
+    # logging / backtest bookkeeping
+    quote_trace_enabled=True,
+    last_ts_value=999900,
+    log_flush_ts=1000,
+    ts_increment=100,
+)
+
+MEMBER_OVERRIDES["hydro_mv_v2"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v2",
+        position_limit=200, params=dict(**_MV_V2_BASE,
+            # best from grid search (2 rounds, 156 combos)
+            ar_gain=8.0,
+            entry_threshold=20.0,
+            exit_threshold=2.0,
+            dev_smooth_half_life=5,
+            ar_smooth_half_life=5,
+        ))},
+}
+
 # ── mv_v1: z-score mean-reversion + Mark 14 gate ─────────────────────────────
 MEMBER_OVERRIDES["hydro_mv_v1"] = {
     4: {

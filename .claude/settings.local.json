@@ -229,7 +229,12 @@
       "Bash(python backtest.py --strategy hydro_mv_v1 --round 4 --days 1 2 3 --match-trades realistic)",
       "Bash(python -c \"import prosperity.tooling.strategy_viz; print\\('OK'\\)\")",
       "Bash(python backtest.py --strategy hydro_mv_v1 --round 4 --days 1 2 3 --match-trades realistic --json-out artifacts/backtest_results/round_4/hydro_mv_v1.json)",
-      "Bash(python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v1.json --product HYDROGEL_PACK --out artifacts/viz/hydro_mv_v1.html)"
+      "Bash(python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v1.json --product HYDROGEL_PACK --out artifacts/viz/hydro_mv_v1.html)",
+      "Bash(python -c \"from prosperity.strategies import build_strategy; s = build_strategy\\('hydro_mv_v2','HYDROGEL_PACK',{'position_limit':200}\\); print\\('OK:', type\\(s\\).__name__\\)\")",
+      "Bash(python -m prosperity.tooling.grid_search --strategy hydro_mv_v2 --round 4 --days 1 2 3 --param HYDROGEL_PACK.ar_gain=0.5,1.0,2.0,4.0 --param HYDROGEL_PACK.entry_threshold=8.0,16.0,24.0,32.0 --param HYDROGEL_PACK.exit_threshold=2.0,4.0,8.0 --execution-rule realistic --top 15 --rank-by pnl)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy hydro_mv_v2 --round 4 --days 1 2 3 --param \"HYDROGEL_PACK.ar_gain=0.5,1.0,2.0,4.0\" --param \"HYDROGEL_PACK.entry_threshold=8.0,16.0,24.0,32.0\" --param \"HYDROGEL_PACK.exit_threshold=2.0,4.0,8.0\" --execution-rule realistic --top 15 --rank-by pnl)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy hydro_mv_v2 --round 4 --days 1 2 3 --param HYDROGEL_PACK.ar_gain=3.0,4.0,6.0,8.0 --param HYDROGEL_PACK.entry_threshold=12.0,16.0,20.0 --param HYDROGEL_PACK.dev_smooth_half_life=5,10,20 --param HYDROGEL_PACK.ar_smooth_half_life=3,5,10 --execution-rule realistic --top 10 --rank-by pnl)",
+      "Bash(python -m prosperity.tooling.grid_search --strategy hydro_mv_v2 --round 4 --days 1 2 3 --param \"HYDROGEL_PACK.ar_gain=3.0,4.0,6.0,8.0\" --param \"HYDROGEL_PACK.entry_threshold=12.0,16.0,20.0\" --param \"HYDROGEL_PACK.dev_smooth_half_life=5,10,20\" --param \"HYDROGEL_PACK.ar_smooth_half_life=3,5,10\" --execution-rule realistic --top 10 --rank-by pnl)"
     ]
   }
 }
