@@ -30,7 +30,9 @@ class R3HydroReversionMMStrategy(BaseStrategy):
 
         mid = float(book.mid_price)
         ema, fast_ema = self._update_emas(mid, memory)
-        deviation = mid - ema
+        mark_signal = self._counterparty_signal(state, memory)
+        mark_shift = self._mark_fair_shift(mark_signal)
+        deviation = mid - ema - mark_shift
         trend = fast_ema - ema  # positive = uptrend, negative = downtrend
         prev_trend = float(memory.get("prev_trend", trend))
         trend_change = trend - prev_trend
@@ -53,6 +55,7 @@ class R3HydroReversionMMStrategy(BaseStrategy):
         bid_size, ask_size = self._apply_midcap_quote_controls(position, bid_size, ask_size, midcap)
         bid_size, ask_size = self._apply_trailcap_quote_controls(position, bid_size, ask_size, trailcap)
         bid_size, ask_size = self._apply_eod_quote_controls(position, bid_size, ask_size, eod)
+        bid_size, ask_size = self._apply_counterparty_size_skew(mark_signal, bid_size, ask_size)
 
         if bid_size > 0 and buy_cap > 0:
             qty = min(bid_size, buy_cap)
@@ -89,6 +92,8 @@ class R3HydroReversionMMStrategy(BaseStrategy):
                 "dev": round(deviation, 2),
                 "trend": round(trend, 2),
                 "trend_change": round(trend_change, 2),
+                "mark_signal": round(mark_signal, 2),
+                "mark_shift": round(mark_shift, 2),
                 "realized": round(realized, 2),
                 "unrealized": round(unrealized, 2),
                 "risk": int(risk is not None),
@@ -107,6 +112,63 @@ class R3HydroReversionMMStrategy(BaseStrategy):
         memory["dev"] = deviation
         memory["prev_trend"] = trend
         return orders, 0
+
+    def _counterparty_signal(self, state: TradingState, memory: Dict[str, Any]) -> float:
+        if not bool(self.params.get("mark_signal_enabled", False)):
+            memory["_mark_signal"] = 0.0
+            memory["_mark_signal_raw"] = 0.0
+            return 0.0
+
+        buy_weights = self.params.get("mark_buy_weights", {})
+        sell_weights = self.params.get("mark_sell_weights", {})
+        alpha = float(self.params.get("mark_signal_alpha", 0.35))
+        decay = float(self.params.get("mark_signal_decay", 0.70))
+        qty_norm = max(1.0, float(self.params.get("mark_qty_norm", 8.0)))
+        clip = max(0.0, float(self.params.get("mark_signal_clip", 6.0)))
+
+        raw = 0.0
+        for trade in state.market_trades.get(self.product, []):
+            raw += float(buy_weights.get(getattr(trade, "buyer", None), 0.0)) * float(trade.quantity)
+            raw += float(sell_weights.get(getattr(trade, "seller", None), 0.0)) * float(trade.quantity)
+        raw /= qty_norm
+
+        prev = float(memory.get("_mark_signal", 0.0))
+        signal = (prev * decay) if abs(raw) < 1e-9 else (alpha * raw + (1.0 - alpha) * prev)
+        if clip > 0.0:
+            signal = max(-clip, min(clip, signal))
+
+        memory["_mark_signal_raw"] = raw
+        memory["_mark_signal"] = signal
+        return signal
+
+    def _mark_fair_shift(self, mark_signal: float) -> float:
+        per_unit = float(self.params.get("mark_fair_shift_per_unit", 0.0))
+        max_shift = float(self.params.get("mark_max_fair_shift", 0.0))
+        if per_unit == 0.0 or max_shift <= 0.0:
+            return 0.0
+        shift = mark_signal * per_unit
+        return max(-max_shift, min(max_shift, shift))
+
+    def _apply_counterparty_size_skew(
+        self,
+        mark_signal: float,
+        bid_size: float,
+        ask_size: float,
+    ) -> tuple[float, float]:
+        skew = float(self.params.get("mark_size_skew", 0.0))
+        clip = max(1e-9, float(self.params.get("mark_size_clip", 2.0)))
+        if skew <= 0.0 or abs(mark_signal) < 1e-9:
+            return bid_size, ask_size
+
+        strength = min(1.0, abs(mark_signal) / clip)
+        mult = 1.0 + skew * strength
+        if mark_signal > 0:
+            bid_size *= mult
+            ask_size /= mult
+        else:
+            ask_size *= mult
+            bid_size /= mult
+        return bid_size, ask_size
 
     def _compute_target_inventory_orders(
         self,

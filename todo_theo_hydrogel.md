@@ -300,3 +300,84 @@
   - the larger fair shift makes the trader signal matter a little more, but still in a controlled way
   - importantly, this is not timestamp hardcoding and not a brittle branch-on-day design
   - it is still the same interpretable market-making family, just tuned to exploit the observed round-4 ecology a bit better
+
+## MM Pivot
+
+- New request:
+  - push the HYDRO strategy toward a more HFT-style market-making profile
+  - reduce the “always stuck near `+200/-200`” behavior
+  - still maximize total PnL as much as possible
+
+- First hard lesson:
+  - simple hard inventory controls do work mechanically, but they destroy too much alpha
+  - examples:
+    - hard same-side taker block + passive cutoff around `0.60-0.70` inventory ratio
+    - average inventory drops a lot, roughly into the `0.58-0.66` area
+    - but PnL collapses into the `99k-118k` band
+  - Reading:
+    - this HYDRO ecology is still rewarding directional inventory usage
+    - forcing a “flat book only” philosophy is too expensive on this dataset
+
+- Second hard lesson:
+  - naive inventory quote-shift / passive unwind is also bad here
+  - small quote repricing toward unwind reduced PnL materially while barely changing average inventory
+  - Reading:
+    - the strategy is not failing because it lacks quote movement alone
+    - it needs a softer reshaping of accumulation, not a crude repricing hammer
+
+- Better idea:
+  - keep the `v7` engine, but reshape passive accumulation more smoothly
+  - I added optional soft MM controls in `hydro_mv_v6_invaware`:
+    - `working_position_limit`
+    - `inventory_same_side_power`
+    - `inventory_opposite_side_boost`
+    - optional passive repricing / taker blocking hooks
+  - Most useful one by far:
+    - convex same-side size decay through `inventory_same_side_power`
+  - Reading:
+    - this is closer to real MM behavior:
+      - do not abruptly stop trading
+      - just contract the accumulating side faster as inventory builds
+
+- Important frontier found:
+  - Best raw PnL after the full loop:
+    - same `v7` family, just more persistent trader signal
+    - `trader_signal_decay=0.93`
+    - result: `158,898.0`, `DD=19,982.0`
+    - but still very inventory-heavy:
+      - avg inventory ratio about `0.8968`
+      - aggressive share about `0.8395`
+  - Best MM-leaning compromise:
+    - `inventory_same_side_power=1.4`
+    - `trader_signal_decay=0.93`
+    - keep `maker_size_base_pct=0.30`
+    - keep `trader_fair_shift_per_unit=1.10`
+    - result: `158,893.0`, `DD=19,982.0`
+    - avg inventory ratio improves to about `0.8883`
+    - aggressive share improves to about `0.8332`
+
+- Why I retained the MM-leaning version as the new submitted candidate:
+  - it is only `5.0` below the absolute best raw PnL point
+  - but it is directionally more aligned with the request:
+    - slightly less inventory glue
+    - slightly more passive participation
+    - slightly less taker dependence
+  - so this is the best “same PnL, more MM-like” point I found
+
+- Final MM-soft candidate:
+  - member: `r4_hydro_mv_v8_mmsoft`
+  - wrapper: `submissions/round_4/r4_hydro_mv_v8_mmsoft.py`
+  - exported file:
+    - `artifacts/submissions/round_4/r4_hydro_mv_v8_mmsoft_round4_submission.py`
+  - validated backtest:
+    - `PnL`: `158,893.0`
+    - `DD`: `19,982.0`
+    - days: `[50,288.0, 40,380.0, 68,225.0]`
+
+- Quant interpretation:
+  - the round-4 HYDRO market still pays a lot for intelligent inventory usage
+  - full HFT flat-inventory MM is too defensive on this path
+  - the best practical answer is therefore:
+    - keep the strong `v7` directional/MM hybrid core
+    - make inventory accumulation softer and more two-sided
+    - not eliminate inventory, just stop it from being quite as sticky

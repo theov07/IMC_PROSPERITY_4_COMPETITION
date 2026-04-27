@@ -32,17 +32,28 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
         if mid is None or anchor is None:
             return super().compute_orders(state, book, order_depth, position, memory)
 
+        mark_signal = self._counterparty_signal(state, memory)
+        anchor_shift = self._mark_anchor_shift(mark_signal)
+        inventory_target = self._mark_inventory_target(mark_signal)
         use_anchor = self._use_anchor(float(mid), float(anchor), position, memory)
         memory["_guard_use_anchor"] = int(use_anchor)
-
-        if use_anchor:
-            return super().compute_orders(state, book, order_depth, position, memory)
+        memory["_mark_signal"] = mark_signal
+        memory["_mark_anchor_shift"] = anchor_shift
+        memory["_mark_inventory_target"] = inventory_target
 
         old_anchor = self.params.get("anchor_price")
+        old_inventory_target = self.params.get("inventory_target", 0)
         old_ar = self.params.get("ar_gain")
         old_take_lo = self.params.get("take_edge_lo")
         old_take_hi = self.params.get("take_edge_hi")
         try:
+            self.params["inventory_target"] = inventory_target
+            if old_anchor is not None:
+                self.params["anchor_price"] = float(old_anchor) + anchor_shift
+
+            if use_anchor:
+                return super().compute_orders(state, book, order_depth, position, memory)
+
             self.params["anchor_price"] = None
             self.params["ar_gain"] = 0.0
             self.params["take_edge_lo"] = 1_000_000.0
@@ -50,9 +61,49 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             return super().compute_orders(state, book, order_depth, position, memory)
         finally:
             self.params["anchor_price"] = old_anchor
+            self.params["inventory_target"] = old_inventory_target
             self.params["ar_gain"] = old_ar
             self.params["take_edge_lo"] = old_take_lo
             self.params["take_edge_hi"] = old_take_hi
+
+    def _counterparty_signal(self, state: TradingState, memory: Dict[str, Any]) -> float:
+        if not bool(self.params.get("mark_signal_enabled", False)):
+            return 0.0
+
+        buy_weights = self.params.get("mark_buy_weights", {})
+        sell_weights = self.params.get("mark_sell_weights", {})
+        alpha = float(self.params.get("mark_signal_alpha", 0.35))
+        decay = float(self.params.get("mark_signal_decay", 0.72))
+        qty_norm = max(1.0, float(self.params.get("mark_qty_norm", 10.0)))
+        clip = max(0.0, float(self.params.get("mark_signal_clip", 6.0)))
+
+        raw = 0.0
+        for trade in state.market_trades.get(self.product, []):
+            raw += float(buy_weights.get(getattr(trade, "buyer", None), 0.0)) * float(trade.quantity)
+            raw += float(sell_weights.get(getattr(trade, "seller", None), 0.0)) * float(trade.quantity)
+        raw /= qty_norm
+
+        prev = float(memory.get("_mark_signal", 0.0))
+        signal = (prev * decay) if abs(raw) < 1e-9 else (alpha * raw + (1.0 - alpha) * prev)
+        if clip > 0.0:
+            signal = max(-clip, min(clip, signal))
+        return signal
+
+    def _mark_anchor_shift(self, mark_signal: float) -> float:
+        per_unit = float(self.params.get("mark_anchor_shift_per_unit", 0.0))
+        max_shift = float(self.params.get("mark_anchor_shift_max", 0.0))
+        if per_unit == 0.0 or max_shift <= 0.0:
+            return 0.0
+        shift = mark_signal * per_unit
+        return max(-max_shift, min(max_shift, shift))
+
+    def _mark_inventory_target(self, mark_signal: float) -> int:
+        per_unit = float(self.params.get("mark_inventory_target_per_unit", 0.0))
+        max_target = int(self.params.get("mark_inventory_target_max", 0))
+        if per_unit == 0.0 or max_target <= 0:
+            return 0
+        target = int(round(mark_signal * per_unit))
+        return max(-max_target, min(max_target, target))
 
     def _use_anchor(self, mid: float, anchor: float, position: int, memory: Dict[str, Any]) -> bool:
         prev_mid = memory.get("_guard_prev_mid")
@@ -89,4 +140,8 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             out["GuardTrend"] = float(trend)
         if (use_anchor := memory.get("_guard_use_anchor")) is not None:
             out["GuardOn"] = float(use_anchor)
+        if (mark_signal := memory.get("_mark_signal")) is not None:
+            out["MarkSignal"] = float(mark_signal)
+        if (mark_target := memory.get("_mark_inventory_target")) is not None:
+            out["MarkTarget"] = float(mark_target)
         return out

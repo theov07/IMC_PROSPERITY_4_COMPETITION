@@ -235,6 +235,9 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "velvet_strat_v3":     ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetStratV3"),
     "velvet_strat_v3_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetMMV3"),
     "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
+    "r4_gamma_scalp_zgated_slim": ("prosperity/strategies/round_4/gamma_scalp_zgated_slim.py", "R4GammaScalpZGatedSlimStrategy"),
+    "r4_hydro_mv_v6_invaware": ("prosperity/strategies/round_4/hydro_mv_v6_invaware.py", "R4HydroMVV6InvAwareStrategy"),
+    "r4_hydro_reversion_mm_slim": ("prosperity/strategies/round_4/hydro_reversion_mm_slim.py", "R4HydroReversionMMSlimStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -314,6 +317,7 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "gamma_scalp_zgated": _R3_OPTIONS_DEPS,
     "iv_momentum_mm": _R3_OPTIONS_DEPS,
     "r3_guarded_anchor_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
+    "r4_hydro_mv_v6_invaware": ["prosperity/strategies/round_4/hydro_mv_v5_best.py"],
     "velvet_r2_exhaustion_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
     "hydro_anchor_zgate_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
