@@ -57,8 +57,66 @@ class BaseStrategy(ABC):
         orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
         # Position-skewed ask/bid (force unwind when position > threshold)
         orders = self._apply_position_skew(state, position, orders, book, memory)
+        # Counterparty bias overlay (per-product trader weights — opt-in)
+        orders = self._apply_cp_bias(state, position, orders, book, memory)
 
         return orders, conversions
+
+    def _apply_cp_bias(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """Generic cp_bias overlay — applies per-product trader weights.
+
+        Same logic as the cp_bias hook embedded in mm_first_v4_combo, but applies
+        to ALL products opt-in via params (not just VELVET).
+
+        If `_cp_bias_handled_internally` flag is set by the strategy itself,
+        skip (avoid double-application on VELVET).
+
+        Params:
+          counterparty_bias_enabled       : turn on (default False)
+          cp_trader_weights               : dict trader_id -> weight (PER-PRODUCT)
+          cp_signal_threshold             : minimum |signal| to fire (default 5.0)
+          cp_max_anchor_offset            : max ticks to shift (default 3.0)
+          cp_anchor_scale_per_unit        : signal -> ticks scaling (default 0.10)
+        """
+        if not bool(self.params.get("counterparty_bias_enabled", False)):
+            return orders
+        if bool(self.params.get("_cp_bias_handled_internally", False)):
+            return orders
+        if not orders:
+            return orders
+
+        cp_signal = self._counterparty_signal(state, memory)
+        cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
+        cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
+        cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
+
+        if abs(cp_signal) <= cp_threshold:
+            return orders
+
+        cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
+        if cp_offset == 0:
+            return orders
+
+        # Apply uniform price shift on all orders (no-cross safety)
+        shifted: List[Order] = []
+        best_bid = book.best_bid
+        best_ask = book.best_ask
+        for o in orders:
+            new_price = int(o.price) + cp_offset
+            if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
+                new_price = int(best_ask) - 1
+            elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
+                new_price = int(best_bid) + 1
+            shifted.append(Order(o.symbol, new_price, o.quantity))
+        memory["_cp_bias_offset"] = cp_offset
+        return shifted
 
     def _apply_position_skew(
         self,

@@ -14936,6 +14936,306 @@ MEMBER_OVERRIDES["r4_v11_M22_M67_micro"] = _v7_conditional(
 )
 
 
+# v12 — Trader-PnL-driven weights (TRADE LIKE THE WINNERS)
+# DATA-DRIVEN finding from scripts/trader_alpha_hunt.py:
+#   Mark 14 = INFORMED (+49,713 implied PnL, +22.89/trade) ← we were FADING this!
+#   Mark 01 = INFORMED (+10,278 / +5.58)                    ← we were fading
+#   Mark 67 = INFORMED (+1,746 / +10.58)                    ← we ignore
+#   Mark 49 = noise/loses (-1,190 / -9.75)                   ← keep fading (correct)
+#   Mark 22 = noise/loses (-3,688 / -2.33)                   ← keep fading (correct)
+#   Mark 55 = noise (-13,204 / -11.02)                       ← could fade
+#   Mark 38 = ANTI-INFO (-43,656 / -29.54)                   ← FADE HARD (we ignore!)
+
+# v12a — INVERSE Mark 14 (FOLLOW informed instead of FADE)
+MEMBER_OVERRIDES["r4_v12_M14_follow_w05"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": +0.5, "Mark 01": -0.2, "Mark 22": -0.4}
+)
+MEMBER_OVERRIDES["r4_v12_M14_follow_w03"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": +0.3, "Mark 01": -0.2, "Mark 22": -0.4}
+)
+MEMBER_OVERRIDES["r4_v12_M14_neutral"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": 0.0, "Mark 01": -0.2, "Mark 22": -0.4}
+)
+
+# v12b — INVERSE Mark 01 too (also informed, was being faded)
+MEMBER_OVERRIDES["r4_v12_M14_M01_follow"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": +0.5, "Mark 01": +0.2, "Mark 22": -0.4}
+)
+
+# v12c — ADD Mark 38 fade (the worst trader, was ignored)
+MEMBER_OVERRIDES["r4_v12_M38_fade_w05"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 38": -0.5}
+)
+MEMBER_OVERRIDES["r4_v12_M38_fade_w08"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4,
+             "Mark 38": -0.8}
+)
+
+# v12d — Full data-driven weights: follow informed + fade noise
+MEMBER_OVERRIDES["r4_v12_data_driven"] = _v7_conditional(
+    ["Mark 22"], zthresh=1.5,
+    weights={
+        "Mark 14": +0.5,   # follow (top informed)
+        "Mark 01": +0.2,   # follow (informed)
+        "Mark 67": +0.3,   # follow (informed)
+        "Mark 49": -0.8,   # fade (noise — keep)
+        "Mark 22": -0.4,   # fade conditional (keep)
+        "Mark 38": -0.8,   # fade (worst trader)
+        "Mark 55": -0.3,   # fade (noise)
+    }
+)
+
+
+# ═══════════════════════════════════════════════════════════════
+# v13 — PER-PRODUCT cp_bias weights (the user-requested feature)
+# ═══════════════════════════════════════════════════════════════
+# Insight: Mark 14 informed on HYDRO/VEV_4000/VELVET, but FADING him on VELVET
+# wins (because we're MM passive — when M14 buys, we sell into him before drift).
+# Mark 38 ONLY trades HYDRO + VEV_4000 (worthless on VELVET).
+# Mark 01 ↔ Mark 22 dyad on VEV_5300+ : Mark 01 buys deep OTM, Mark 22 sells.
+#
+# Per-product weights from data (and adjusted for our MM dynamics):
+#   HYDRO:    Mark 14 +0.5 (follow informed), Mark 38 -0.5 (fade worst)
+#   VEV_4000: Mark 14 +0.5 (follow), Mark 38 -0.5 (fade)
+#   VEV_5xxx: Mark 01 +0.3 (follow informed), Mark 22 -0.3 (fade noise)
+#   VELVET:   keep v9 weights — fade makes more sense in MM passive context
+#
+# Overlay: _apply_cp_bias in base.py applies these per-product when
+#          counterparty_bias_enabled is True for that product.
+
+def _v13_per_product_weights(velvet_weights, hydro_weights, vev4000_weights,
+                             vev5xxx_weights, deep_otm_weights):
+    """Build a member config with per-product cp_bias weights.
+
+    Args:
+      velvet_weights: dict trader -> weight applied to VELVET
+      hydro_weights: dict trader -> weight applied to HYDROGEL_PACK
+      vev4000_weights: dict trader -> weight applied to VEV_4000 / VEV_4500
+      vev5xxx_weights: dict trader -> weight applied to VEV_5000-5400
+      deep_otm_weights: dict trader -> weight applied to VEV_5500/6000/6500
+
+    Re-uses v9 base (M22 conditional fade z=1.5 w=-0.4) for VELVET.
+    """
+    # Start from v9 base (which has VELVET cp_bias setup)
+    base_v9 = _v7_conditional(
+        ["Mark 22"], zthresh=1.5,
+        weights=velvet_weights,
+    )[4]
+
+    out = {}
+    for sym, cfg in base_v9.items():
+        if cfg is None:
+            out[sym] = None
+            continue
+        # Choose product-specific weights
+        if sym == "VELVETFRUIT_EXTRACT":
+            # already configured by _v7_conditional
+            out[sym] = cfg
+            continue
+        if sym == "HYDROGEL_PACK":
+            w = hydro_weights
+        elif sym in ("VEV_4000", "VEV_4500"):
+            w = vev4000_weights
+        elif sym in ("VEV_5000", "VEV_5100", "VEV_5200", "VEV_5300", "VEV_5400"):
+            w = vev5xxx_weights
+        elif sym in ("VEV_5500", "VEV_6000", "VEV_6500"):
+            w = deep_otm_weights
+        else:
+            w = None
+        if w:
+            params = {k: v for k, v in cfg.params.items()
+                      if k not in ("position_limit", "counterparty_bias_enabled",
+                                   "cp_window_ts", "cp_signal_threshold",
+                                   "cp_max_anchor_offset", "cp_anchor_scale_per_unit",
+                                   "cp_trader_weights")}
+            out[sym] = _override(
+                cfg,
+                **params,
+                counterparty_bias_enabled=True,
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights=w,
+            )
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+# v13a — base case: enable cp_bias on options with light per-product weights
+MEMBER_OVERRIDES["r4_v13_per_product_v1"] = _v13_per_product_weights(
+    velvet_weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4},
+    hydro_weights={"Mark 14": +0.5, "Mark 38": -0.5},  # follow M14, fade M38
+    vev4000_weights={"Mark 14": +0.3, "Mark 38": -0.3},
+    vev5xxx_weights={"Mark 01": +0.3, "Mark 22": -0.3, "Mark 14": +0.2},
+    deep_otm_weights={"Mark 01": +0.3, "Mark 22": -0.3},
+)
+
+# v13b — same but FADE Mark 14 (consistent with v9 finding)
+MEMBER_OVERRIDES["r4_v13_per_product_M14_fade"] = _v13_per_product_weights(
+    velvet_weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4},
+    hydro_weights={"Mark 14": -0.5, "Mark 38": -0.5},  # both faded
+    vev4000_weights={"Mark 14": -0.3, "Mark 38": -0.3},
+    vev5xxx_weights={"Mark 01": -0.3, "Mark 22": -0.3},
+    deep_otm_weights={"Mark 01": -0.3, "Mark 22": -0.3},
+)
+
+# v13c — only options (skip HYDRO since it's currently None=disabled)
+MEMBER_OVERRIDES["r4_v13_options_only_follow"] = _v13_per_product_weights(
+    velvet_weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4},
+    hydro_weights={},  # HYDROGEL is None anyway
+    vev4000_weights={"Mark 14": +0.3, "Mark 38": -0.3},
+    vev5xxx_weights={"Mark 01": +0.3, "Mark 22": -0.3},
+    deep_otm_weights={"Mark 01": +0.3, "Mark 22": -0.3},
+)
+
+# v13d — only options FADE both (test that fade dominates again)
+MEMBER_OVERRIDES["r4_v13_options_only_fade"] = _v13_per_product_weights(
+    velvet_weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4},
+    hydro_weights={},
+    vev4000_weights={"Mark 14": -0.3, "Mark 38": -0.3},
+    vev5xxx_weights={"Mark 01": -0.3, "Mark 22": -0.3},
+    deep_otm_weights={"Mark 01": -0.3, "Mark 22": -0.3},
+)
+
+# v13e — options TINY (almost neutral, just for safety check that overlay works)
+MEMBER_OVERRIDES["r4_v13_options_tiny"] = _v13_per_product_weights(
+    velvet_weights={"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.2, "Mark 22": -0.4},
+    hydro_weights={},
+    vev4000_weights={"Mark 14": +0.05, "Mark 38": -0.05},
+    vev5xxx_weights={"Mark 01": +0.05, "Mark 22": -0.05},
+    deep_otm_weights={"Mark 01": +0.05, "Mark 22": -0.05},
+)
+
+
+# ═══════════════════════════════════════════════════════════════
+# v14 — RE-ENABLE HYDROGEL with cp_bias on Mark 14 / Mark 38 dyad
+# ═══════════════════════════════════════════════════════════════
+# HYDROGEL was disabled (-104k in R4 D3 without cp_bias).
+# But Mark 14 makes +34,581 and Mark 38 loses -34,466 on HYDRO.
+# If we MM with bias toward following M14 / fading M38, we may capture spread + dyad alpha.
+
+def _v14_with_hydro(hydro_weights, hydro_signal_threshold=1.0,
+                    hydro_max_offset=2.0, hydro_scale=0.15):
+    """v9 base + HYDROGEL_PACK enabled with mm_first_v4_combo + cp_bias."""
+    base = MEMBER_OVERRIDES["r4_v9_M22cond_z15_w04"][4]
+    out = dict(base)
+    # Enable HYDROGEL with the v4_F5 template, plus cp_bias
+    hydro_cfg = _override(
+        ROUND_3["HYDROGEL_PACK"],
+        strategy="mm_first_v4_combo",
+        position_limit=80,
+        **_R3_HYDROGEL_PARAMS,
+        counterparty_bias_enabled=True,
+        cp_window_ts=10000,
+        cp_signal_threshold=hydro_signal_threshold,
+        cp_max_anchor_offset=hydro_max_offset,
+        cp_anchor_scale_per_unit=hydro_scale,
+        cp_trader_weights=hydro_weights,
+    )
+    out["HYDROGEL_PACK"] = hydro_cfg
+    return {4: out}
+
+
+# v14a — HYDRO enabled with M14 follow + M38 fade
+MEMBER_OVERRIDES["r4_v14_hydro_M14p5_M38m5"] = _v14_with_hydro({
+    "Mark 14": +0.5, "Mark 38": -0.5,
+})
+
+# v14b — only fade Mark 38 (don't follow Mark 14, just fade the loser)
+MEMBER_OVERRIDES["r4_v14_hydro_M38_only"] = _v14_with_hydro({
+    "Mark 38": -0.5,
+})
+
+# v14c — only follow Mark 14 (don't fade Mark 38)
+MEMBER_OVERRIDES["r4_v14_hydro_M14_only"] = _v14_with_hydro({
+    "Mark 14": +0.5,
+})
+
+# v14d — both fade (consistent with v9 M14 fade finding)
+MEMBER_OVERRIDES["r4_v14_hydro_both_fade"] = _v14_with_hydro({
+    "Mark 14": -0.5, "Mark 38": -0.5,
+})
+
+# v14e — HYDRO without cp_bias — baseline measurement (for sanity)
+MEMBER_OVERRIDES["r4_v14_hydro_no_cp_bias"] = _v14_with_hydro({})  # empty weights = no signal
+
+
+# ═══════════════════════════════════════════════════════════════
+# v15 — ENABLE deep OTM options VEV_5500/6000/6500
+# ═══════════════════════════════════════════════════════════════
+# Mark 01 ↔ Mark 22 dyad on these strikes:
+#   VEV_5500: M01 +1042 BUYS, M22 -1069 SELLS
+#   VEV_6000: M01 +1105 BUYS, M22 -1105 SELLS
+#   VEV_6500: M01 +1105 BUYS, M22 -1105 SELLS
+# These options are cheap (price 1-5 ticks) but flow is HUGE.
+# Test: enable as passive MM with cp_bias following M01 / fading M22.
+
+def _v15_with_deep_otm(deep_otm_weights, deep_otm_size=20, deep_otm_edge=1):
+    """v9 base + VEV_5500/6000/6500 enabled with passive MM strategy + cp_bias."""
+    base = MEMBER_OVERRIDES["r4_v9_M22cond_z15_w04"][4]
+    out = dict(base)
+    for strike in [5500, 6000, 6500]:
+        sym = f"VEV_{strike}"
+        cfg = _r3_v24_passive_option(
+            strike,
+            maker_size=deep_otm_size,
+            maker_edge=deep_otm_edge,
+            min_quote_price=1.0,
+            use_smile=False,
+        )
+        params = dict(cfg.params)
+        params.pop("position_limit", None)
+        if deep_otm_weights:
+            cfg_with_cp = _override(
+                cfg,
+                **params,
+                position_limit=cfg.position_limit,
+                counterparty_bias_enabled=True,
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights=deep_otm_weights,
+            )
+        else:
+            cfg_with_cp = cfg
+        out[sym] = cfg_with_cp
+    return {4: out}
+
+
+# v15a — deep OTM with cp_bias: follow M01, fade M22
+MEMBER_OVERRIDES["r4_v15_deep_otm_M01p3_M22m3"] = _v15_with_deep_otm({
+    "Mark 01": +0.3, "Mark 22": -0.3,
+})
+
+# v15b — deep OTM without cp_bias (baseline test of the strategy alone)
+MEMBER_OVERRIDES["r4_v15_deep_otm_no_cp"] = _v15_with_deep_otm({})
+
+# v15c — deep OTM with stronger weights
+MEMBER_OVERRIDES["r4_v15_deep_otm_strong"] = _v15_with_deep_otm({
+    "Mark 01": +0.5, "Mark 22": -0.5,
+})
+
+# v15d — deep OTM with smaller maker_size (less risk)
+MEMBER_OVERRIDES["r4_v15_deep_otm_size10"] = _v15_with_deep_otm(
+    {"Mark 01": +0.3, "Mark 22": -0.3}, deep_otm_size=10
+)
+
+# v15e — deep OTM larger maker_edge (only fill on bigger moves)
+MEMBER_OVERRIDES["r4_v15_deep_otm_edge2"] = _v15_with_deep_otm(
+    {"Mark 01": +0.3, "Mark 22": -0.3}, deep_otm_edge=2
+)
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
