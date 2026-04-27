@@ -53,15 +53,18 @@ class BaseStrategy(ABC):
             memory=memory,
         )
 
+        # Alpha overlays (opt-in via params; no-op when params absent):
+        # 1a. OBI passive bias (shift quote prices based on L3 OBI — captures alpha without spread cost)
+        orders = self._apply_obi_passive_bias(state, position, orders, book, memory)
+        # 1b. OBI taker overlay (directional alpha from L3 book imbalance, 88% hit rate)
+        orders = self._apply_obi_taker_overlay(state, position, orders, book, memory)
+
         # Risk management filters (all opt-in via params; no-op when params absent):
-        # 1. Intraday stop-loss (PnL drawdown trigger — robust, not time-based)
+        # 2. Intraday stop-loss (PnL drawdown trigger — robust, not time-based)
         orders = self._apply_intraday_stop_loss(state, position, orders, book, memory)
-        # 2. Conditional aggressive unwind (VWAP signal trigger — robust, not time-based).
-        #    THIS is the cleanest catch for the D3 crash: when mid << VWAP and we're long,
-        #    actively flatten position chunk-by-chunk regardless of clock.
+        # 3. Conditional aggressive unwind (VWAP signal trigger — robust, not time-based).
         orders = self._apply_conditional_unwind(state, position, orders, book, memory)
-        # 3. End-of-day inventory unwind (time-based — opt-in for emergencies only,
-        #    DISABLED by default after we found it overfits to D3 crash)
+        # 4. End-of-day inventory unwind (time-based — DISABLED by default, overfits)
         orders = self._apply_eod_unwind(state, position, orders, book)
 
         return orders, conversions
@@ -562,6 +565,214 @@ class BaseStrategy(ABC):
     # ------------------------------------------------------------------
     # Trend gate (skip mean-rev BUY in downtrend, mean-rev SELL in uptrend)
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Order Book Imbalance (OBI) PASSIVE bias — adjust own quote PRICES
+    # to capture directional flow without paying spread.
+    # ------------------------------------------------------------------
+    def _apply_obi_passive_bias(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """When L3 OBI is extreme, shift our PASSIVE quotes (in/out the book).
+
+        Bullish OBI (>+threshold):
+          - Raise bid by `obi_passive_tick_offset` ticks (more aggressive bid → fills faster)
+          - Lower ask by 0 ticks (keep where it was; we want to KEEP long, not sell cheap)
+            Actually shift ask UP (raise) → less likely to be hit → we keep longs
+
+        Bearish OBI (<-threshold):
+          - Lower ask by `obi_passive_tick_offset` ticks (more aggressive ask)
+          - Raise bid (less aggressive bid → don't catch falling knife)
+
+        Params:
+          obi_passive_enabled       : turn on (default False)
+          obi_passive_levels        : aggregation levels (default 3)
+          obi_passive_threshold     : abs OBI to fire (default 0.005)
+          obi_passive_tick_offset   : ticks to shift on the favored side (default 1)
+          obi_passive_anti_offset   : ticks to shift on the opposed side (default 1)
+        """
+        if not bool(self.params.get("obi_passive_enabled", False)):
+            return orders
+
+        levels = int(self.params.get("obi_passive_levels", 3))
+        threshold = float(self.params.get("obi_passive_threshold", 0.005))
+        tick_pro = int(self.params.get("obi_passive_tick_offset", 1))
+        tick_anti = int(self.params.get("obi_passive_anti_offset", 1))
+
+        bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
+        ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
+        total = bid_total + ask_total
+        if total == 0:
+            return orders
+        obi = (bid_total - ask_total) / total
+        memory["_obi_passive"] = obi
+
+        if abs(obi) < threshold:
+            return orders
+
+        bullish = obi > 0
+        # Apply per-order price shift
+        adjusted: List[Order] = []
+        for o in orders:
+            if o.quantity > 0:  # BUY (passive bid or taker buy)
+                # Shift bid: bullish → up by tick_pro (more aggressive); bearish → down by tick_anti (less aggressive)
+                shift = +tick_pro if bullish else -tick_anti
+                new_price = int(o.price) + shift
+                adjusted.append(Order(self.product, new_price, o.quantity))
+            elif o.quantity < 0:  # SELL (passive ask or taker sell)
+                # Shift ask: bullish → up by tick_anti (less aggressive); bearish → down by tick_pro (more aggressive)
+                shift = +tick_anti if bullish else -tick_pro
+                new_price = int(o.price) + shift
+                adjusted.append(Order(self.product, new_price, o.quantity))
+            else:
+                adjusted.append(o)
+
+        memory["_obi_passive_dir"] = "BULL" if bullish else "BEAR"
+        return adjusted
+
+    # ------------------------------------------------------------------
+    # Order Book Imbalance (OBI) taker overlay — directional alpha from L3 imbalance
+    # ------------------------------------------------------------------
+    def _apply_obi_taker_overlay(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """When L3 book imbalance is extreme, fire a small taker order in the predicted direction.
+
+        Predictive analysis on R4 VELVET D1+D2+D3 found:
+          L3 OBI > 0 → next 50 ticks avg ret +7.82 (hit_up 88.5%, n=5990)
+          L3 OBI < 0 → next 50 ticks avg ret -7.64 (hit_up 11%, n=5990)
+
+        Params:
+          obi_taker_enabled    : turn on (default False)
+          obi_taker_levels     : how many book levels to aggregate (default 3)
+          obi_taker_threshold  : abs OBI threshold to fire (default 0.005)
+          obi_taker_size       : qty per taker order (default 5)
+          obi_taker_cooldown_ticks : min ticks between fires (default 10)
+        """
+        if not bool(self.params.get("obi_taker_enabled", False)):
+            return orders
+
+        levels = int(self.params.get("obi_taker_levels", 3))
+        threshold = float(self.params.get("obi_taker_threshold", 0.005))
+        size = int(self.params.get("obi_taker_size", 5))
+        cooldown = int(self.params.get("obi_taker_cooldown_ticks", 10))
+
+        # Cooldown
+        ts_now = int(getattr(state, "timestamp", 0))
+        last_fire_ts = memory.get("_obi_last_fire_ts", -10**9)
+        if ts_now - last_fire_ts < cooldown * 100:
+            return orders
+
+        # Compute OBI from book levels
+        bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
+        ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
+        total = bid_total + ask_total
+        if total == 0:
+            return orders
+        obi = (bid_total - ask_total) / total
+        memory["_obi"] = obi
+
+        # Bullish OBI → BUY taker at ask
+        if obi > threshold and book.best_ask is not None:
+            cap = max(0, self.position_limit() - position)
+            qty = min(size, cap, book.best_ask_volume or size)
+            if qty > 0:
+                orders.append(Order(self.product, int(book.best_ask), int(qty)))
+                memory["_obi_last_fire_ts"] = ts_now
+                memory["_obi_last_dir"] = "BUY"
+
+        # Bearish OBI → SELL taker at bid
+        elif obi < -threshold and book.best_bid is not None:
+            cap = max(0, self.position_limit() + position)
+            qty = min(size, cap, book.best_bid_volume or size)
+            if qty > 0:
+                orders.append(Order(self.product, int(book.best_bid), -int(qty)))
+                memory["_obi_last_fire_ts"] = ts_now
+                memory["_obi_last_dir"] = "SELL"
+
+        return orders
+
+    def _counterparty_signal(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+    ) -> float:
+        """Counterparty-flow weighted signal.
+
+        Maintains a rolling buffer of (timestamp, trader_id, signed_qty) for the last
+        `cp_window_ts` timestamp units. Signed qty = +qty when trader is buyer, -qty
+        when trader is seller. Aggregates per trader, applies a per-trader weight,
+        returns weighted sum.
+
+        Default weights (from R4 D1+D2+D3 lead-lag analysis on VELVET):
+          Mark 55 = +1.0  (high-vol MM, +0.14 rho with next-50-tick return, 60% hit rate)
+          Mark 67 = +1.0  (directional buyer, +0.12 rho, 54% hit rate)
+          Mark 01 = -1.0  (MM, -0.17 rho — FADE its flow)
+          Mark 14 = -1.0  (MM, -0.15 rho — FADE)
+        Other traders default to 0 weight.
+
+        Params:
+          cp_window_ts        : rolling window in timestamp units (default 10000 = 100 ticks)
+          cp_trader_weights   : dict trader_id -> weight (default = R4 VELVET weights)
+
+        Returns: weighted signed signal (units = contracts).
+        """
+        window_ts = int(self.params.get("cp_window_ts", 10000))
+        weights = self.params.get("cp_trader_weights", {
+            "Mark 55": +1.0, "Mark 67": +1.0,
+            "Mark 01": -1.0, "Mark 14": -1.0,
+        })
+
+        ts_now = int(getattr(state, "timestamp", 0))
+
+        # Append this tick's trades to rolling buffer
+        buf = memory.setdefault("_cp_buf", [])  # list of [ts, trader, signed_qty]
+        try:
+            mt = state.market_trades
+            trades = (mt or {}).get(self.product, []) or []
+        except Exception:
+            trades = []
+        for t in trades:
+            buyer = getattr(t, "buyer", None) or ""
+            seller = getattr(t, "seller", None) or ""
+            qty = float(getattr(t, "quantity", 0))
+            if qty <= 0:
+                continue
+            if buyer:
+                buf.append([ts_now, buyer, qty])
+            if seller:
+                buf.append([ts_now, seller, -qty])
+
+        # Drop old entries
+        cutoff = ts_now - window_ts
+        if buf and buf[0][0] < cutoff:
+            i = 0
+            while i < len(buf) and buf[i][0] < cutoff:
+                i += 1
+            del buf[:i]
+
+        # Aggregate per trader, apply weights
+        signal = 0.0
+        per_trader = {}
+        for _, trader, signed in buf:
+            per_trader[trader] = per_trader.get(trader, 0.0) + signed
+        for trader, net in per_trader.items():
+            w = weights.get(trader, 0.0)
+            signal += w * net
+
+        memory["_cp_signal"] = signal
+        memory["_cp_per_trader"] = per_trader
+        return signal
+
     def _vwap_signal(
         self,
         state: TradingState,

@@ -79,3 +79,8 @@ artifacts/**/_3d.json
 artifacts/**/oracle_*.json
 artifacts/backtest_results/*
 artifacts/backtests/*
+
+# Large HTML reports (counterparties tool, data explorer) — regenerable from data
+artifacts/analysis/round_*/counterparties_*.html
+artifacts/analysis/round_*/data_explorer_*.html
+artifacts/analysis/round_*/hydro_counterparties.html

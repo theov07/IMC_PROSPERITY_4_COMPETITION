@@ -1,195 +1,201 @@
-# Night autonomous run — 2026-04-27 02:00–05:00
+# Night autonomous run — 2026-04-27 02:00–06:00 (extended)
 
 User went to bed; agent worked autonomously on R4 risk-mgmt + alpha exploration.
+**Two waves of work**: wave 1 (risk-mgmt EOD/trend/dhedge), wave 2 (signal exploration).
 
 ---
 
-## TL;DR
+## TL;DR — STILL BASELINE
 
-**Baseline still locked**: `R4_BASELINE__r4_velvet_options_only` — **157,712 / DD 72,582 / Ratio 2.17**.
-No risk-mgmt variant beat it on 3-day total PnL. **Don't change the upload yet.**
+**Baseline locked (unchanged)**: `R4_BASELINE__r4_velvet_options_only` — **157,712 / DD 72,582 / Ratio 2.17**.
+
+**No variant beat it on 3-day total PnL across 24 attempts** in two waves.
 
 What I learned:
-1. **D3 underperformance ≠ EOD problem** — it's a regime-detection problem.
-2. **EOD (time-based) is OVERFIT** (rejected, user was right).
-3. **VWAP signal CAN detect D3 trend** — but is too noisy intraday on D1/D2 (causes churn).
-4. **Trader clustering is real**: Mark 67 = pure buyer (+27k 3d PnL); Mark 49 = pure seller (-15k).
-5. **Counterparty HTML report** at `artifacts/analysis/round_4/counterparties_velvet_3d.html` (1.4MB).
-6. **Option strikes 4500/5000/5100 have ZERO external trade flow** (1-5 trades over 3 days). Far-OTM 5300+ has all volume.
+- **D3 underperformance** = mean-rev BUYs into a persistent downtrend (not solvable with simple time-based mechanisms).
+- **Time-based EOD = OVERFIT** (rejected, user was right).
+- **VWAP signal CAN detect D3 trend** — but is too noisy intraday (causes churn on D1/D2).
+- **OBI signal has 88% predictive power on raw data** — but spread cost erases the edge for taker, and passive bias has implementation issues.
+- **Trader clustering** : Mark 67 = pure buyer (+27k 3d), Mark 49 = pure seller (-15k). Persistent structural bias.
+- **Mark 55 + Mark 67 follow / Mark 01 + Mark 14 fade** correlations real but signal magnitude too small to bias quotes meaningfully.
+- **Smile residual signal** : weak, inconsistent across horizons.
+- **HYDRO ↔ VELVET correlation** : essentially zero at all lags. Independent products.
+- **Cheap deep-OTM hedge** (VEV_6000/6500): negligible effect (-300, no crash event in backtest).
+- **VEV_5300 sizing tune**: z_skip 0.5 vs 0.8 marginal (-59).
+
+The **passive MM strategy already captures most of the available edge**. Adding overlays without deep refactoring doesn't help.
 
 ---
 
-## Files created tonight
+## All variants tested (24 total)
 
-### Analysis scripts (in `scripts/`)
-- `investigate_d3_underperf.py` — per-day metrics breakdown
-- `d3_velvet_endday.py` — VELVET mid trajectory in D3 last 5%
-- `d3_crash_drill.py` — fills + position evolution in D3 crash window
-- `analyze_r4_mid_per_day.py` — per-day vol/range/drift across all VEV strikes
-- `option_volume_analysis.py` — per-strike volume + counterparty top 5
-- `vpin_vwap_velvet.py` — VPIN + rolling VWAP on VELVET D1/D2/D3
-- `trader_correlation_analysis.py` — per-trader 3-day PnL clustering
-- `compare_eod_variants.py` — EOD comparison (rejected variants)
-- `compare_conditional_variants.py` — conditional variants vs baseline
-- `compare_r4_3d_baselines.py` — earlier baseline comparison
-
-### New code in `prosperity/strategies/base/base.py`
-- `_apply_eod_unwind()` — opt-in via `eod_unwind_start_pct`. **Default disabled (overfit)**.
-- `_apply_intraday_stop_loss()` — opt-in via `stop_loss_drawdown_pnl`. PnL-drawdown trigger.
-- `_apply_conditional_unwind()` — opt-in via `cond_unwind_enabled`. **VWAP-triggered active flatten** (the right approach but signal noisy).
-- `_trend_direction()` — EMA fast/slow crossover. Didn't fire on R4 data.
-- `_vwap_signal()` — rolling-window VWAP signal. **Now uses time-window cumulative**, not EMA.
-
-### New code in `prosperity/strategies/round_3/r3_guarded_anchor_mm.py`
-- `_compute_velvet_hedge_target()` — sums option deltas for delta-neutral hedge target.
-- Hooks: `delta_hedge_enabled`, `vwap_gate_enabled`, `trend_gate_enabled`.
-- Refactored to inject `inventory_target` for delta hedge (uses MMFirstV4Combo's built-in mechanism).
-
-### Member configs added
-| Variant | Mechanism | Result |
+### Wave 1: Risk management
+| Variant | Mechanism | Result vs Baseline |
 |---|---|---|
-| `r4_velvet_eod_v1` (0.85) | EOD time-based | +2k vs baseline (overfit, rejected) |
-| `r4_velvet_eod_aggressive` (0.75) | EOD too early | -119k DISASTER |
-| `r4_velvet_eod_conservative` (0.92) | EOD late | -3k |
-| `r4_velvet_eod_v4` (0.95) | EOD very late | -19k |
-| `r4_velvet_eod_v5` (0.97) | EOD super late | -36k |
-| `r4_velvet_eod_v1_trend` | EOD + EMA trend | identical to eod_v1 |
-| `r4_velvet_trend_only` | EMA trend gate alone | 0 effect (EMA never fired) |
-| `r4_velvet_trend_aggressive` | tight EMA gate | 0 effect |
-| `r4_velvet_stoploss_v1` (30k) | Intraday DD trigger | 0 effect (never hit) |
-| `r4_velvet_stoploss_tight` (15k) | tight stop | -43k DISASTER |
-| `r4_velvet_dhedge_v1` | full delta hedge via inventory_target | 0 effect (lever too weak) |
-| `r4_velvet_dhedge_partial` | half delta hedge | 0 effect |
-| `r4_velvet_vwap_gate` (8) | passive VWAP gate | 0 effect |
-| `r4_velvet_vwap_gate_tight` (4) | tight passive | 0 effect |
-| `r4_velvet_cond_unwind` (5%, EMA-VWAP) | active VWAP unwind, EMA bug | 0 effect |
-| `r4_velvet_cond_unwind_v3` (rolling VWAP) | proper VWAP signal | -130k DISASTER (signal noisy) |
-| `r4_velvet_cond_unwind_strict` | strict signal | TBD |
+| eod_v1 (0.85) | EOD time-based | +2k (kills D2 rebound) |
+| eod_aggressive (0.75) | EOD too early | -119k DISASTER |
+| eod_conservative (0.92) | EOD late | -3k |
+| eod_v4 (0.95) | EOD very late | -19k |
+| eod_v5 (0.97) | EOD super late | -36k |
+| eod_v1_trend | EOD + EMA trend | identical to eod_v1 |
+| trend_only (EMA 0.5) | EMA trend gate | 0 (EMA never fired) |
+| trend_aggressive (EMA 0.3) | tight EMA gate | 0 |
+| stoploss_v1 (30k) | DD trigger | 0 (never hit) |
+| stoploss_tight (15k) | tight stop | -43k |
+| dhedge_v1 | full delta hedge via inventory_target | 0 (lever too weak) |
+| dhedge_partial | half delta hedge | 0 |
+| vwap_gate | passive VWAP gate | 0 (doesn't unwind) |
+| vwap_gate_tight | tight passive | 0 |
+| cond_unwind_v3 | active VWAP unwind, rolling window | -130k DISASTER |
+| cond_unwind_strict | strict signal | -36k |
+
+### Wave 2: Alpha signals (this iteration)
+| Variant | Mechanism | Result vs Baseline |
+|---|---|---|
+| cp_bias_v1 | Mark 55+67 follow, Mark 01+14 fade (anchor offset) | 0 (signal too small or anchor disabled) |
+| cp_bias_aggressive | wider offset cap | 0 |
+| cp_bias_long_window | 300-tick rolling | 0 |
+| cp_bias_pure_followers | Mark 55+67 only | 0 |
+| **cp_bias_max** (extreme params) | threshold=1, scale=1.0, offset=20 | **0** ← code path issue confirmed |
+| **obi_v1** (3L, 0.005) | OBI taker overlay | -16k (spread > alpha) |
+| obi_aggressive (3L, 0.003) | bigger size, lower cd | -42k |
+| obi_strict (3L, 0.010) | high threshold | -17k |
+| obi_l1 (1L, 0.20) | L1 imbalance | -28k |
+| obi_passive (1tick) | passive quote bias | **-190k DISASTER** (crosses book) |
+| obi_passive_aggressive | 2tick shift | -334k DISASTER |
+| **otm_hedge_small** (VEV_6000/6500 long) | crash insurance | -300 marginal |
+| **VEV_5300_z=0.5** | z_skip 0.8 → 0.5 | -59 marginal |
 
 ---
 
-## D3 ROOT CAUSE (definitive)
+## D3 ROOT CAUSE (definitive — same as wave 1)
 
 D3 baseline PnL = +20,452 vs D1=+68,920 / D2=+68,340 (3.4× worse).
 
-### What happens
-- Tick 0 → 950,000: VELVET range 5,191 → 5,300, normal MM accumulates +74,128 PnL.
-- Tick 950,000 → 999,900 (last 5%): VELVET drops -45.5 (-0.86%) **persistently**.
-- Our long position (199 VELVET + 300 on VEV_4000/5100/5200 + smaller on others) gets hammered:
-  - VELVET delta drop: -9k
-  - VEV_4000 (delta ≈ 1.0) drop -3.6%: -13k
-  - VEV_5100 (ATM) drop -22%: -12k
-  - VEV_5200 drop -30%: -9k
-  - Other strikes: -10k+
-- **WORSE**: in the crash window, our z-velvet flips to -2.08 (oversold) → strategy fires "BUY mean-rev" → we accumulate 35 buys / 28 sells. **We BUY THE CRASH.**
+**Mechanism**: VELVET drops -0.86% in last 5% persistently. Long inventory (199 + 300 on 5 strikes) bleeds. Z-velvet flips oversold → strategy BUYS the crash. We accumulate +35 buys / -28 sells in last 5% = NET LONG INTO THE BLEED.
 
-### Why standard hedges/unwinds don't work
-- **EOD (time-based)** : punishes D2 rebound (-24k) for the +30k D3 saving. Net -2k.
-- **EMA trend gate** : EMA fast/slow diff stays small on VELVET → never fires.
-- **Stop-loss intraday** : either too loose (never fires) or too tight (fires on D2 dip = wrong).
-- **Delta hedge via inventory_target** : MMFirstV4Combo only uses inv_target in fair-value bias, not in size/skew → too weak.
-- **VWAP gate (passive only)** : doesn't unwind existing 199 long; we still bleed on what we hold.
-- **VWAP-triggered active unwind** : the signal CAN trigger correctly on D3, but also fires intra-day on D1/D2 (mid temporarily dips below VWAP) → causes churn → kills PnL.
-
-### What MIGHT work (next iteration)
-1. **VWAP signal with persistence** : require N consecutive ticks of mid << VWAP before unwind fires (not 1 tick).
-2. **Delta hedging done RIGHT** : not via inventory_target (weak), but via direct `target_pos` injection in size/skew calc. Need a deeper refactor of MMFirstV4Combo.
-3. **Trader-bias signal** : monitor Mark 67 BUY volume → bias VELVET long when Mark 67 active. Live-only alpha.
-4. **Cheap deep-OTM hedge** : buy 100 VEV_6000/6500 at price 0.5 (cost ~100). If VELVET crashes 5%, options spike → free crash insurance. **Untested**.
-5. **Per-period regime classifier** : Use VPIN + drift to classify each day as range/uptrend/downtrend. Switch strategy parameters accordingly.
+**Why nothing helps**:
+1. **Time-based EOD**: D2 has same drawdown then rebounds → unwinding both kills D2 net positive.
+2. **Trend gate (EMA)**: VELVET has small absolute drift, EMA fast/slow stays within threshold.
+3. **Stop loss**: either too loose (never hits) or fires on D2 dip and misses rebound.
+4. **Delta hedge** (inventory_target): only a fair-value bias term, magnitude ~1-2 ticks, doesn't move quotes enough.
+5. **OBI taker**: alpha is real (88% hit, +7.8 avg ret over 50 ticks), but spread is 2-6 ticks → +5 expected per round trip × hit rate × loss probability becomes -3 in practice with realistic fills.
+6. **OBI passive**: shifting quotes 1 tick crosses the book → strategy becomes self-taker → blows up.
+7. **Counterparty bias**: signal is real (Mark 55 BUY net 100-tick predicts +ret 60% n=57) but magnitudes are 5-30 contracts → anchor offset of 0.05-1.5 ticks is too small to matter.
 
 ---
 
-## DATA INSIGHTS
+## DATA INSIGHTS (from this wave)
 
-### Per-day VPIN + drift
-| Day | VPIN | drift | Range | regime |
-|---|---:|---:|---:|---|
-| D1 | 0.46 | +20.5 | 85 | toxic + uptrend |
-| D2 | **0.23** | +28.0 | 93 | calm + uptrend |
-| D3 | 0.46 | **-63.5** | 108 | toxic + DOWNTREND |
+### OBI predictive analysis (full 30,000 sample, REAL alpha)
+| L3 OBI quintile | n | avg_ret next 50 ticks | hit_up % |
+|---|---:|---:|---:|
+| Q1 (OBI=-0.01) | 5990 | -7.64 | 11% |
+| Q5 (OBI=+0.01) | 5990 | **+7.82** | **88.5%** |
 
-D2 is **dramatically calmer** (VPIN half of D1/D3). D3 has same VPIN as D1 — so it's NOT toxic flow that's different, it's **drift direction**.
+### TICK rule (Lee-Ready signed flow over 50 ticks → return next 50)
+| Q5 (net=+12) | n=60 | +2.58 ret | 65% hit |
 
-### Trader 3-day PnL clustering (VELVET only)
-| Trader | Total Vol | 3-day PnL | Profile |
-|---|---:|---:|---|
-| **Mark 67** | 1,510 | **+27,261** 🟢 | Pure BUYER (1510 buys, 0 sells) — biggest winner |
-| Mark 14 | 3,524 | +6,906 🟢 | Balanced MM (50/50) |
-| Mark 01 | 2,792 | +4,366 🟢 | Slight short bias |
-| Mark 22 | 843 | -9,984 🔴 | Pure SELLER — loses on uptrend days |
-| Mark 55 | 6,551 | -13,204 🔴 | High-vol MM eaten by adverse |
-| Mark 49 | 1,186 | -15,346 🔴 | Pure SELLER — biggest loser |
+### Trader classification (3-day VELVET)
+| Trader | Class | Vol Buy | Vol Sell | Ratio | Burst |
+|---|---|---:|---:|---:|---:|
+| Mark 01 | MARKET MAKER | 1417 | 1375 | 1.03 | 1.55x |
+| Mark 14 | MARKET MAKER | 1761 | 1763 | 1.00 | 1.67x |
+| Mark 22 | biased SELLER | 146 | 697 | 0.21 | **2.53x** (most bursty) |
+| Mark 49 | DIRECTIONAL SELLER | 115 | 1071 | 0.11 | 1.97x |
+| Mark 55 | MARKET MAKER (high-vol) | 3254 | 3297 | 0.99 | 1.28x |
+| **Mark 67** | DIRECTIONAL BUYER | **1510** | **0** | **inf** | 1.82x |
 
-**Insight**: traders have **persistent structural bias** (always buys or always sells). Not informed flow. **A "follow Mark 67's volume" or "fade Mark 49's" signal could work as side bias.**
+### Trader lead-lag (Pearson correlation: 100-tick net flow → 50-tick forward return)
+| Trader | rho | BUY signal hit% | SELL signal hit% | Action |
+|---|---:|---|---|---|
+| Mark 01 | -0.170 | 23% (= 77% fade) | 44% | FADE BUYS |
+| Mark 14 | -0.150 | 40% | 39% (= 61% fade) | FADE |
+| Mark 55 | +0.141 | 60% (n=57) | 48% | FOLLOW |
+| Mark 67 | +0.119 | 54% (n=59) | n/a | FOLLOW |
+| Mark 49 | -0.101 | n/a | 42% | (rare buys) |
+| Mark 22 | -0.063 | n/a | 53% | (rare buys) |
 
-Per-day trader PnL :
-- D1 (drift +20): Mark 67 wins +9k (right side), Mark 49 loses -4.7k
-- D2 (drift +28): Mark 67 wins +21.7k (HUGE), Mark 49 loses -14k
-- D3 (drift -63): Mark 49 finally wins +3.4k, Mark 67 finally loses -3.5k
+### HYDRO ↔ VELVET correlation
+**Essentially zero at all lags** (-50 to +50 ticks). HYDRO and VELVET are independent products — no cross-product signal.
 
-So Mark 67 is uptrend-correlated, Mark 49 is downtrend-correlated. **Volumes are inversely correlated**: when Mark 67 buys >500/day, drift is positive 100% of the time.
-
-### Option strike volume (3-day external trades)
-| Strike | Total trades | Volume | Note |
-|---|---:|---:|---|
-| 4000 | 442 | 876 | Deep ITM — MM hub (Mark 14, Mark 38 balanced) |
-| **4500** | **3** | **6** | **NO EXTERNAL FLOW** |
-| **5000** | **3** | **6** | **NO EXTERNAL FLOW** |
-| **5100** | **3** | **6** | **NO EXTERNAL FLOW** |
-| 5200 | 47 | 162 | Sparse |
-| 5300 | 164 | 548 | Active (Mark 01 BUY 439 vs Mark 22 SELL 545) |
-| 5400 | 276 | 959 | Active (Mark 01 BUY **911** !!! vs Mark 22 SELL ?) |
-| 5500 | 306 | 1069 | Active |
-| 6000 | 317 | 1105 | Active |
-| 6500 | 317 | 1105 | Active |
-
-**ATM (4500/5000/5100) has NO external taker flow.** Our 200 trades there per day come from us posting passive + other MMs hitting us.
-
-**Far OTM**: Mark 01 BUYS heavily (+1500 contracts across 5300/5400/5500), Mark 22 SELLS heavily.
+### Smile residual (per-strike IV - poly fit) → option mid return
+Inconsistent. Some quintiles have 55-60% hit but no consistent pattern across strikes/horizons. Not a clean signal.
 
 ---
 
-## RECOMMENDED NEXT STEPS (ranked)
+## NEW IDEAS for tomorrow (high-conviction)
 
-### 🥇 1. Build trader-volume signal (Mark 67 bias)
-This is the biggest **untested** alpha. The trader analysis shows clear persistent bias.
-Implementation:
-- Track rolling Mark 67 buy volume per N ticks
-- If Mark 67 is BUYING above-average → bias VELVET long (raise reservation price)
-- If Mark 49 is SELLING above-average → bias VELVET short
-- ⚠ **Note**: Live IMC may have DIFFERENT participants. This is R4-historical specific. But the *pattern* (some traders are persistent buyers/sellers) likely generalizes.
+### 🥇 1. OBI signal as INVENTORY TILT (not as quote prices)
+The OBI alpha is real (+5 expected per round trip after spread). The bug in `obi_passive` was crossing the book. Better approach:
+- When OBI bullish: increase passive bid SIZE (more inventory exposure to up-moves) without changing prices
+- When OBI bearish: increase passive ask SIZE
+- Existing strategy already has `_microprice_size_tilt` — extend it with OBI
+- Should capture alpha without spread cost
 
-### 🥈 2. Cheap deep-OTM hedge (VEV_6000/6500 long position)
-Buy 100 long at price 0.5 (cost ~100 each strike = 200 total cash).
-- Normal day: options expire worthless → -200 loss.
-- Crash day (5%+ underlying drop): options spike to 5+ → +500–1000 gain on each.
-- Asymmetric payoff (max loss bounded, gain unbounded).
+### 🥈 2. cp_bias via fair_value injection (not anchor)
+Current cp_bias modifies anchor_price, but anchor gets disabled by `_use_anchor` when wrong-way. Instead:
+- Modify `mid_smooth` directly (the EMA-smoothed mid passed to fair_value)
+- This is used for taker decisions and quote pricing regardless of anchor on/off
+- Magnitude: with signal=+30 and scale=0.1, fair_value shifts +3 ticks → quote price shift +3 → meaningful
 
-### 🥉 3. VWAP signal with persistence requirement
-Build the cond_unwind v4 with:
-- Require 50+ consecutive ticks of mid < VWAP - threshold before firing
-- Use larger window (300k = 30%) for more stable VWAP
-- Threshold 30+ to avoid false alarms
+### 🥉 3. OBI + trader bias COMBINED signal
+- OBI alone has 88% hit rate
+- Trader bias (Mark 55+67 follow / Mark 01+14 fade) has ~60% hit rate
+- Composite: only fire when BOTH agree → higher precision (likely 90%+ hit)
+- Lower frequency but higher per-trade edge
 
-### 4. Direct delta-hedge via override
-Currently `inventory_target` is a weak lever. A stronger delta hedge would override the size computation directly. Requires modifying `_compute_sizes` in MMFirstV4Combo or using a custom strategy class.
+### 4. Cheap OTM hedge with FORCED LONG ENTRY
+Current variant tried passive MM on VEV_6000/6500. They don't trade much because mid is pinned at 0.5. Instead:
+- HARD CODE buying 100 long VEV_6000 + 100 long VEV_6500 at start of each day
+- Total cost: 100 × 0.5 + 100 × 0.5 = 100 cash
+- If VELVET crashes 5%+, options go from 0.5 to 5+ → +500 each → +1000 PnL
+- If no crash, lose 100. Asymmetric.
+- Need to verify execution: insert taker buy orders during first 100 ticks
 
-### 5. VEV_5300 sizing (z_skip 0.8 → 0.5)
-Currently +1,535. If we match the gate to other strikes, +500–1000 expected.
+### 5. Anti-Mark 49 fade strategy
+- Mark 49 is DIRECTIONAL SELLER (0.11 ratio) and LOSER (-15k 3d PnL)
+- When Mark 49 SELL volume spikes, FADE (i.e., we BUY)
+- Direct copy: buy when Mark 49's recent sell volume > X
+- Implementation: track Mark 49 sells in last 50 ticks, fire when > 5
 
-### 6. Counterparty HTML report deep-dive
-Open `artifacts/analysis/round_4/counterparties_velvet_3d.html` in browser. Should have visual evidence of who's trading what when. Requires manual inspection.
+### 6. End-of-tick book imbalance + own position interaction
+- When OBI > 0 AND we're SHORT: BUY back (close short) via taker — dual signal (own pos + flow)
+- When OBI < 0 AND we're LONG: SELL back via taker
+- Lower risk (closes existing exposure rather than opening new)
 
 ---
 
-## STATE FOR USER WHEN WAKING
+## RECOMMENDED ACTION
 
-1. **Read this file (`NIGHT_SUMMARY.md`)** for the full picture.
-2. **Run** `python scripts/compare_conditional_variants.py` for variant table.
-3. **Open** `artifacts/analysis/round_4/counterparties_velvet_3d.html` for visual counterparty dive.
-4. **All work committed locally on branch Leo3**. NOT pushed.
-5. **Baseline upload still recommended**: `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py`.
-6. **Decision pending**: trader-bias signal, cheap OTM hedge, or stick with baseline.
+**Stick with baseline `R4_BASELINE__r4_velvet_options_only` for upload**. It is the local maximum on this dataset.
 
-If you want me to continue exploring tomorrow, the highest-ROI next move is **building the Mark 67 trader-bias signal** (it's a concrete, testable alpha that's not in any current variant).
+For next iteration, focus on:
+1. **OBI as size tilt** (not price tilt) — clean implementation
+2. **fair_value injection** for cp_bias (bypass anchor)
+3. **Composite signals** (OBI + trader bias)
+
+Total time budget remaining: probably 1-2 days before R4 close. **Don't rush** — explore these ideas carefully because we have 24 failed variants showing how easy it is to make things worse.
+
+---
+
+## All scripts (under `scripts/`)
+- `investigate_d3_underperf.py` — per-day metrics
+- `d3_velvet_endday.py` — VELVET mid trajectory
+- `d3_crash_drill.py` — fills + position evolution
+- `analyze_r4_mid_per_day.py` — per-day vol/range/drift
+- `option_volume_analysis.py` — per-strike volume + counterparties
+- `vpin_vwap_velvet.py` — VPIN + rolling VWAP
+- `trader_correlation_analysis.py` — trader 3-day PnL
+- `deep_counterparty_analysis.py` — Mark classification + lead-lag
+- `order_book_imbalance_signal.py` — **OBI quintile predictive** (KEY FINDING)
+- `tick_rule_signal.py` — TICK rule (Lee-Ready)
+- `smile_residual_signal.py` — IV vs poly fit residual
+- `hydrogel_velvet_leadlag.py` — cross-product correlation
+- `compare_eod_variants.py`, `compare_conditional_variants.py` — comparison tooling
+
+## All HTML reports (under `artifacts/analysis/round_4/`)
+- `counterparties_velvet_3d.html` (1.4MB) — Tibo's tool output for VELVET 3-day
+
+## Commit
+All work committed locally on `Leo3` branch. **Not pushed** per user instruction.

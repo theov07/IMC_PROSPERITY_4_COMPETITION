@@ -72,11 +72,29 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             dh_saved_target = self.params.get("inventory_target", 0)
             self.params["inventory_target"] = scaled_target
 
+        # Counterparty bias layer (opt-in): shift anchor based on trader-flow signal.
+        # When Mark 55+67 net buying or Mark 01+14 net selling → bullish → anchor up.
+        # When opposite → bearish → anchor down.
+        cp_saved_anchor = None
+        if bool(self.params.get("counterparty_bias_enabled", False)):
+            cp_signal = self._counterparty_signal(state, memory)
+            cp_threshold = float(self.params.get("cp_signal_threshold", 30.0))
+            cp_max_offset = float(self.params.get("cp_max_anchor_offset", 5.0))
+            cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.05))
+            old_anchor = self.params.get("anchor_price")
+            if old_anchor is not None and abs(cp_signal) > cp_threshold:
+                offset = max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))
+                cp_saved_anchor = old_anchor
+                self.params["anchor_price"] = old_anchor + offset
+                memory["_cp_anchor_offset"] = offset
+
         try:
             return self._compute_orders_inner(state, book, order_depth, position, memory, mid)
         finally:
             if dh_saved_target is not None:
                 self.params["inventory_target"] = dh_saved_target
+            if cp_saved_anchor is not None:
+                self.params["anchor_price"] = cp_saved_anchor
 
     def _compute_orders_inner(
         self,

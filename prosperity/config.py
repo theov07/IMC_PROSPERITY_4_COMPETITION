@@ -13418,6 +13418,309 @@ MEMBER_OVERRIDES["r4_velvet_cond_unwind_all"] = {
 }
 
 
+# =============================================================================
+# R4 COUNTERPARTY-BIAS VARIANTS — alpha from trader-flow lead-lag analysis
+# Lead-lag analysis shows:
+#   - Mark 55 + Mark 67 net flow predicts NEXT-50-tick return positively (rho +0.14, +0.12)
+#   - Mark 01 + Mark 14 net flow predicts negatively (rho -0.17, -0.15) → FADE them
+# Hit rates: Mark 55 BUY signal = 60% (n=57), Mark 67 BUY signal = 54% (n=59)
+# =============================================================================
+
+# r4_velvet_cp_bias_v1 — counterparty bias on VELVET only (anchor offset)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_v1"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,            # 100 tick rolling
+                cp_signal_threshold=30.0,      # min |signal| to fire
+                cp_max_anchor_offset=5.0,      # cap on anchor shift in ticks
+                cp_anchor_scale_per_unit=0.05, # ticks per signal-unit (signal up to 100)
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_aggressive — wider offset cap, lower threshold
+MEMBER_OVERRIDES["r4_velvet_cp_bias_aggressive"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=15.0,
+                cp_max_anchor_offset=10.0,
+                cp_anchor_scale_per_unit=0.10,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_long_window — longer rolling (300 ticks)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_long_window"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=30000,            # 300 ticks
+                cp_signal_threshold=50.0,
+                cp_max_anchor_offset=8.0,
+                cp_anchor_scale_per_unit=0.06,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_max — extreme params to verify signal does anything at all
+MEMBER_OVERRIDES["r4_velvet_cp_bias_max"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,         # fire on any flow
+                cp_max_anchor_offset=20.0,       # huge offset
+                cp_anchor_scale_per_unit=1.0,    # 1 tick per unit signal
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
+MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=20.0,
+                cp_max_anchor_offset=6.0,
+                cp_anchor_scale_per_unit=0.08,
+                cp_trader_weights={"Mark 55": 1.0, "Mark 67": 1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# =============================================================================
+# R4 OBI TAKER OVERLAY — directional alpha from L3 book imbalance
+# Predictive analysis: L3 OBI > 0 → next 50 ticks +7.8 ret (88% hit), <0 → -7.6 (11% hit)
+# =============================================================================
+
+# r4_velvet_obi_v1 — OBI taker on VELVET only, conservative size + cooldown
+MEMBER_OVERRIDES["r4_velvet_obi_v1"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_taker_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_taker_levels=3,
+                obi_taker_threshold=0.005,
+                obi_taker_size=5,
+                obi_taker_cooldown_ticks=10,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_obi_aggressive — bigger size, lower cooldown
+MEMBER_OVERRIDES["r4_velvet_obi_aggressive"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_taker_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_taker_levels=3,
+                obi_taker_threshold=0.003,
+                obi_taker_size=10,
+                obi_taker_cooldown_ticks=5,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_obi_strict — higher threshold (only fire on extreme imbalance)
+MEMBER_OVERRIDES["r4_velvet_obi_strict"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_taker_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_taker_levels=3,
+                obi_taker_threshold=0.010,
+                obi_taker_size=8,
+                obi_taker_cooldown_ticks=20,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_obi_passive — quote-bias version (shift bid/ask 1 tick when OBI extreme)
+MEMBER_OVERRIDES["r4_velvet_obi_passive"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_passive_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_passive_levels=3,
+                obi_passive_threshold=0.005,
+                obi_passive_tick_offset=1,
+                obi_passive_anti_offset=1,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_obi_passive_aggressive — wider shifts
+MEMBER_OVERRIDES["r4_velvet_obi_passive_aggressive"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_passive_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_passive_levels=3,
+                obi_passive_threshold=0.003,
+                obi_passive_tick_offset=2,
+                obi_passive_anti_offset=2,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_obi_l1 — use L1 imbalance instead of L3 (different signal)
+MEMBER_OVERRIDES["r4_velvet_obi_l1"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                obi_taker_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                obi_taker_levels=1,
+                obi_taker_threshold=0.20,    # L1 imbalance has wider range
+                obi_taker_size=5,
+                obi_taker_cooldown_ticks=10,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# =============================================================================
+# R4 CHEAP DEEP-OTM HEDGE — buy small VEV_6000/6500 long (price = 0.5 = worthless)
+# Asymmetric payoff: cost 0.5/contract, +5/contract if VELVET drops 5%+
+# Acts as crash insurance for the 199 VELVET + 300 VEV_5xxx long positions.
+# =============================================================================
+
+# r4_velvet_otm_hedge_small — long 100 of VEV_6000 + VEV_6500 each
+# Use simple option_mm_bs with small target & buy-only-passive
+def _otm_hedge_params():
+    return dict(
+        strategy="option_mm_bs",
+        # Target a long bias by lowering ask side aggressiveness
+        position_limit=100,
+        strike=0,  # set per strike below
+        tte_days_initial=4.0,
+        ticks_per_day=10000,
+        timestamp_units_per_day=1000000,
+        historical_tte_by_day={1: 7.0, 2: 6.0, 3: 5.0},
+        prior_vol=0.0125,
+        maker_edge=1,
+        maker_size=10,    # small size
+        take_edge=10.0,   # very high — won't fire
+        take_size=0,      # no takers
+        use_smile=False,
+        iv_ewma_alpha=0.3,
+        sigma_floor=0.005,
+        sigma_cap=0.10,
+        min_quote_price=0.4,  # quote even at 0.5 (default 2.0 skips)
+        inv_bias_per_unit=0.0,  # no skew
+        enable_takers=False,
+        penny_improve_around_mkt=True,
+        underlying_symbol="VELVETFRUIT_EXTRACT",
+        log_flush_ts=1000,
+        ts_increment=100,
+        last_ts_value=999900,
+    )
+
+
+MEMBER_OVERRIDES["r4_velvet_otm_hedge_small"] = {
+    4: {
+        sym: cfg
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+# Add VEV_6000 and VEV_6500 with small position MM
+for k in (6000, 6500):
+    MEMBER_OVERRIDES["r4_velvet_otm_hedge_small"][4][f"VEV_{k}"] = _override(
+        ROUND_4[f"VEV_{k}"], position_limit=100, strike=k, **{kk: vv for kk, vv in _otm_hedge_params().items() if kk not in ("position_limit", "strike", "strategy")},
+    )
+
+
+# =============================================================================
+# R4 VEV_5300 SIZING TUNE — match z_skip 0.5 (current 0.8)
+# Currently +1,535 PnL with z_skip=0.8 (gate restrictive). Try z_skip=0.5 like 4500-5100.
+# =============================================================================
+MEMBER_OVERRIDES["r4_velvet_v5300_z05"] = {
+    4: {
+        **{
+            sym: cfg
+            for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+        },
+        "VEV_5300": _override(
+            ROUND_4["VEV_5300"], position_limit=300, strike=5300,
+            **_r4_gamma_params(z_skip=0.5, with_iv_gate=True),
+        ),
+    },
+}
+
+
 # r3_combined_best — combine our best on each product, validate vs final_sub_v100
 MEMBER_OVERRIDES["r3_combined_best"] = {
     3: {
