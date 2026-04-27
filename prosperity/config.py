@@ -10212,23 +10212,6 @@ MEMBER_OVERRIDES["hydro_v201_influenced"] = {
     },
 }
 
-# Variant 3: Cancel-against — only strip orders that oppose Mark 14, keep all others
-MEMBER_OVERRIDES["hydro_v201_cancel_against"] = {
-    3: {
-        "HYDROGEL_PACK": ProductConfig(
-            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_cancel_against",
-            position_limit=200,
-            params=dict(**_HYDRO_V201_BASE_PARAMS)),
-        **_HYDRO_V201_NONE_PRODS,
-    },
-    4: {
-        "HYDROGEL_PACK": ProductConfig(
-            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_cancel_against",
-            position_limit=200,
-            params=dict(**_HYDRO_V201_BASE_PARAMS)),
-    },
-}
-
 # Baseline v200 round 4 reference
 MEMBER_OVERRIDES["hydro_v200_r4_ref"] = {
     4: {
