@@ -239,7 +239,8 @@
       "Bash(python backtest.py --strategy hydro_mv_v2 --round 4 --days 1 2 3 --match-trades realistic)",
       "Bash(python backtest.py --strategy hydro_mv_v2 --round 4 --days 1 --match-trades realistic)",
       "Bash(python backtest.py --strategy hydro_mv_v2 --round 4 --days 2 --match-trades realistic)",
-      "Bash(python backtest.py --strategy hydro_mv_v2 --round 4 --days 3 --match-trades realistic)"
+      "Bash(python backtest.py --strategy hydro_mv_v2 --round 4 --days 3 --match-trades realistic)",
+      "Bash(python scripts/export_submission.py --member hydro_mv_v5_best --round 4)"
     ]
   }
 }

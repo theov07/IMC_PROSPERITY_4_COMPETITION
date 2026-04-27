@@ -779,9 +779,10 @@ class HydroMVV5(BaseStrategy):
             bid_price=None, ask_price=None,
             extras={
                 "position":   position,
-                "deviation":  round(dev, 3),
-                "fair_value": round(fair_value, 3),
-                "m14_signal": signal,
+                # Capitalized keys match feature_prices() — viz auto-detects v5 from these
+                "DevSmooth":  round(dev, 3),
+                "FairValue":  round(fair_value, 3),
+                "M14Signal":  signal,
                 "bid_size":   int(bid_size),
                 "ask_size":   int(ask_size),
                 "sigma":      round(sigma, 4),
