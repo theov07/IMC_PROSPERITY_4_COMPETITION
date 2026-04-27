@@ -110,14 +110,12 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "aco_mm_modulaire":   ("prosperity/strategies/round_2/leo/aco_mm_modulaire.py", "AcoMMModulaireStrategy"),
     # ── Round 3 ──
     "option_mm_bs":       ("prosperity/strategies/round_3/option_mm_bs.py", "OptionMMBSStrategy"),
-<<<<<<< HEAD
     "r3_gamma_scalp_zgated": ("prosperity/strategies/round_3/velvet_option_layers.py", "GammaScalpZGatedStrategy"),
     "r3_smile_iv_scalper": ("prosperity/strategies/round_3/velvet_option_layers.py", "SmileIVScalperStrategy"),
     "theo_r3_vol_arb_v1": ("prosperity/strategies/round_3/theo/theo_r3_vol_arb_v1.py", "TheoR3VolArbV1Strategy"),
     "r3_live_defensive_mm": ("prosperity/strategies/round_3/live_defensive_mm.py", "R3LiveDefensiveMMStrategy"),
     "r3_guarded_anchor_mm": ("prosperity/strategies/round_3/guarded_anchor_mm.py", "R3GuardedAnchorMMStrategy"),
     "r3_hydro_reversion_mm": ("prosperity/strategies/round_3/hydro_reversion_mm.py", "R3HydroReversionMMStrategy"),
-=======
     "option_skew_signal_mm": ("prosperity/strategies/round_3/option_skew_signal_mm.py", "OptionSkewSignalMMStrategy"),
     "option_skew_dynamic_mm": ("prosperity/strategies/round_3/option_skew_dynamic_mm.py", "OptionSkewDynamicMMStrategy"),
     "option_live_probe_mm": ("prosperity/strategies/round_3/option_live_probe_mm.py", "OptionLiveProbeMMStrategy"),
@@ -215,7 +213,15 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "hydro_mm_v100":      ("prosperity/strategies/round_3/tibo/velvet_strat_v100.py", "HydroMMV100"),
     "velvet_mm_v200":     ("prosperity/strategies/round_3/tibo/velvet_strat_v200.py", "VelvetMMV200"),
     "gamma_scalp_v200":   ("prosperity/strategies/round_3/tibo/velvet_strat_v200.py", "GammaScalpV200"),
-    "hydro_mm_v200":      ("prosperity/strategies/round_3/tibo/hydro_strat_v200.py", "HydroMMV200"),
+    "hydro_mm_v200":               ("prosperity/strategies/round_4/tibo/hydro_strat_v200.py", "HydroMMV200"),
+    # ── Round 4 tibo ──
+    "hydro_mm_v200_r4":            ("prosperity/strategies/round_4/tibo/hydro_strat_v200.py", "HydroMMV200"),
+    "hydro_mm_v201_ruled":         ("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201Ruled"),
+    "hydro_mm_v201_influenced":    ("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201Influenced"),
+    "hydro_mm_v201_cancel_against":("prosperity/strategies/round_4/tibo/hydro_strat_v201.py", "HydroMMV201CancelAgainst"),
+    "hydro_mv_v4":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v4.py", "HydroMVV4"),
+    "hydro_mv_v5":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v5.py", "HydroMVV5"),
+    "hydro_mv_v6":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v6.py", "HydroMVV6"),
     # ── smile IV scalper ──
     "smile_iv_scalper":          ("prosperity/strategies/round_3/tibo/smile_iv_scalper.py", "SmileIVScalerStrategy"),
     # ── Theo v7 ──
@@ -229,7 +235,6 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "velvet_strat_v3":     ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetStratV3"),
     "velvet_strat_v3_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetMMV3"),
     "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
->>>>>>> origin/main
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -279,7 +284,6 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
         "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
         "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
     ],
-<<<<<<< HEAD
     "r3_gamma_scalp_zgated": [
         "prosperity/options/time.py",
         "prosperity/options/black_scholes.py",
@@ -297,11 +301,10 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
         "prosperity/options/black_scholes.py",
         "prosperity/options/implied_vol.py",
         "prosperity/options/smile.py",
-=======
+    ],
     "hydrogel_day2_oracle_anchor": [
         "prosperity/strategies/round_2/leo/mm_first_v4_combo.py",
         "prosperity/strategies/round_3/oracle_day2_l1_replay_hydro.py",
->>>>>>> origin/main
     ],
     "hydrogel_day2_oracle_guarded": [
         "prosperity/strategies/round_3/hydrogel_guarded_reversion_mm.py",
@@ -372,9 +375,7 @@ STRATEGY_DEPS: dict[str, list[str]] = {
     "theo_best_generalized": ["round1_regression_mm_v5"],
     "pepper_modulaire":      ["round1_regression_mm_v5"],
     "ask_exploit_modulaire": ["round1_regression_mm_v5"],
-<<<<<<< HEAD
     "r3_guarded_anchor_mm": ["mm_first_v4_combo"],
-=======
     "ms_regime_delta": ["option_mm_bs"],
     "ms_regime_option": ["option_mm_bs"],
     "velvet_strat_v25_mm":  ["velvet_strat_v3_mm", "gamma_scalp_zgated"],
@@ -437,7 +438,11 @@ STRATEGY_DEPS: dict[str, list[str]] = {
                           "velvet_strat_v3_opt"],
     "velvet_mm_v200":    ["mm_first_v4_combo", "r3_guarded_anchor_mm"],
     "gamma_scalp_v200":  ["mm_first_v4_combo", "r3_guarded_anchor_mm"],
-    "hydro_mm_v200":     ["mm_first_v4_combo", "r3_guarded_anchor_mm"],
+    "hydro_mm_v200":               ["mm_first_v4_combo", "r3_guarded_anchor_mm"],
+    "hydro_mm_v200_r4":            ["mm_first_v4_combo", "r3_guarded_anchor_mm"],
+    "hydro_mm_v201_ruled":         ["hydro_mm_v200"],
+    "hydro_mm_v201_influenced":    ["hydro_mm_v200"],
+    "hydro_mm_v201_cancel_against":["hydro_mm_v200"],
     # ── v30 — all live in velvet_strat_v30.py which imports GammaScalpWithAsk
     # from velvet_strat_v40.py, so the full v28+v40 chain must precede it. ──
     "gamma_scalp_smile_v30_vev4500":    ["velvet_strat_v3_mm", "gamma_scalp_zgated",
@@ -464,7 +469,6 @@ STRATEGY_DEPS: dict[str, list[str]] = {
                                           "mm_first_v4_combo", "r3_guarded_anchor_mm",
                                           "theo_v7_velvet_mm", "theo_v7_gamma_scalp",
                                           "velvet_strat_v28_mm", "gamma_scalp_with_ask_v40"],
->>>>>>> origin/main
 }
 
 # Params useful for local analysis/backtests but pointless in the live upload.
@@ -871,13 +875,19 @@ def main() -> int:
     print(f"Wrote {output_path} ({len(output):,} bytes)")
     print(f"Inlined : {', '.join(module_files)}")
     print(f"Strategies: {', '.join(sorted(needed))}")
+    print(f"UPLOAD THIS FILE TO PROSPERITY: {output_path}")
 
     _validate(output_path, products)
 
     # Write the submissions/ wrapper so the backtester can import it directly.
     wrapper_path = ROOT / "submissions" / f"{args.member}.py"
     wrapper = dedent(f'''\
-        """Backtester entrypoint — {args.member}."""
+        """Backtester entrypoint — {args.member}.
+
+        Local backtesting wrapper only.
+        DO NOT upload this file to Prosperity/IMC.
+        Upload the generated artifact under artifacts/submissions instead.
+        """
 
         from prosperity.config import get_round_config
         from prosperity.persistence import dump_state, load_state
@@ -919,7 +929,7 @@ def main() -> int:
                 return result, convs, dump_state(saved), features
         ''')
     wrapper_path.write_text(wrapper, encoding="utf-8")
-    print(f"Wrote {wrapper_path}")
+    print(f"Wrote local backtest wrapper: {wrapper_path}")
 
     return 0
 

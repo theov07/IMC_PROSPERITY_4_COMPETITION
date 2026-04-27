@@ -6,23 +6,24 @@ counterparty's activity, PnL, and inventory.
 
 Usage:
     # Single day
-    python -m prosperity.tooling.counterparties_analysis \\
-        --prices data/round_4/prices_round_4_day_1.csv \\
-        --trades data/round_4/trades_round_4_day_1.csv \\
+    python -m prosperity.tooling.counterparties_analysis \
+        --prices data/round_4/prices_round_4_day_1.csv \
+        --trades data/round_4/trades_round_4_day_1.csv \
         --out artifacts/analysis/round_4/counterparties.html
 
     # Multi-day (days chained in timestamp order)
-    python -m prosperity.tooling.counterparties_analysis \\
-        --prices data/round_4/prices_round_4_day_{1,2,3}.csv \\
-        --trades data/round_4/trades_round_4_day_{1,2,3}.csv \\
+    python -m prosperity.tooling.counterparties_analysis \
+        --prices data/round_4/prices_round_4_day_{1,2,3}.csv \
+        --trades data/round_4/trades_round_4_day_{1,2,3}.csv \
         --out artifacts/analysis/round_4/counterparties_all.html
 
     # Single product
-    python -m prosperity.tooling.counterparties_analysis \\
-        --prices data/round_4/prices_round_4_day_1.csv \\
-        --trades data/round_4/trades_round_4_day_1.csv \\
-        --product VELVETFRUIT_EXTRACT \\
-        --out artifacts/analysis/round_4/velvet_counterparties.html
+    python -m prosperity.tooling.counterparties_analysis \
+    --prices data/round_4/prices_round_4_day_1.csv \
+    --trades data/round_4/trades_round_4_day_1.csv \
+    --product HYDROGEL_PACK \
+    --out artifacts/analysis/round_4/hydro_counterparties.html
+
 """
 from __future__ import annotations
 
@@ -340,6 +341,65 @@ def _build_data(
     }
 
 
+# ── Z-score series ────────────────────────────────────────────────────────────
+
+def _compute_zscore_series(mkt: Dict, window: int, smoothing: int) -> Dict:
+    """Compute rolling z-score and ±1/±2 std bands on mid price (subsampled ×10)."""
+    mid = mkt["mid"]
+    ts  = mkt["ts"]
+    n   = len(mid)
+
+    means:    List[Optional[float]] = [None] * n
+    std1_up:  List[Optional[float]] = [None] * n
+    std1_dn:  List[Optional[float]] = [None] * n
+    std2_up:  List[Optional[float]] = [None] * n
+    std2_dn:  List[Optional[float]] = [None] * n
+    zscores:  List[Optional[float]] = [None] * n
+
+    for i in range(n):
+        start  = max(0, i - window + 1)
+        vals   = [v for v in mid[start : i + 1] if v is not None]
+        if len(vals) < 2:
+            continue
+        mu     = sum(vals) / len(vals)
+        sigma  = math.sqrt(sum((v - mu) ** 2 for v in vals) / len(vals))
+        means[i]   = mu
+        std1_up[i] = mu + sigma
+        std1_dn[i] = mu - sigma
+        std2_up[i] = mu + 2 * sigma
+        std2_dn[i] = mu - 2 * sigma
+        if sigma > 0 and mid[i] is not None:
+            zscores[i] = (mid[i] - mu) / sigma
+
+    # EWMA smoothing on z-score
+    if smoothing > 1:
+        alpha    = 2.0 / (smoothing + 1)
+        smoothed: List[Optional[float]] = [None] * n
+        prev: Optional[float] = None
+        for i in range(n):
+            z = zscores[i]
+            if z is None:
+                smoothed[i] = prev
+            elif prev is None:
+                smoothed[i] = z
+                prev = z
+            else:
+                prev = alpha * z + (1.0 - alpha) * prev
+                smoothed[i] = prev
+        zscores = smoothed
+
+    step = 10
+    return {
+        "ts":      ts[::step],
+        "mean":    means[::step],
+        "std1_up": std1_up[::step],
+        "std1_dn": std1_dn[::step],
+        "std2_up": std2_up[::step],
+        "std2_dn": std2_dn[::step],
+        "zs":      zscores[::step],
+    }
+
+
 # ── HTML / CSS / JS ───────────────────────────────────────────────────────────
 
 CSS = """
@@ -387,8 +447,9 @@ h3 { color: #89dceb; margin: 0.6em 0 0.3em; font-size: 1em; }
 
 /* Charts */
 .chart-container { margin-bottom: 1em; border-radius: 8px; overflow: hidden; }
-.chart      { height: 360px; }
-.chart-tall { height: 500px; }
+.chart        { height: 360px; }
+.chart-tall   { height: 500px; }
+.chart-short  { height: 180px; }
 .product-panel { display: none; }
 .trader-panel  { display: none; }
 
@@ -406,7 +467,12 @@ function showProductPanel(safe) {
   var btn = document.getElementById('prod_btn_' + safe);
   if (btn) { btn.classList.add('active'); }
   var fn = window['plot_prod_' + safe];
-  if (fn && panel && !panel.dataset.plotted) { fn(); panel.dataset.plotted = '1'; }
+  if (fn && panel && !panel.dataset.plotted) {
+    fn();
+    var zfn = window['plot_zscore_' + safe];
+    if (zfn) { zfn(); }
+    panel.dataset.plotted = '1';
+  }
 }
 
 function showTraderPanel(safe) {
@@ -499,14 +565,16 @@ def _summary_html(data: Dict[str, Any]) -> str:
 # ── Price + trades chart per product ──────────────────────────────────────────
 
 def _price_chart_js(prod: str, mkt: Dict, traders: List[str],
-                    trader_analytics: Dict[str, Dict]) -> str:
-    """JS function that plots market bid/ask + all traders' fills for one product."""
+                    trader_analytics: Dict[str, Dict],
+                    zs_data: Optional[Dict] = None) -> str:
+    """JS function that plots market bid/ask + mid bands + all traders' fills."""
     safe = _jsid(prod)
 
     # Subsample market data every 10 ticks
     ts_s   = mkt["ts"][::10]
     bid_s  = mkt["bid1"][::10]
     ask_s  = mkt["ask1"][::10]
+    mid_s  = mkt["mid"][::10]
 
     traces: List[str] = [
         f"""{{
@@ -521,7 +589,50 @@ def _price_chart_js(prod: str, mkt: Dict, traders: List[str],
       line:{{color:'#f38ba8',width:1.5}},
       hovertemplate:'<b>Ask</b>: %{{y}}<extra></extra>'
     }}""",
+        f"""{{
+      x:{_json_list(ts_s)}, y:{_json_list(mid_s)},
+      name:'Mid', mode:'lines',
+      line:{{color:'#cdd6f4',width:1}},
+      hovertemplate:'<b>Mid</b>: %{{y}}<extra></extra>'
+    }}""",
     ]
+
+    # ±1std and ±2std bands from z-score series
+    if zs_data:
+        zts = _json_list(zs_data["ts"])
+        traces += [
+            f"""{{
+      x:{zts}, y:{_json_list(zs_data['std2_up'])},
+      name:'+2σ', mode:'lines',
+      line:{{color:'#6c7086',width:1,dash:'dot'}},
+      hovertemplate:'+2σ: %{{y}}<extra></extra>'
+    }}""",
+            f"""{{
+      x:{zts}, y:{_json_list(zs_data['std2_dn'])},
+      name:'-2σ', mode:'lines',
+      line:{{color:'#6c7086',width:1,dash:'dot'}},
+      hovertemplate:'-2σ: %{{y}}<extra></extra>'
+    }}""",
+            f"""{{
+      x:{zts}, y:{_json_list(zs_data['std1_up'])},
+      name:'+1σ', mode:'lines',
+      line:{{color:'#9399b2',width:1,dash:'dash'}},
+      hovertemplate:'+1σ: %{{y}}<extra></extra>'
+    }}""",
+            f"""{{
+      x:{zts}, y:{_json_list(zs_data['std1_dn'])},
+      name:'-1σ', mode:'lines',
+      line:{{color:'#9399b2',width:1,dash:'dash'}},
+      hovertemplate:'-1σ: %{{y}}<extra></extra>'
+    }}""",
+            f"""{{
+      x:{zts}, y:{_json_list(zs_data['mean'])},
+      name:'Rolling mean', mode:'lines',
+      line:{{color:'#a6adc8',width:1,dash:'longdash'}},
+      hovertemplate:'Mean: %{{y}}<extra></extra>'
+    }}""",
+        ]
+
 
     for i, trader in enumerate(traders):
         fills = [f for f in trader_analytics[trader]["fills"] if f["prod"] == prod]
@@ -574,6 +685,49 @@ def _price_chart_js(prod: str, mkt: Dict, traders: List[str],
     Plotly.newPlot('prod_{safe}_chart', [
     {traces_js}
     ], layout, {{responsive:true}});
+  }}"""
+
+
+def _zscore_chart_js(prod: str, zs_data: Optional[Dict]) -> str:
+    """JS function that plots the rolling z-score for one product."""
+    safe = _jsid(prod)
+    if not zs_data:
+        return f"""
+  function plot_zscore_{safe}() {{
+    document.getElementById('prod_{safe}_zscore').innerHTML =
+      '<p style="color:#6c7086;padding:1em">No z-score data.</p>';
+  }}"""
+
+    zts = _json_list(zs_data["ts"])
+    zs  = _json_list(zs_data["zs"])
+
+    ref_lines = """
+      {type:'line', xref:'paper', x0:0, x1:1, yref:'y',
+       y0:0, y1:0, line:{color:'#cdd6f4',width:1,dash:'solid'}},
+      {type:'line', xref:'paper', x0:0, x1:1, yref:'y',
+       y0:1, y1:1, line:{color:'#9399b2',width:1,dash:'dash'}},
+      {type:'line', xref:'paper', x0:0, x1:1, yref:'y',
+       y0:-1, y1:-1, line:{color:'#9399b2',width:1,dash:'dash'}},
+      {type:'line', xref:'paper', x0:0, x1:1, yref:'y',
+       y0:2, y1:2, line:{color:'#6c7086',width:1,dash:'dot'}},
+      {type:'line', xref:'paper', x0:0, x1:1, yref:'y',
+       y0:-2, y1:-2, line:{color:'#6c7086',width:1,dash:'dot'}},"""
+
+    return f"""
+  function plot_zscore_{safe}() {{
+    var layout = Object.assign({{}}, {_layout_js()}, {{
+      title: '{prod} — Rolling Z-score',
+      yaxis: {{title:'z-score', gridcolor:'#313244', zeroline:false}},
+      shapes: [{ref_lines}
+      ],
+      margin: {{t:30, b:36, l:55, r:20}},
+    }});
+    Plotly.newPlot('prod_{safe}_zscore', [{{
+      x:{zts}, y:{zs},
+      name:'z-score', mode:'lines',
+      line:{{color:'#cba6f7',width:1.5}},
+      hovertemplate:'z: %{{y:.2f}}<extra></extra>'
+    }}], layout, {{responsive:true}});
   }}"""
 
 
@@ -709,11 +863,24 @@ def _trader_pnl_table_html(trader: str, analytics: Dict, products: List[str]) ->
 
 # ── Assemble HTML ─────────────────────────────────────────────────────────────
 
-def generate_html(data: Dict[str, Any], output_path: Path, title: str = "") -> None:
+def generate_html(
+    data: Dict[str, Any],
+    output_path: Path,
+    title: str = "",
+    zscore_window: int = 50,
+    zscore_smoothing: int = 10,
+) -> None:
     products         = data["products"]
     traders          = data["traders"]
     analytics        = data["trader_analytics"]
     market_by_prod   = data["market_by_prod"]
+
+    # Pre-compute z-score series per product
+    zscore_by_prod: Dict[str, Dict] = {
+        prod: _compute_zscore_series(market_by_prod[prod], zscore_window, zscore_smoothing)
+        for prod in products
+        if prod in market_by_prod
+    }
 
     # ── Summary table ────────────────────────────────────────────────────────
     summary_html = _summary_html(data)
@@ -745,6 +912,9 @@ def generate_html(data: Dict[str, Any], output_path: Path, title: str = "") -> N
   <div class="chart-container">
     <div id="prod_{safe}_chart" class="chart chart-tall"></div>
   </div>
+  <div class="chart-container">
+    <div id="prod_{safe}_zscore" class="chart-short"></div>
+  </div>
 </div>"""
     prod_tab_bar += "</div>"
 
@@ -771,7 +941,10 @@ def generate_html(data: Dict[str, Any], output_path: Path, title: str = "") -> N
 
     # ── JS chart functions ───────────────────────────────────────────────────
     js_prod_fns = "\n".join(
-        _price_chart_js(prod, market_by_prod[prod], traders, analytics)
+        _price_chart_js(prod, market_by_prod[prod], traders, analytics,
+                        zs_data=zscore_by_prod.get(prod))
+        + "\n"
+        + _zscore_chart_js(prod, zscore_by_prod.get(prod))
         for prod in products
         if prod in market_by_prod
     )
@@ -857,6 +1030,10 @@ def main() -> None:
                         help="Filter to a single product symbol (default: all)")
     parser.add_argument("--out", default=None,
                         help="Output HTML path (default: auto-derived from first prices file)")
+    parser.add_argument("--zscore-window", type=int, default=50, metavar="N",
+                        help="Rolling window size for z-score computation (default: 50)")
+    parser.add_argument("--zscore-smoothing", type=int, default=10, metavar="N",
+                        help="EWMA smoothing period applied to z-score output (default: 10)")
     args = parser.parse_args()
 
     price_paths = [ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.prices]
@@ -897,7 +1074,9 @@ def main() -> None:
     title = " | ".join(title_parts)
 
     print("Generating HTML ...")
-    generate_html(data, out_path, title)
+    generate_html(data, out_path, title,
+                  zscore_window=args.zscore_window,
+                  zscore_smoothing=args.zscore_smoothing)
     print("Done.")
 
 
