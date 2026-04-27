@@ -8072,10 +8072,7 @@ MEMBER_OVERRIDES["r3_vol_harvest_champion"] = {
         "VELVETFRUIT_EXTRACT": _override(
             ROUND_3["VELVETFRUIT_EXTRACT"],
             strategy="r3_live_defensive_mm",
-            strategy="r3_live_defensive_mm",
             position_limit=200,
-            **_R3_LIVE_DEFENSIVE_PARAMS,
-        ),
             **_R3_LIVE_DEFENSIVE_PARAMS,
         ),
         # VEV options: vol_harvest strategy (orphan velvet_delta_hedger params dropped — bad merge artifact)
@@ -13034,6 +13031,389 @@ MEMBER_OVERRIDES["r4_velvet_options_only"] = {
         ),
         "VEV_5400": _r4_tibo_vev_mm(5400, prevent_crossing=True),
         **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
+    },
+}
+
+
+# =============================================================================
+# R4 EOD UNWIND — fix D3 last-5% crash (-53k bleed: VELVET drops 0.86%, options
+# long bleed 30-50%). Adds end-of-day inventory unwind to baseline.
+# Params:
+#   eod_unwind_start_pct = 0.85     → start unwinding at 85% of day
+#   eod_unwind_aggressive_pct = 0.93 → switch to aggressive (taker) at 93%
+#   eod_unwind_full_flat_pct = 0.99 → target 0 position by 99%
+# =============================================================================
+_R4_EOD_PARAMS = dict(
+    eod_unwind_start_pct=0.85,
+    eod_unwind_aggressive_pct=0.93,
+    eod_unwind_full_flat_pct=0.99,
+)
+
+
+def _with_eod(cfg):
+    """Merge EOD params into an existing ProductConfig.params dict."""
+    if cfg is None:
+        return None
+    new_params = dict(cfg.params)
+    new_params.update(_R4_EOD_PARAMS)
+    return _override(cfg, **new_params)
+
+
+# r4_velvet_eod_v1 — baseline + EOD inventory unwind (last 15% of day = flatten)
+MEMBER_OVERRIDES["r4_velvet_eod_v1"] = {
+    4: {
+        sym: _with_eod(cfg)
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_eod_aggressive — earlier start, more aggressive flatten
+MEMBER_OVERRIDES["r4_velvet_eod_aggressive"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                eod_unwind_start_pct=0.75,
+                eod_unwind_aggressive_pct=0.88,
+                eod_unwind_full_flat_pct=0.97,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_eod_v4 — last 5% only (matches the D3 crash window exactly)
+MEMBER_OVERRIDES["r4_velvet_eod_v4"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                eod_unwind_start_pct=0.95,
+                eod_unwind_aggressive_pct=0.97,
+                eod_unwind_full_flat_pct=0.995,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_eod_v5 — last 3% only (very late start, tries to capture max upside)
+MEMBER_OVERRIDES["r4_velvet_eod_v5"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                eod_unwind_start_pct=0.97,
+                eod_unwind_aggressive_pct=0.985,
+                eod_unwind_full_flat_pct=0.998,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_eod_v1_trend — eod_v1 + trend_gate on VELVET (block BUYs when downtrend + already long)
+MEMBER_OVERRIDES["r4_velvet_eod_v1_trend"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                eod_unwind_start_pct=0.85,
+                eod_unwind_aggressive_pct=0.93,
+                eod_unwind_full_flat_pct=0.99,
+                trend_gate_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                trend_gate_long_block_pos=50,
+                trend_ema_fast_alpha=0.05,
+                trend_ema_slow_alpha=0.005,
+                trend_threshold=1.0,
+                trend_warmup_ticks=200,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_eod_conservative — only last 8% flatten
+MEMBER_OVERRIDES["r4_velvet_eod_conservative"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                eod_unwind_start_pct=0.92,
+                eod_unwind_aggressive_pct=0.96,
+                eod_unwind_full_flat_pct=0.995,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# =============================================================================
+# R4 CONDITIONAL VARIANTS (no time-based EOD) — react to market state
+# =============================================================================
+
+# r4_velvet_trend_only — baseline + trend gate on VELVET only (no EOD)
+# Block BUYs when (EMA_fast - EMA_slow) < -trend_threshold AND position >= trend_gate_long_block_pos
+MEMBER_OVERRIDES["r4_velvet_trend_only"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                trend_gate_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                trend_gate_long_block_pos=50,
+                trend_ema_fast_alpha=0.05,
+                trend_ema_slow_alpha=0.005,
+                trend_threshold=0.5,        # lowered from 1.0 to actually fire
+                trend_warmup_ticks=200,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_trend_aggressive — trend_only with threshold=0.3 (more sensitive)
+MEMBER_OVERRIDES["r4_velvet_trend_aggressive"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                trend_gate_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                trend_gate_long_block_pos=30,
+                trend_ema_fast_alpha=0.10,
+                trend_ema_slow_alpha=0.01,
+                trend_threshold=0.3,
+                trend_warmup_ticks=100,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_stoploss_v1 — baseline + intraday stop-loss (per-product flatten on big drawdown)
+# Stop-loss = 30k drawdown from per-product peak, min peak 5k before fires
+MEMBER_OVERRIDES["r4_velvet_stoploss_v1"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                stop_loss_drawdown_pnl=30000,
+                stop_loss_min_peak=5000,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_stoploss_tight — tighter 15k drawdown (more sensitive)
+MEMBER_OVERRIDES["r4_velvet_stoploss_tight"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                stop_loss_drawdown_pnl=15000,
+                stop_loss_min_peak=3000,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_dhedge_v1 — delta-hedge VELVET to net out option deltas
+# When we're long calls, target VELVET position drifts negative (short underlying).
+# Should auto-protect against the D3 crash (long calls + falling underlying = bleed).
+MEMBER_OVERRIDES["r4_velvet_dhedge_v1"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                delta_hedge_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                delta_hedge_strength=1.0,        # full hedge
+                delta_hedge_implied_vol=0.0125,  # match option prior_vol
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_dhedge_partial — half-hedge (50% of option delta)
+MEMBER_OVERRIDES["r4_velvet_dhedge_partial"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                delta_hedge_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                delta_hedge_strength=0.5,
+                delta_hedge_implied_vol=0.0125,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_vwap_gate — block BUYs when mid below rolling VWAP and already long
+# Discovery: on D3, mid finishes -27 below VWAP(50k window) — clean trend signal
+# that EMA fast/slow missed. Should protect against the D3 crash.
+MEMBER_OVERRIDES["r4_velvet_vwap_gate"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                vwap_gate_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                vwap_gate_long_block_pos=50,
+                vwap_threshold=8.0,
+                vwap_min_volume=50.0,
+                vwap_decay_alpha=0.005,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_vwap_gate_tight — tighter threshold (fires more often)
+MEMBER_OVERRIDES["r4_velvet_vwap_gate_tight"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                vwap_gate_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                vwap_gate_long_block_pos=30,
+                vwap_threshold=4.0,
+                vwap_min_volume=30.0,
+                vwap_decay_alpha=0.01,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cond_unwind — VWAP-triggered active unwind on VELVET only
+# Tuned params for sparse VELVET trade flow (~0.65 qty/tick avg):
+#   - min_vol = 0.1 (was 50, never fired)
+#   - decay_alpha = 0.02 (faster EMA, ~35-tick half-life)
+MEMBER_OVERRIDES["r4_velvet_cond_unwind"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                cond_unwind_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cond_unwind_min_pos=50,
+                cond_unwind_chunk_pct=0.05,
+                cond_unwind_use_vwap=True,
+                vwap_threshold=8.0,
+                vwap_min_volume=0.1,
+                vwap_decay_alpha=0.02,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cond_unwind_strict — VWAP gate only fires if signal persistent (D3 only)
+# Higher threshold (25) + longer rolling window (200000 = 20%) to suppress noise
+MEMBER_OVERRIDES["r4_velvet_cond_unwind_strict"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                cond_unwind_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cond_unwind_min_pos=100,        # only fire when > 100 long
+                cond_unwind_chunk_pct=0.03,
+                cond_unwind_use_vwap=True,
+                vwap_threshold=25.0,            # strict threshold (only crash signal)
+                vwap_min_volume=50.0,
+                vwap_window_ts=200000,          # 20% rolling window (less noisy)
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cond_unwind_aggressive — bigger unwind chunks (10%/tick)
+MEMBER_OVERRIDES["r4_velvet_cond_unwind_aggressive"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                cond_unwind_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cond_unwind_min_pos=30,
+                cond_unwind_chunk_pct=0.10,
+                cond_unwind_use_vwap=True,
+                vwap_threshold=4.0,
+                vwap_min_volume=30.0,
+                vwap_decay_alpha=0.01,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cond_unwind_all_products — also enabled on options (which got crushed on D3)
+MEMBER_OVERRIDES["r4_velvet_cond_unwind_all"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                cond_unwind_enabled=True,  # All products
+                cond_unwind_min_pos=50,
+                cond_unwind_chunk_pct=0.05,
+                cond_unwind_use_vwap=True,
+                vwap_threshold=8.0,
+                vwap_min_volume=50.0,
+                vwap_decay_alpha=0.005,
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
     },
 }
 

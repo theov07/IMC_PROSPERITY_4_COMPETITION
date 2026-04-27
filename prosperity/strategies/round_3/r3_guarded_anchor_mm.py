@@ -1,5 +1,11 @@
 """R3GuardedAnchorMM — MMFirstV4Combo + guard logic on VELVET.
 
+Optional delta-hedge layer (R4): when `delta_hedge_enabled=True`, override the
+position passed to the parent strategy by `position - target_velvet_pos`, where
+`target_velvet_pos = -sum_K(delta_K * pos_K)` across VEV options. This makes
+the inventory-skew machinery push quotes to bring net portfolio delta to 0.
+
+
 Theo's discovery (v5_guardedtuned, +74k VELVET vs our +27k with naive R2 anchor):
 
 The anchor pull (toward fixed mid 5250) is GREAT when price is mean-reverting
@@ -29,7 +35,16 @@ from typing import Any, Dict, List, Tuple
 from datamodel import Order, OrderDepth, TradingState
 
 from prosperity.market import BookSnapshot
+from prosperity.options.black_scholes import call_delta
+from prosperity.options.time import (
+    resolve_initial_tte_days,
+    time_to_expiry_days,
+    timestamp_units_per_day_from_params,
+)
 from prosperity.strategies.round_2.leo.mm_first_v4_combo import MMFirstV4ComboStrategy
+
+# VEV strikes used for delta-hedge aggregation
+_VEV_STRIKES = [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
 
 
 class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
@@ -44,9 +59,52 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
         memory: Dict[str, Any],
     ) -> Tuple[List[Order], int]:
         mid = book.mid_price
+
+        # Delta-hedge layer (opt-in): inject inventory_target so MMFirstV4Combo's
+        # skew/sizing helpers treat real_pos - target as the effective inventory.
+        dh_saved_target = None
+        if bool(self.params.get("delta_hedge_enabled", False)) and mid is not None:
+            target_pos = self._compute_velvet_hedge_target(state, float(mid), memory)
+            memory["_dh_target_pos"] = target_pos
+            hedge_strength = float(self.params.get("delta_hedge_strength", 1.0))
+            scaled_target = int(round(target_pos * hedge_strength))
+            memory["_dh_scaled_target"] = scaled_target
+            dh_saved_target = self.params.get("inventory_target", 0)
+            self.params["inventory_target"] = scaled_target
+
+        try:
+            return self._compute_orders_inner(state, book, order_depth, position, memory, mid)
+        finally:
+            if dh_saved_target is not None:
+                self.params["inventory_target"] = dh_saved_target
+
+    def _compute_orders_inner(
+        self,
+        state: TradingState,
+        book: BookSnapshot,
+        order_depth: OrderDepth,
+        position: int,
+        memory: Dict[str, Any],
+        mid,
+    ) -> Tuple[List[Order], int]:
         anchor = self.params.get("anchor_price")
         if mid is None or anchor is None:
             return super().compute_orders(state, book, order_depth, position, memory)
+
+        # Trend gate (opt-in via params): when downtrend persistent, disable
+        # bullish mean-rev BUYs (the cause of the D3 last-5% bleed in R4 baseline).
+        if bool(self.params.get("trend_gate_enabled", False)):
+            trend_dir = self._trend_direction(float(mid), memory)
+            memory["_trend_dir"] = trend_dir
+            if trend_dir == -1 and position >= int(self.params.get("trend_gate_long_block_pos", 0)):
+                return self._run_trend_blocked(state, book, order_depth, position, memory)
+
+        # VWAP gate (opt-in via params): more robust trend signal than EMA-fast/slow.
+        if bool(self.params.get("vwap_gate_enabled", False)):
+            vwap_dir = self._vwap_signal(state, float(mid), memory)
+            memory["_vwap_dir"] = vwap_dir
+            if vwap_dir == -1 and position >= int(self.params.get("vwap_gate_long_block_pos", 0)):
+                return self._run_trend_blocked(state, book, order_depth, position, memory)
 
         use_anchor = self._use_anchor(float(mid), float(anchor), position, memory)
         memory["_guard_use_anchor"] = int(use_anchor)
@@ -55,6 +113,72 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             return super().compute_orders(state, book, order_depth, position, memory)
 
         # Disable anchor + takers, run as pure passive MM
+        old_anchor = self.params.get("anchor_price")
+        old_ar = self.params.get("ar_gain")
+        old_take_lo = self.params.get("take_edge_lo")
+        old_take_hi = self.params.get("take_edge_hi")
+        try:
+            self.params["anchor_price"] = None
+            self.params["ar_gain"] = 0.0
+            self.params["take_edge_lo"] = 1_000_000.0
+            self.params["take_edge_hi"] = 1_000_000.0
+            return super().compute_orders(state, book, order_depth, position, memory)
+        finally:
+            self.params["anchor_price"] = old_anchor
+            self.params["ar_gain"] = old_ar
+            self.params["take_edge_lo"] = old_take_lo
+            self.params["take_edge_hi"] = old_take_hi
+
+    def _compute_velvet_hedge_target(
+        self,
+        state: TradingState,
+        mid: float,
+        memory: Dict[str, Any],
+    ) -> int:
+        """Compute target VELVET position to delta-hedge our option portfolio.
+
+        Sum across all VEV_K options held: delta_K * pos_K
+        Target VELVET = -sum (so portfolio delta = 0).
+        Capped at +/- velvet position_limit.
+        """
+        # Use VELVET prior_vol if set, else default
+        iv = float(self.params.get("delta_hedge_implied_vol", 0.0125))
+        # Compute T from initial TTE + day mapping
+        ts_per_day = timestamp_units_per_day_from_params(self.params)
+        tte0 = resolve_initial_tte_days(
+            getattr(state, "traderData", "") or "",
+            self.params.get("tte_days_initial", 4.0),
+            self.params.get("historical_tte_by_day"),
+        )
+        T_days = time_to_expiry_days(int(state.timestamp), tte0,
+                                     timestamp_units_per_day=ts_per_day)
+        T_years = max(T_days / 365.0, 1e-6)
+
+        total_delta = 0.0
+        for K in _VEV_STRIKES:
+            sym = f"VEV_{K}"
+            pos = state.position.get(sym, 0)
+            if pos == 0:
+                continue
+            d = call_delta(mid, float(K), T_years, iv)
+            total_delta += d * pos
+
+        target = -int(round(total_delta))
+        # Cap at +/- VELVET position limit (default 200)
+        cap = int(self.params.get("position_limit", 200))
+        target = max(-cap, min(cap, target))
+        memory["_dh_total_delta"] = total_delta
+        return target
+
+    def _run_trend_blocked(
+        self,
+        state: TradingState,
+        book: BookSnapshot,
+        order_depth: OrderDepth,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> Tuple[List[Order], int]:
+        """Same as guard-off mode (pure passive penny-improve, no anchor, no taker)."""
         old_anchor = self.params.get("anchor_price")
         old_ar = self.params.get("ar_gain")
         old_take_lo = self.params.get("take_edge_lo")
@@ -112,4 +236,6 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             out["GuardTrend"] = float(trend)
         if (use_anchor := memory.get("_guard_use_anchor")) is not None:
             out["GuardOn"] = float(use_anchor)
+        if (trend_dir := memory.get("_trend_dir")) is not None:
+            out["TrendDir"] = float(trend_dir)
         return out

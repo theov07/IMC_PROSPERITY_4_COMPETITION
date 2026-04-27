@@ -45,13 +45,26 @@ class BaseStrategy(ABC):
         position = state.position.get(self.product, 0)
         book = snapshot_from_order_depth(self.product, order_depth)
 
-        return self.compute_orders(
+        orders, conversions = self.compute_orders(
             state=state,
             book=book,
             order_depth=order_depth,
             position=position,
             memory=memory,
         )
+
+        # Risk management filters (all opt-in via params; no-op when params absent):
+        # 1. Intraday stop-loss (PnL drawdown trigger — robust, not time-based)
+        orders = self._apply_intraday_stop_loss(state, position, orders, book, memory)
+        # 2. Conditional aggressive unwind (VWAP signal trigger — robust, not time-based).
+        #    THIS is the cleanest catch for the D3 crash: when mid << VWAP and we're long,
+        #    actively flatten position chunk-by-chunk regardless of clock.
+        orders = self._apply_conditional_unwind(state, position, orders, book, memory)
+        # 3. End-of-day inventory unwind (time-based — opt-in for emergencies only,
+        #    DISABLED by default after we found it overfits to D3 crash)
+        orders = self._apply_eod_unwind(state, position, orders, book)
+
+        return orders, conversions
 
     @abstractmethod
     def compute_orders(
@@ -318,3 +331,345 @@ class BaseStrategy(ABC):
 
     def sell_capacity(self, position: int) -> int:
         return max(0, self.position_limit() + position)
+
+    # ------------------------------------------------------------------
+    # End-of-day inventory unwind (R4 D3 crash protection)
+    # ------------------------------------------------------------------
+    def _apply_eod_unwind(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+    ) -> List[Order]:
+        """Force inventory toward 0 in the last X% of the day.
+
+        Params (read from self.params; all optional, defaults disable behavior):
+          eod_unwind_start_pct      : start unwinding at this fraction of day (0.85 = last 15%)
+          eod_unwind_aggressive_pct : at this fraction, switch to aggressive taker (0.95)
+          eod_unwind_full_flat_pct  : at this fraction, force position toward 0 (0.99)
+          last_ts_value             : last timestamp of the day (default 999900)
+
+        Behavior:
+          - progress < eod_unwind_start_pct: no change to orders.
+          - eod_start <= progress < eod_aggressive: drop orders that increase |position|.
+          - eod_aggressive <= progress: drop increasing orders + add taker to reduce position
+            toward target (target shrinks linearly to 0 by eod_full_flat).
+        """
+        eod_start = float(self.params.get("eod_unwind_start_pct", 0.0))
+        if eod_start <= 0 or eod_start >= 1.0:
+            return orders  # disabled
+
+        last_ts = float(self.params.get("last_ts_value", 999900))
+        progress = float(state.timestamp) / max(last_ts, 1.0)
+        if progress < eod_start:
+            return orders
+
+        eod_agg = float(self.params.get("eod_unwind_aggressive_pct", 0.95))
+        eod_full = float(self.params.get("eod_unwind_full_flat_pct", 0.99))
+
+        # Target position: linear ramp from `position` at progress=eod_start
+        # down to 0 at progress=eod_full.
+        if progress >= eod_full:
+            target_pos = 0
+        else:
+            ramp = (progress - eod_start) / max(eod_full - eod_start, 1e-9)
+            target_pos = int(round(position * (1.0 - ramp)))
+
+        # Filter: drop any order that grows |position| (we always want to shrink in EOD)
+        filtered: List[Order] = []
+        for o in orders:
+            new_pos = position + o.quantity
+            if abs(new_pos) > abs(position):
+                continue  # would grow inventory — drop
+            filtered.append(o)
+
+        # Aggressive phase: if position is still away from target, add a taker order
+        delta = target_pos - position
+        if progress >= eod_agg and delta != 0:
+            if delta > 0 and book.best_ask is not None:
+                # Need to BUY — take the ask
+                avail = book.best_ask_volume or abs(delta)
+                qty = min(int(delta), int(avail))
+                if qty > 0:
+                    filtered.append(Order(self.product, int(book.best_ask), qty))
+            elif delta < 0 and book.best_bid is not None:
+                # Need to SELL — take the bid
+                avail = book.best_bid_volume or abs(delta)
+                qty = max(int(delta), -int(avail))
+                if qty < 0:
+                    filtered.append(Order(self.product, int(book.best_bid), qty))
+
+        return filtered
+
+    # ------------------------------------------------------------------
+    # Intraday stop-loss (flatten when peak-to-current PnL drawdown exceeds threshold)
+    # Activates ONLY on outlier days — robust, not time-based.
+    # ------------------------------------------------------------------
+    def _apply_intraday_stop_loss(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """Flatten position when intraday PnL drawdown from peak exceeds limit.
+
+        Params:
+          stop_loss_drawdown_pnl  : if (peak_pnl - current_pnl) > this, flatten (default 0 = disabled)
+          stop_loss_min_peak      : minimum peak PnL before stop-loss can fire (default 5000)
+
+        Approximate per-product PnL using mark-to-market with mid price.
+        Stop-loss state stored in memory: _peak_pnl, _stop_triggered.
+        """
+        threshold = float(self.params.get("stop_loss_drawdown_pnl", 0.0))
+        if threshold <= 0:
+            return orders  # disabled
+
+        min_peak = float(self.params.get("stop_loss_min_peak", 5000.0))
+
+        # Approximate current PnL from cumulative trade history
+        # We don't have direct PnL access here, so use a proxy:
+        # cumulative cash flow + current position * mid
+        cum_cash = memory.get("_stop_cum_cash", 0.0)
+        # Track prior position to compute realized P&L from fills
+        prev_pos = memory.get("_stop_prev_pos", 0)
+        # Use last mid as fill price proxy (approximate; actual fills aren't available here)
+        mid = book.mid_price
+        if mid is None:
+            mid = book.best_bid or book.best_ask or 0
+        # Compute fill cash since last tick
+        if prev_pos != position:
+            # Approximation: assume fills happened at current mid
+            cum_cash -= float(position - prev_pos) * float(mid)
+        # Current marked PnL = cum_cash + position * mid
+        current_pnl = cum_cash + float(position) * float(mid)
+        memory["_stop_cum_cash"] = cum_cash
+        memory["_stop_prev_pos"] = position
+        memory["_stop_current_pnl"] = current_pnl
+
+        peak_pnl = float(memory.get("_stop_peak_pnl", 0.0))
+        if current_pnl > peak_pnl:
+            peak_pnl = current_pnl
+        memory["_stop_peak_pnl"] = peak_pnl
+
+        # Already triggered? Stay flattened for the rest of the day
+        triggered = bool(memory.get("_stop_triggered", False))
+
+        if not triggered:
+            drawdown = peak_pnl - current_pnl
+            if peak_pnl >= min_peak and drawdown >= threshold:
+                triggered = True
+                memory["_stop_triggered"] = True
+
+        if not triggered:
+            return orders
+
+        # Flatten: drop orders that grow |position|, force taker to flatten
+        filtered: List[Order] = []
+        for o in orders:
+            new_pos = position + o.quantity
+            if abs(new_pos) > abs(position):
+                continue
+            filtered.append(o)
+        # Force flatten via taker
+        if position > 0 and book.best_bid is not None:
+            avail = book.best_bid_volume or position
+            qty = min(position, avail)
+            if qty > 0:
+                filtered.append(Order(self.product, int(book.best_bid), -qty))
+        elif position < 0 and book.best_ask is not None:
+            avail = book.best_ask_volume or abs(position)
+            qty = min(abs(position), avail)
+            if qty > 0:
+                filtered.append(Order(self.product, int(book.best_ask), qty))
+
+        return filtered
+
+    # ------------------------------------------------------------------
+    # Conditional aggressive unwind (e.g. trigger when VWAP signal = -1 + long).
+    # Different from EOD: only fires when market state says "danger" — not on a clock.
+    # ------------------------------------------------------------------
+    def _apply_conditional_unwind(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """Active unwind when market condition signals adversity.
+
+        Reads VWAP signal (or other) and, if conditions met:
+          - Drop orders that grow |position|
+          - Add taker order to reduce position by `cond_unwind_chunk_pct` of current position
+
+        Params:
+          cond_unwind_enabled         : turn on (default False)
+          cond_unwind_min_pos         : abs(position) threshold to fire (default 50)
+          cond_unwind_chunk_pct       : fraction of current pos to unwind per tick (default 0.05)
+          cond_unwind_use_vwap        : use VWAP signal as trigger (default True)
+        """
+        if not bool(self.params.get("cond_unwind_enabled", False)):
+            return orders
+
+        min_pos = int(self.params.get("cond_unwind_min_pos", 50))
+        if abs(position) < min_pos:
+            return orders
+
+        # Determine signal direction
+        signal = 0
+        mid = book.mid_price
+        if mid is not None and bool(self.params.get("cond_unwind_use_vwap", True)):
+            signal = self._vwap_signal(state, float(mid), memory)
+
+        # Only unwind if market signals adversity FOR our current position direction
+        # signal = -1 (mid below VWAP, bearish) + long position → unwind long
+        # signal = +1 (mid above VWAP, bullish) + short position → unwind short
+        unwind_now = (signal == -1 and position > 0) or (signal == +1 and position < 0)
+        if not unwind_now:
+            return orders
+
+        # Mark memory for diagnostics
+        memory["_cond_unwind_active"] = 1
+
+        chunk_pct = float(self.params.get("cond_unwind_chunk_pct", 0.05))
+        chunk_size = max(1, int(round(abs(position) * chunk_pct)))
+
+        # Filter: drop orders that grow |position|
+        filtered: List[Order] = []
+        for o in orders:
+            new_pos = position + o.quantity
+            if abs(new_pos) > abs(position):
+                continue
+            filtered.append(o)
+
+        # Add taker chunk to flatten
+        if position > 0 and book.best_bid is not None:
+            avail = book.best_bid_volume or chunk_size
+            qty = min(chunk_size, avail, position)
+            if qty > 0:
+                filtered.append(Order(self.product, int(book.best_bid), -qty))
+        elif position < 0 and book.best_ask is not None:
+            avail = book.best_ask_volume or chunk_size
+            qty = min(chunk_size, avail, abs(position))
+            if qty > 0:
+                filtered.append(Order(self.product, int(book.best_ask), qty))
+
+        return filtered
+
+    # ------------------------------------------------------------------
+    # Trend gate (skip mean-rev BUY in downtrend, mean-rev SELL in uptrend)
+    # ------------------------------------------------------------------
+    def _vwap_signal(
+        self,
+        state: TradingState,
+        mid: float,
+        memory: Dict[str, Any],
+    ) -> int:
+        """Compute rolling-window VWAP-based trend signal from market_trades.
+
+        Maintains a deque of recent trades (within window_ts of current timestamp).
+        VWAP = sum(price * qty) / sum(qty) over the window.
+
+        Returns:
+            +1 if mid > VWAP + threshold (mid premium, market frothy)
+            -1 if mid < VWAP - threshold (mid discount, trend down — caution)
+             0 if neutral or insufficient data
+
+        Params:
+          vwap_threshold      : minimum |mid - vwap| to fire (default 8.0)
+          vwap_min_volume     : minimum cumulative volume before VWAP fires (default 20)
+          vwap_window_ts      : rolling window in timestamp units (default 100000 = 10% of day)
+        """
+        threshold = float(self.params.get("vwap_threshold", 8.0))
+        min_vol = float(self.params.get("vwap_min_volume", 20.0))
+        window_ts = int(self.params.get("vwap_window_ts", 100000))
+
+        # Get current timestamp
+        ts_now = int(getattr(state, "timestamp", 0))
+
+        # Get this-tick trades for our product
+        trades = []
+        try:
+            mt = state.market_trades
+            if mt:
+                trades = mt.get(self.product, []) or []
+        except Exception:
+            pass
+
+        # Maintain rolling buffer of (ts, price*qty, qty)
+        buf = memory.setdefault("_vwap_buf", [])  # list of [ts, dollars, qty]
+        for t in trades:
+            qty = float(getattr(t, "quantity", 0))
+            price = float(getattr(t, "price", 0))
+            if qty > 0 and price > 0:
+                buf.append([ts_now, price * qty, qty])
+
+        # Drop entries older than window_ts
+        cutoff = ts_now - window_ts
+        if buf and buf[0][0] < cutoff:
+            i = 0
+            while i < len(buf) and buf[i][0] < cutoff:
+                i += 1
+            del buf[:i]
+
+        # Compute VWAP from buffer
+        total_qty = sum(b[2] for b in buf)
+        total_dol = sum(b[1] for b in buf)
+        if total_qty < min_vol or total_qty <= 0:
+            return 0
+
+        vwap = total_dol / total_qty
+        memory["_vwap"] = vwap
+
+        diff = mid - vwap
+        memory["_vwap_diff"] = diff
+        if diff > threshold:
+            return 1
+        if diff < -threshold:
+            return -1
+        return 0
+
+    def _trend_direction(self, mid: float, memory: Dict[str, Any]) -> int:
+        """Compute trend direction using EMA-fast vs EMA-slow.
+
+        Returns:
+            +1 if uptrend (EMA_fast > EMA_slow + threshold)
+            -1 if downtrend (EMA_fast < EMA_slow - threshold)
+             0 if neutral / not enough data
+
+        Params:
+          trend_ema_fast_alpha : default 0.05 (~half-life 14 ticks)
+          trend_ema_slow_alpha : default 0.005 (~half-life 138 ticks)
+          trend_threshold      : minimum |fast - slow| to declare trend (default 0.5)
+        """
+        fast_alpha = float(self.params.get("trend_ema_fast_alpha", 0.05))
+        slow_alpha = float(self.params.get("trend_ema_slow_alpha", 0.005))
+        threshold = float(self.params.get("trend_threshold", 0.5))
+
+        ema_fast = memory.get("_trend_ema_fast")
+        ema_slow = memory.get("_trend_ema_slow")
+        if ema_fast is None:
+            ema_fast = mid
+            ema_slow = mid
+        else:
+            ema_fast = fast_alpha * mid + (1.0 - fast_alpha) * ema_fast
+            ema_slow = slow_alpha * mid + (1.0 - slow_alpha) * ema_slow
+        memory["_trend_ema_fast"] = ema_fast
+        memory["_trend_ema_slow"] = ema_slow
+
+        # Wait for slow EMA to warm up
+        n_seen = memory.get("_trend_n_seen", 0) + 1
+        memory["_trend_n_seen"] = n_seen
+        warmup = int(self.params.get("trend_warmup_ticks", 200))
+        if n_seen < warmup:
+            return 0
+
+        diff = ema_fast - ema_slow
+        if diff > threshold:
+            return 1
+        elif diff < -threshold:
+            return -1
+        return 0
