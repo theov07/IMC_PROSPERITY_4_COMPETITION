@@ -14508,6 +14508,28 @@ MEMBER_OVERRIDES["r4_velvet_v5_M49w08_M01w015"] = _v4_with_extras({"Mark 49": -0
 MEMBER_OVERRIDES["r4_velvet_v5_M49w08_M01w025"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.25})
 
 
+# r4_LIVE_ALPHA_PROBE — research-only submission to study LIVE counterparty patterns
+# Use this in the LIVE round to capture per-Mark fill data, then iterate next round.
+# Posts simple passive MM on VELVET (penny-improve), tracks who fills our quotes.
+MEMBER_OVERRIDES["r4_LIVE_ALPHA_PROBE"] = {
+    4: {
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT",
+            strategy="live_alpha_probe",
+            position_limit=200,
+            params=dict(
+                probe_size=30,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        ),
+        "HYDROGEL_PACK": None,  # skip, focus on VELVET
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
