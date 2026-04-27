@@ -10181,6 +10181,32 @@ MEMBER_OVERRIDES["hydro_v200_r4"] = {
     }
 }
 
+# ── mv_v1: z-score mean-reversion + Mark 14 gate ─────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v1"] = {
+    4: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mv_v1",
+            position_limit=200,
+            params=dict(
+                # z-score signal
+                zscore_window=50,
+                mid_smooth_half_life=10,
+                entry_z_threshold=2.0,
+                exit_z_threshold=0.5,
+                entry_size=20,
+                # Mark 14 gate
+                informed_trader_name="Mark 14",
+                m14_lookback_ticks=10,
+                m14_wait_ticks=10,
+                # logging (quote_trace emitted to stdout in live; features via feature_prices() in backtest)
+                quote_trace_enabled=True,
+                last_ts_value=999900,
+                log_flush_ts=1000,
+                ts_increment=100,
+            )),
+    },
+}
+
 # ── v201: Mark 14 informed-trader gate (3 variants) ───────────────────────────
 _HYDRO_V201_BASE_PARAMS = dict(
     **_HYDRO_V7B_PARAMS,

@@ -224,7 +224,12 @@
       "Bash(python scripts/export_submission.py --member hydro_v201_influenced --round 4)",
       "Bash(sed 's/hydro_v201_ruled/hydro_v202/g; s/hydro_v201_ruled/hydro_v202/g' /Users/thibautdesauty/Documents/Prosperity4/IMC_PROSPERITY_4_COMPETITION/submissions/hydro_v201_ruled.py)",
       "Bash(python -c \"from prosperity.strategies import build_strategy; s = build_strategy\\('hydro_mm_v202', 'HYDROGEL_PACK', {'position_limit': 200}\\); print\\('OK:', type\\(s\\).__name__\\)\")",
-      "Bash(python backtest.py --strategy hydro_v202 --round 4 --days 1 2 3 --match-trades realistic)"
+      "Bash(python backtest.py --strategy hydro_v202 --round 4 --days 1 2 3 --match-trades realistic)",
+      "Bash(sed 's/hydro_v201_influenced/hydro_mv_v1/g; s/get_round_config\\(4,/get_round_config\\(4,/g' /Users/thibautdesauty/Documents/Prosperity4/IMC_PROSPERITY_4_COMPETITION/submissions/hydro_v201_influenced.py)",
+      "Bash(python backtest.py --strategy hydro_mv_v1 --round 4 --days 1 2 3 --match-trades realistic)",
+      "Bash(python -c \"import prosperity.tooling.strategy_viz; print\\('OK'\\)\")",
+      "Bash(python backtest.py --strategy hydro_mv_v1 --round 4 --days 1 2 3 --match-trades realistic --json-out artifacts/backtest_results/round_4/hydro_mv_v1.json)",
+      "Bash(python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v1.json --product HYDROGEL_PACK --out artifacts/viz/hydro_mv_v1.html)"
     ]
   }
 }
