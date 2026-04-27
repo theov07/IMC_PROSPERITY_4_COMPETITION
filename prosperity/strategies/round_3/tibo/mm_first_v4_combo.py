@@ -897,6 +897,9 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
     ) -> Tuple[List[Order], int]:
         # Counterparty bias layer (opt-in via params): compute trader-flow signal
         # Mark 55+67 follow / Mark 01+14 fade → returns weighted net flow signal
+        # Mark this strategy as handling cp_bias internally — avoid double-application from on_tick
+        self.params["_cp_bias_handled_internally"] = True
+
         cp_offset = 0
         if bool(self.params.get("counterparty_bias_enabled", False)):
             cp_signal = self._counterparty_signal(state, memory)

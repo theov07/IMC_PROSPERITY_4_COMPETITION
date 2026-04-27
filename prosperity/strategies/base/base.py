@@ -58,6 +58,10 @@ class BaseStrategy(ABC):
         orders = self._apply_obi_passive_bias(state, position, orders, book, memory)
         # 1b. OBI taker overlay (directional alpha from L3 book imbalance, 88% hit rate)
         orders = self._apply_obi_taker_overlay(state, position, orders, book, memory)
+        # 1c. Counterparty bias (Mark 49 fade etc) — works for ANY product (not just VELVET)
+        # Note: VELVET strategy has cp_bias built into its compute_orders. This is for OPTIONS.
+        if not bool(self.params.get("_cp_bias_handled_internally", False)):
+            orders = self._apply_counterparty_bias(state, position, orders, book, memory)
 
         # Risk management filters (all opt-in via params; no-op when params absent):
         # 2. Intraday stop-loss (PnL drawdown trigger — robust, not time-based)
@@ -700,6 +704,55 @@ class BaseStrategy(ABC):
                 memory["_obi_last_dir"] = "SELL"
 
         return orders
+
+    # ------------------------------------------------------------------
+    # Apply counterparty bias as uniform price shift on orders (post-strategy)
+    # Works for ANY product/strategy that doesn't already integrate cp_bias
+    # ------------------------------------------------------------------
+    def _apply_counterparty_bias(
+        self,
+        state: TradingState,
+        position: int,
+        orders: List[Order],
+        book: BookSnapshot,
+        memory: Dict[str, Any],
+    ) -> List[Order]:
+        """Shift order prices based on counterparty signal.
+
+        Same logic as in MMFirstV4Combo's compute_orders cp_bias section,
+        but this version is opt-in via params and applies to ANY strategy.
+
+        Bullish signal (>+threshold) → shift UP
+        Bearish signal (<-threshold) → shift DOWN
+
+        Caps shifts to avoid crossing the book.
+        """
+        if not bool(self.params.get("counterparty_bias_enabled", False)):
+            return orders
+
+        cp_signal = self._counterparty_signal(state, memory)
+        cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
+        if abs(cp_signal) <= cp_threshold:
+            return orders
+
+        cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
+        cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
+        cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
+        if cp_offset == 0:
+            return orders
+        memory["_cp_offset_applied"] = cp_offset
+
+        shifted: List[Order] = []
+        best_bid = book.best_bid
+        best_ask = book.best_ask
+        for o in orders:
+            new_price = int(o.price) + cp_offset
+            if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
+                new_price = int(best_ask) - 1
+            elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
+                new_price = int(best_bid) + 1
+            shifted.append(Order(o.symbol, new_price, o.quantity))
+        return shifted
 
     def _counterparty_signal(
         self,

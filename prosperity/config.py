@@ -13633,6 +13633,315 @@ MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_sellers"] = {
 }
 
 
+# r4_velvet_cp_bias_fade_mark49_tight — smaller threshold, smaller scale (capture more events)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_mark49_tight"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_fade_mark49_short_window — 50-tick window (faster reaction)
+MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_mark49_short_window"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=5000,
+                cp_signal_threshold=2.0,
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.20,
+                cp_trader_weights={"Mark 49": -1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_fade_mark67 — counter-test: fade Mark 67 (the WINNER 67% buyer)
+# If Mark 67 buys → bias DOWN. Should LOSE because Mark 67 is the smart buyer.
+MEMBER_OVERRIDES["r4_velvet_cp_bias_fade_mark67"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=3.0,
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.20,
+                cp_trader_weights={"Mark 67": -1.0},  # Fade Mark 67
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_cp_bias_follow_mark49 — INVERSE of fade_mark49 — sanity check
+MEMBER_OVERRIDES["r4_velvet_cp_bias_follow_mark49"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=3.0,
+                cp_max_anchor_offset=3.0,
+                cp_anchor_scale_per_unit=0.20,
+                cp_trader_weights={"Mark 49": +1.0},  # Follow Mark 49 (should LOSE)
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_mark49_all — fade Mark 49 on VELVET + all VEV options
+# Each product has its own per-product Mark 49 trades to track
+MEMBER_OVERRIDES["r4_velvet_fade_mark49_all"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=True,
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_mark01_options — fade Mark 01 on options (he LOSES on VEV_5300/5400/5500)
+# But Mark 01 is balanced MM on VELVET, so don't apply there
+MEMBER_OVERRIDES["r4_velvet_fade_mark01_options"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym.startswith("VEV_")),  # ONLY options
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 01": -1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_mark49_velvet_mark01_options — combine both winning fades
+# fade_mark49 on VELVET (best signal there), fade_mark01 on options
+MEMBER_OVERRIDES["r4_velvet_combo_fade"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=True,
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights=(
+                    {"Mark 49": -1.0} if sym == "VELVETFRUIT_EXTRACT"
+                    else {"Mark 01": -1.0}
+                ),
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_49_14 — fade Mark 49 + fade Mark 14 (second weak fade signal)
+MEMBER_OVERRIDES["r4_velvet_fade_49_14"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_49_01 — fade Mark 49 + fade Mark 01 (both negative-correlation fades)
+MEMBER_OVERRIDES["r4_velvet_fade_49_01"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 01": -0.3},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_optimal_marks — use ALL signals with empirically-derived weights
+# Weights = correlation rho (positive = follow, negative = fade)
+MEMBER_OVERRIDES["r4_velvet_optimal_marks"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={
+                    "Mark 55": +0.14,    # follow (rho=+0.14)
+                    "Mark 67": +0.12,    # follow (rho=+0.12)
+                    "Mark 01": -0.17,    # fade (rho=-0.17)
+                    "Mark 14": -0.15,    # fade
+                    "Mark 49": -1.0,    # fade Mark 49 (proven winner — strong weight)
+                    "Mark 22": -0.06,    # weak fade
+                },
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_49_14_balanced — equal weights on Mark 49 + Mark 14
+MEMBER_OVERRIDES["r4_velvet_fade_49_14_balanced"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -1.0},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_49_14_22 — also add Mark 22 (the third seller)
+MEMBER_OVERRIDES["r4_velvet_fade_49_14_22"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 22": -0.3},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_49_14_55 — fade Mark 49 + Mark 14 + Mark 55 (the high-vol losing MM)
+MEMBER_OVERRIDES["r4_velvet_fade_49_14_55"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=2.0,
+                cp_anchor_scale_per_unit=0.15,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5, "Mark 55": -0.3},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
+# r4_velvet_fade_49_14_strong — bigger offset cap on the WIN
+MEMBER_OVERRIDES["r4_velvet_fade_49_14_strong"] = {
+    4: {
+        sym: (
+            _override(
+                cfg,
+                **dict(cfg.params),
+                counterparty_bias_enabled=(sym == "VELVETFRUIT_EXTRACT"),
+                cp_window_ts=10000,
+                cp_signal_threshold=1.0,
+                cp_max_anchor_offset=4.0,
+                cp_anchor_scale_per_unit=0.20,
+                cp_trader_weights={"Mark 49": -1.0, "Mark 14": -0.5},
+            )
+            if cfg is not None else None
+        )
+        for sym, cfg in MEMBER_OVERRIDES["r4_velvet_options_only"][4].items()
+    },
+}
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
