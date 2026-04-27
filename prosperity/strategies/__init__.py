@@ -213,6 +213,9 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "forced_long_buyer": ("prosperity.strategies.round_4.forced_long_buyer", "ForcedLongBuyerStrategy"),
     "live_alpha_probe": ("prosperity.strategies.round_4.live_alpha_probe", "LiveAlphaProbeStrategy"),
     "live_alpha_probe_extreme": ("prosperity.strategies.round_4.live_alpha_probe_extreme", "LiveAlphaProbeExtremeStrategy"),
+    "live_alpha_probe_shadow": ("prosperity.strategies.round_4.live_alpha_probe_shadow", "LiveAlphaProbeShadowStrategy"),
+    "live_alpha_probe_onoff": ("prosperity.strategies.round_4.live_alpha_probe_onoff", "LiveAlphaProbeOnOffStrategy"),
+    "live_alpha_probe_size": ("prosperity.strategies.round_4.live_alpha_probe_size", "LiveAlphaProbeSizeStrategy"),
     # ── Tibo Round 3 ──
     "gamma_scalp_zgated":  ("prosperity.strategies.round_3.tibo.gamma_scalp_zgated", "GammaScalpZGatedStrategy"),
     "velvet_strat":        ("prosperity.strategies.round_3.tibo.velvet_strat",    "VelvetStratV1"),

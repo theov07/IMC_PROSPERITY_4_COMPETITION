@@ -14508,6 +14508,48 @@ MEMBER_OVERRIDES["r4_velvet_v5_M49w08_M01w015"] = _v4_with_extras({"Mark 49": -0
 MEMBER_OVERRIDES["r4_velvet_v5_M49w08_M01w025"] = _v4_with_extras({"Mark 49": -0.8, "Mark 14": -0.5, "Mark 01": -0.25})
 
 
+# r4_LIVE_ALPHA_PROBE_SHADOW — sit BEHIND queue (queue 2nd) to observe Mark 14/01 in action
+MEMBER_OVERRIDES["r4_LIVE_ALPHA_PROBE_SHADOW"] = {
+    4: {
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT", strategy="live_alpha_probe_shadow",
+            position_limit=200,
+            params=dict(log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+        ),
+        "HYDROGEL_PACK": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# r4_LIVE_ALPHA_PROBE_ONOFF — 50t ON / 50t OFF cycles to capture natural Mark↔Mark flow
+MEMBER_OVERRIDES["r4_LIVE_ALPHA_PROBE_ONOFF"] = {
+    4: {
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT", strategy="live_alpha_probe_onoff",
+            position_limit=200,
+            params=dict(log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+        ),
+        "HYDROGEL_PACK": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
+# r4_LIVE_ALPHA_PROBE_SIZE — cycle SIZE (1, 5, 30, 100, 200) at constant penny-improve price
+MEMBER_OVERRIDES["r4_LIVE_ALPHA_PROBE_SIZE"] = {
+    4: {
+        "VELVETFRUIT_EXTRACT": ProductConfig(
+            symbol="VELVETFRUIT_EXTRACT", strategy="live_alpha_probe_size",
+            position_limit=200,
+            params=dict(log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+        ),
+        "HYDROGEL_PACK": None,
+        **{f"VEV_{k}": None for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]},
+    },
+}
+
+
 # r4_LIVE_ALPHA_PROBE_EXTREME — 5-phase provocative probe (RESEARCH)
 # 1000 ticks split into 200-tick phases:
 #   P1 DARK (no quotes) — baseline naturally trading
