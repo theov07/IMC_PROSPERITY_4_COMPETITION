@@ -1,13 +1,28 @@
 # Round 4 Submissions — Final candidates
 
+## 🏆 NEW CHAMPION (2026-04-27 wave 3)
+
+**`R4_NEW_CHAMPION__fade_49_14__pnl168k_dd70k_ratio239.py`** — **167,860 / 70,277 / 2.39**
+**+10,148 PnL vs previous baseline** (was 157,712).
+
+Mechanism: counterparty fade signal. When Mark 49 (directional seller, -15k 3d PnL) and
+Mark 14 (balanced MM with -0.15 short-term correlation) net-sell over 100 ticks, we
+shift our VELVET quotes UP by up to 2 ticks. This captures the rebound after their selling.
+
+Per-day:
+- D1: +69,789 (+869 vs baseline)
+- D2: +82,262 (**+13,922** — HUGE win, Mark 49 selling into uptrend creates rebounds)
+- D3: +15,809 (-4,643 vs baseline — small loss on clear downtrend)
+
 ## Pareto frontier (R4 3-day backtest, realistic fill, HYDROGEL DISABLED)
 
 | Tier | File | PnL 3d | DD | Ratio | CV% | Pick if... |
 |---|---|---:|---:|---:|---:|---|
-| **BEST RATIO** ★ | `R4_v57_best_ratio__pnl152k_dd62k_ratio246.py` | **151,596** | **61,560** | **2.46** | 47.8% | Risk-adjusted choice |
-| **BALANCED** | `R4_v58_balanced__pnl153k_dd64k_ratio239.py` | 153,132 | 64,004 | 2.39 | 49.3% | + VEV_5300 (+1.5k) |
-| **MAX PnL** | `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py` | **157,712** | 72,582 | 2.17 | 52.9% | + Tibo MM 5200/5400 (+4.6k) |
-| MINIMAL | `R4_v52_minimal__pnl140k_dd61k_ratio230.py` | 140,488 | 61,195 | 2.30 | 52.8% | No toxic/unwind (lower) |
+| **🏆 NEW CHAMPION** | `R4_NEW_CHAMPION__fade_49_14__pnl168k_dd70k_ratio239.py` | **167,860** | **70,277** | **2.39** | TBD | **DEFAULT UPLOAD** |
+| OLD MAX PnL | `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py` | 157,712 | 72,582 | 2.17 | 52.9% | Without trader signal |
+| OLD BEST RATIO | `R4_v57_best_ratio__pnl152k_dd62k_ratio246.py` | 151,596 | 61,560 | 2.46 | 47.8% | Lower DD risk |
+| OLD BALANCED | `R4_v58_balanced__pnl153k_dd64k_ratio239.py` | 153,132 | 64,004 | 2.39 | 49.3% | Backup |
+| MINIMAL | `R4_v52_minimal__pnl140k_dd61k_ratio230.py` | 140,488 | 61,195 | 2.30 | 52.8% | No toxic/unwind |
 
 ## Per-product 3-day PnL
 
