@@ -273,6 +273,18 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydro_mv_v6":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v6", "HydroMVV6"),
     # mv_v7: two-component MM (anchor AR taker + fast passive MM both sides)
     "hydro_mv_v7":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v7", "HydroMVV7"),
+    # mv_v8: hysteresis on AR taker + inventory-skewed MM
+    "hydro_mv_v8":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v8", "HydroMVV8"),
+    # mv_v9: v6b + hard cap ALL orders + M14 cumulative gate + inv skew
+    "hydro_mv_v9":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v9", "HydroMVV9"),
+    # mv_v10: active MM with hard inventory cap + vol gate
+    "hydro_mv_v10":                ("prosperity.strategies.round_4.tibo.hydro_mv_v10", "HydroMVV10"),
+    # mv_v11: v9 base + M38 streak gate (data-driven: M38 is the aggressor)
+    "hydro_mv_v11":                ("prosperity.strategies.round_4.tibo.hydro_mv_v11", "HydroMVV11"),
+    # mv_v12: v9 base + M14 VEV_4000 cross-asset hedge signal
+    "hydro_mv_v12":                ("prosperity.strategies.round_4.tibo.hydro_mv_v12", "HydroMVV12"),
+    # mv_v13: dual gate = v9 M14-HYDRO gate + v12 VEV_4000 hedge gate
+    "hydro_mv_v13":                ("prosperity.strategies.round_4.tibo.hydro_mv_v13", "HydroMVV13"),
     # v201: Mark 14 informed-trader gate (3 variants)
     "hydro_mm_v201_ruled":         ("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201Ruled"),
     "hydro_mm_v201_influenced":    ("prosperity.strategies.round_4.tibo.hydro_strat_v201_influenced", "HydroMMV201Influenced"),

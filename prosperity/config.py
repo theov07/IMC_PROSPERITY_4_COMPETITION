@@ -11531,6 +11531,176 @@ MEMBER_OVERRIDES["hydro_mv_v7"] = {
     )}
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# mv_v10 — active MM with hard inventory cap + vol gate (starting from v6b)
+#
+# Root cause confirmed (v9 live):
+#   - m14_cum=-4260 → gate never fired. Position hit -200 by ts=10k.
+#   - Passive MM asks filled continuously (ask_size only =0 at position=-200).
+#
+# Fixes:
+#   1. Hard MM cap: stop ALL asks when position <= -mm_cap (25% = 50u).
+#   2. Separate AR taker cap: stop AR sells when position <= -ar_cap (40% = 80u).
+#   3. Vol gate: when realized vol >= threshold (3.0), stop all adds to position.
+#
+# 3-day backtest: 117,246 PnL | 16,540 DD | 14.1% | PnL/DD=7.1  (66% of v6b)
+# Day 1 alone:    42,908 PnL  (74% of v6b day1) — max short: -129u
+# Root causes fixed:
+#   1. Unified hysteresis: stop=0.70 (-140u), restart=0.30 (-60u).
+#      MM ask + AR taker both stop at -140u. Only restart when pos > -60u.
+#      Prevents the MM-bid/AR-taker "fight" (buying at 10027, selling at 10025).
+#   2. Inventory skew: bid raised by floor(4 × |pos/limit|) ticks when short.
+#      Makes passive bids more competitive during recovery.
+#   v9 live (position → -187 in seconds): v10 caps at -140u (hysteresis).
+#   Max live loss: 140 × 50 ticks = 7,000 (vs 200 × 50 = 10,000 in v9).
+# ─────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v10"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v10", position_limit=200,
+        params=dict(
+            anchor_price=10000,
+            anchor_alpha=0.005,
+            anchor_pos_threshold=0.20,
+            ar_gain=8.0,
+            ar_smooth_half_life=5,
+            mid_smooth_half_life=20,
+            dev_smooth_half_life=5,
+            ar_taker_edge=12.0,
+            ar_taker_size_pct=0.30,
+            sell_stop_pct=0.70,         # ALL selling stops at -140u (70% of 200)
+            sell_restart_pct=0.30,      # restarts only when position > -60u (80u gap)
+            buy_stop_pct=0.70,          # symmetric for long side
+            buy_restart_pct=0.30,
+            maker_size_base_pct=0.15,
+            inv_skew_ticks=4,           # raise bid 4 ticks per |pos/limit| when short
+            vol_half_life=20,
+            vol_threshold=3.5,
+            m14_trader="Mark 14",
+            m38_trader="Mark 38",
+            m14_bullish_threshold=75,   # M14 gate
+            m38_weight=0.0,
+            last_ts_value=999900,
+            quote_trace_enabled=True,
+            log_flush_ts=1000,
+        ),
+    )}
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# mv_v9 — v6b + hard cap ALL orders + M14 cumulative gate + inv skew
+#
+# Starting from v6b (178,785 PnL). Two confirmed live failures fixed:
+#   1. Hard cap ALL sells (taker + MM ask) when pos <= -sell_cap_pct × limit.
+#      v8 bug: hard cap blocked only AR taker; MM asks kept filling as Mark 14
+#      lifted them → position went to -105 despite sell_ok=0.
+#   2. M14 cumulative gate: track M14 net buys since day start. When M14 has
+#      bought > bullish_threshold units net, suppress ALL selling (confirmed
+#      uptrend signal). In v8 live, M14 bought +75 units total — early gate
+#      fire at +40 would have capped position near -50 vs actual -105.
+#
+# 3-day backtest: 169,512 PnL | 19,662 abs DD | 11.6% | PnL/DD=8.6 (94.8% of v6b)
+# M14 gate fires when m14_cum >= 75 (v8 live: M14 bought 75 exactly → gate fires).
+# ─────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v13"] = {
+    # Dual gate: v9 M14-HYDRO cumulative + v12 VEV_4000 hedge signal
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v13", position_limit=200,
+        params=dict(
+            anchor_price=10000, anchor_alpha=0.005, anchor_pos_threshold=0.30,
+            ar_gain=8.0, ar_smooth_half_life=5, mid_smooth_half_life=20,
+            dev_smooth_half_life=5, ar_taker_edge=12.0, ar_taker_size_pct=0.30,
+            sell_cap_pct=1.0, buy_cap_pct=1.0,
+            maker_size_base_pct=0.12, inv_skew_ticks=4,
+            # Gate 1: M14 HYDROGEL cumulative (v9 gate)
+            m14_trader="Mark 14",
+            m14_hydro_threshold=75.0,
+            # Gate 2: M14 VEV_4000 cross-asset hedge (v12 gate)
+            vev_gate_product="VEV_4000",
+            vev_gate_trader="Mark 14",
+            vev_gate_hl=100.0,
+            vev_gate_threshold=5.0,
+            last_ts_value=999900, quote_trace_enabled=True, log_flush_ts=1000,
+        ),
+    )}
+}
+MEMBER_OVERRIDES["hydro_mv_v9"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v9", position_limit=200,
+        params=dict(
+            anchor_price=10000,
+            anchor_alpha=0.005,
+            anchor_pos_threshold=0.30,   # grid winner: anchor updates when |pos| < 60u (+14k vs 0.20)
+            ar_gain=8.0,
+            ar_smooth_half_life=5,
+            mid_smooth_half_life=20,
+            dev_smooth_half_life=5,
+            ar_taker_edge=12.0,
+            ar_taker_size_pct=0.30,
+            sell_cap_pct=1.0,           # no hard cap — M14 gate is primary protection
+            buy_cap_pct=1.0,            # symmetric (rarely needed)
+            maker_size_base_pct=0.12,   # grid winner: 12% × 200 = 24u per side
+            inv_skew_ticks=4,
+            m14_trader="Mark 14",
+            m38_trader="Mark 38",
+            m14_bullish_threshold=75,   # gate fires when M14 net >= 75u (catches v8 live scenario exactly)
+            m14_bearish_threshold=75,
+            m38_weight=0.0,             # M14 only; set >0 to add M38 contribution
+            last_ts_value=999900,
+            quote_trace_enabled=True,
+            log_flush_ts=1000,
+        ),
+    )}
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# mv_v8 — hysteresis + inventory-skewed MM
+#
+# Root cause of v7 live failure: zero hysteresis on anchor_limit=80.
+# MM buys 6u → AR taker immediately re-sells 6u. Position stuck at -80 for 53%
+# of session, paying spread both ways. Final pos: -91. PnL: 1,307.
+#
+# v8 fixes:
+#   1. Hysteresis: stop selling when |pos| >= stop_pct×limit (80u=40%),
+#      restart only when |pos| < start_pct×limit (76u=38%). 4u gap.
+#   2. Cooldown: after any taker fire, blocks re-fire for 20 ticks (2s).
+#      Prevents the 1-tick fight: MM buys 6u → taker re-sells 6u next tick.
+#   3. Inventory skew: when short, raise bid by floor(4 × |pos/limit|) ticks
+#      above best_bid+1. Modest improvement in recovery fill rate.
+#
+# 3-day backtest: 97,692 PnL | 10,158 abs DD | 10.4% | PnL/DD=9.6
+# vs v7:          104,602 PnL |  9,067 abs DD |  8.7% | PnL/DD=11.5  (-6.6%)
+# vs v6b:         178,785 PnL | 20,130 abs DD | 88.9% | PnL/DD=8.9
+#
+# Live (v7b): stuck at pos -80 for 53% of session, profit 1,307.
+# Live (v8 expected): 2s breathing room between taker fires + 4u hysteresis
+#   gap breaks the MM-vs-taker fight. Position should oscillate less tightly.
+# ─────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v8"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v8", position_limit=200,
+        params=dict(
+            anchor_price=10000,
+            anchor_alpha=0.005,
+            anchor_pos_threshold=0.20,
+            ar_gain=8.0,
+            ar_smooth_half_life=5,
+            mid_smooth_half_life=20,
+            dev_smooth_half_life=5,
+            ar_taker_edge=15.0,
+            ar_taker_size_pct=0.30,
+            ar_taker_stop_pct=0.40,     # taker stops selling at -80u
+            ar_taker_start_pct=0.38,    # restart only when pos > -76u (4u hysteresis gap)
+            taker_cooldown_ticks=20,    # 2s min between consecutive fires
+            mm_base_size=20,
+            inv_skew_ticks=4,           # modest bid skew: floor(4 × |pos/limit|) ticks
+            fast_mid_half_life=5,
+            last_ts_value=999900,
+            quote_trace_enabled=True,
+            log_flush_ts=1000,
+        ),
+    )}
+}
+
 # ── mv_v1: z-score mean-reversion + Mark 14 gate ─────────────────────────────
 MEMBER_OVERRIDES["hydro_mv_v1"] = {
     4: {

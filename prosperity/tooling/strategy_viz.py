@@ -367,10 +367,11 @@ def _position_curve(
 
 # ── IMC log mode: load everything from an uploaded submission log ──────────────
 
-def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict]:
-    """Parse activitiesLog CSV → market_prices per product + equity curve."""
+def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict, Dict[str, Dict]]:
+    """Parse activitiesLog CSV → market_prices, total equity, per-product equity."""
     rows_by_prod: Dict[str, List[Tuple]] = defaultdict(list)
     pnl_by_ts: Dict[int, float] = {}
+    pnl_by_prod_ts: Dict[str, Dict[int, float]] = defaultdict(dict)
 
     for row in csv.DictReader(activities_text.strip().splitlines(), delimiter=";"):
         prod = (row.get("product") or "").strip()
@@ -386,6 +387,7 @@ def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict]:
         pnl = _to_float(row.get("profit_and_loss", ""))
         if pnl is not None:
             pnl_by_ts[ts] = pnl_by_ts.get(ts, 0.0) + pnl
+            pnl_by_prod_ts[prod][ts] = pnl
 
     market_prices: Dict[str, Any] = {}
     for prod, rows in rows_by_prod.items():
@@ -397,7 +399,13 @@ def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict]:
 
     ts_sorted = sorted(pnl_by_ts)
     equity = {"ts": ts_sorted, "pnl": [pnl_by_ts[t] for t in ts_sorted]}
-    return market_prices, equity
+
+    per_product_equity: Dict[str, Dict] = {}
+    for prod, pm in pnl_by_prod_ts.items():
+        ts_p = sorted(pm)
+        per_product_equity[prod] = {"ts": ts_p, "pnl": [pm[t] for t in ts_p]}
+
+    return market_prices, equity, per_product_equity
 
 
 def _parse_trade_history(trade_raw) -> Tuple[List[Dict], List[Dict]]:
@@ -534,7 +542,7 @@ def _load_from_imclog(path: Path) -> Dict[str, Any]:
         sys.exit(1)
 
     activities_text = (raw.get("activitiesLog") or raw.get("activityLog") or "")
-    market_prices, equity = _parse_activities(activities_text)
+    market_prices, equity, per_product_equity = _parse_activities(activities_text)
 
     trade_raw = raw.get("tradeHistory") or raw.get("tradeLog") or []
     runtime_logs = raw.get("logs", [])
@@ -573,14 +581,15 @@ def _load_from_imclog(path: Path) -> Dict[str, Any]:
         print("  ⚠  No FairValue/DevSmooth in lambdaLog — v5 chart will show price/fills only")
 
     return {
-        "market_prices":  market_prices,
-        "market_trades":  market_trades,
-        "our_fills":      our_fills,
-        "quotes":         [],          # passive quote prices not logged in live
-        "features":       features,
-        "equity":         equity,
-        "strategy_name":  strategy_name,
-        "day_boundaries": [],          # single-day live run — no resets
+        "market_prices":        market_prices,
+        "market_trades":        market_trades,
+        "our_fills":            our_fills,
+        "quotes":               [],          # passive quote prices not logged in live
+        "features":             features,
+        "equity":               equity,
+        "per_product_equity":   per_product_equity,
+        "strategy_name":        strategy_name,
+        "day_boundaries":       [],          # single-day live run — no resets
     }
 
 
@@ -1007,50 +1016,137 @@ def _ar_momentum_chart_js(product: str, v5: Dict) -> str:
   }}"""
 
 
+# ── Per-product equity from fills (backtest mode) ─────────────────────────────
+
+def _compute_product_equity_from_fills(
+    our_fills: List[Dict],
+    market_prices: Dict[str, Any],
+    products: List[str],
+) -> Dict[str, Dict]:
+    """Reconstruct per-product PnL curve from fills + mid prices.
+
+    PnL = -cost_basis + position × mid  (realized + unrealized, matches IMC formula).
+    Used in backtest mode where activitiesLog is not available.
+    """
+    per_product: Dict[str, Dict] = {}
+    for product in products:
+        prod_fills = sorted(
+            [f for f in our_fills if f.get("symbol") == product],
+            key=lambda x: x["ts"],
+        )
+        mid_ts   = market_prices.get(product, {}).get("ts",  [])
+        mid_vals = market_prices.get(product, {}).get("mid", [])
+        if not mid_ts:
+            continue
+
+        position   = 0
+        cost_basis = 0.0
+        fi         = 0
+        ts_list:  List[int]   = []
+        pnl_list: List[float] = []
+
+        for i, ts in enumerate(mid_ts):
+            mid = mid_vals[i]
+            if mid is None:
+                continue
+            while fi < len(prod_fills) and prod_fills[fi]["ts"] <= ts:
+                f   = prod_fills[fi]
+                qty = f.get("qty", f.get("quantity", 0))
+                px  = f["price"]
+                if f["side"] == "BUY":
+                    cost_basis += px * qty
+                    position   += qty
+                else:
+                    cost_basis -= px * qty
+                    position   -= qty
+                fi += 1
+            ts_list.append(ts)
+            pnl_list.append(-cost_basis + position * mid)
+
+        if ts_list:
+            # subsample: keep at most 1 000 points (pure visualisation)
+            step = max(1, len(ts_list) // 1000)
+            per_product[product] = {
+                "ts":  ts_list[::step],
+                "pnl": pnl_list[::step],
+            }
+    return per_product
+
+
 # ── Chart: PnL ────────────────────────────────────────────────────────────────
 
-def _pnl_chart_js(equity: Dict, day_boundaries: Optional[List[int]] = None) -> str:
+def _pnl_chart_js(
+    equity: Dict,
+    per_product_equity: Dict[str, Dict],
+    day_boundaries: Optional[List[int]] = None,
+) -> str:
     if not equity["ts"]:
-        return "function plot_pnl() {}"
+        return "function plot_pnl() {} function pnlSelect(k) {}"
 
-    pnl_vals = equity["pnl"]
+    def _build_dd(pnl_vals: List[float]) -> List[float]:
+        peak = 0.0
+        dd: List[float] = []
+        for p in pnl_vals:
+            if p > peak:
+                peak = p
+            dd.append(p - peak)
+        return dd
 
-    # Drawdown: running peak − current (always ≤ 0)
-    peak = 0.0
-    dd_vals = []
-    for p in pnl_vals:
-        if p > peak:
-            peak = p
-        dd_vals.append(p - peak)
-
-    # Vertical day-separator lines
+    # Vertical day-separator shapes
     boundary_shapes = ""
     for b in (day_boundaries or [])[1:]:
         boundary_shapes += f"""
       {{type:'line',xref:'x',yref:'paper',x0:{b},x1:{b},y0:0,y1:1,
         line:{{color:'#45475a',width:1,dash:'dot'}}}},"""
 
-    ts_js  = json.dumps(equity["ts"])
-    pnl_js = _json_list(pnl_vals)
-    dd_js  = _json_list(dd_vals)
+    # Build JS data object: one entry per view (all + each product)
+    entries: List[str] = []
+
+    all_dd = _build_dd(equity["pnl"])
+    entries.append(
+        f"  all: {{ts:{json.dumps(equity['ts'])},"
+        f"pnl:{_json_list(equity['pnl'])},"
+        f"dd:{_json_list(all_dd)},"
+        f"label:'Portfolio'}}"
+    )
+
+    for prod, eq in per_product_equity.items():
+        if not eq.get("ts"):
+            continue
+        p_dd = _build_dd(eq["pnl"])
+        entries.append(
+            f"  {_jsid(prod)}: {{ts:{json.dumps(eq['ts'])},"
+            f"pnl:{_json_list(eq['pnl'])},"
+            f"dd:{_json_list(p_dd)},"
+            f"label:{json.dumps(prod)}}}"
+        )
+
+    data_js = "{\n" + ",\n".join(entries) + "\n}"
+    layout_extra = "yaxis:{title:'PnL / DD (SeaShells)',gridcolor:'#313244',zeroline:true},"
+    layout_extra += f"shapes:[{boundary_shapes}],margin:{{t:30,b:36,l:75,r:20}},"
 
     return f"""
-  function plot_pnl() {{
-    Plotly.newPlot('pnl_chart',[
-      {{x:{ts_js},y:{pnl_js},name:'PnL',mode:'lines',fill:'tozeroy',
+  var _pnl_data = {data_js};
+  var _pnl_layout = Object.assign({{}},{_layout_js()},{{{layout_extra}}});
+
+  function plot_pnl() {{ pnlSelect('all'); }}
+
+  function pnlSelect(key) {{
+    var d = _pnl_data[key]; if (!d) return;
+    document.querySelectorAll('.pnl-filter-btn').forEach(function(b) {{
+      b.classList.toggle('active', b.dataset.key === key);
+    }});
+    Plotly.react('pnl_chart', [
+      {{x:d.ts,y:d.pnl,name:'PnL',mode:'lines',fill:'tozeroy',
         fillcolor:'rgba(203,166,247,0.15)',
         line:{{color:'#cba6f7',width:2}},
         hovertemplate:'PnL: %{{y:,.0f}}<extra></extra>'}},
-      {{x:{ts_js},y:{dd_js},name:'Drawdown',mode:'lines',fill:'tozeroy',
+      {{x:d.ts,y:d.dd,name:'Drawdown',mode:'lines',fill:'tozeroy',
         fillcolor:'rgba(243,139,168,0.15)',
         line:{{color:'#f38ba8',width:1.5}},
         hovertemplate:'DD: %{{y:,.0f}}<extra></extra>'}}
-    ], Object.assign({{}},{_layout_js()},{{
-      title:'Portfolio Equity Curve + Drawdown',
-      yaxis:{{title:'PnL / DD (SeaShells)',gridcolor:'#313244',zeroline:true}},
-      shapes:[{boundary_shapes}],
-      margin:{{t:30,b:36,l:75,r:20}},
-    }}),{{responsive:true}});
+    ], Object.assign({{}}, _pnl_layout, {{title: d.label + ' — Equity + Drawdown'}}),
+    {{responsive:true}});
   }}"""
 
 
@@ -1270,6 +1366,7 @@ def generate_html(
     features: List[Dict],
     equity: Dict,
     output_path: Path,
+    per_product_equity: Optional[Dict[str, Dict]] = None,
     title: str = "",
     product_filter: Optional[str] = None,
     taker_edge: float = 12.0,
@@ -1278,6 +1375,14 @@ def generate_html(
     products = sorted(market_prices.keys())
     if product_filter:
         products = [p for p in products if p == product_filter]
+
+    # Per-product equity: use provided dict (IMC log mode) or compute from fills
+    if per_product_equity is None:
+        per_product_equity = _compute_product_equity_from_fills(
+            our_fills, market_prices, products,
+        )
+    # Filter to displayed products only
+    ppe = {p: v for p, v in per_product_equity.items() if p in products}
 
     # Detect v5 mode: DevSmooth in feature_ticks
     is_v5 = any("DevSmooth" in ft for ft in features)
@@ -1323,13 +1428,15 @@ def generate_html(
         prod_pnl = 0.0
         for day_data in bt.get("days", []):
             prod_pnl += day_data.get("product_summaries", {}).get(prod, {}).get("pnl", 0.0)
+        # Fall back to last point of per-product equity curve if bt days unavailable
+        if prod_pnl == 0.0 and prod in ppe and ppe[prod].get("pnl"):
+            prod_pnl = ppe[prod]["pnl"][-1]
         n_prod_taker = sum(1 for f in prod_fills if f.get("aggressive", True))
         n_prod_maker = len(prod_fills) - n_prod_taker
 
         if is_v5:
             v5 = _extract_v5_series(features, quotes, prod)
 
-            # Build v5 panel HTML
             panels += f"""
 <div id="prod_panel_{safe}" class="product-panel">
   <div class="stat-row">
@@ -1382,7 +1489,20 @@ def generate_html(
             js_fns += _position_chart_js_generic(prod, our_fills, day_boundaries)
 
     tab_bar += "</div>"
-    js_fns  += _pnl_chart_js(equity, day_boundaries)
+
+    # PnL filter bar: All + one button per product that has equity data
+    pnl_filter_bar = '<div class="tab-bar">'
+    pnl_filter_bar += '<button class="pnl-filter-btn tab-btn active" data-key="all" onclick="pnlSelect(\'all\')">All</button>'
+    for prod in products:
+        if prod in ppe:
+            safe_key = _jsid(prod)
+            pnl_filter_bar += (
+                f'<button class="pnl-filter-btn tab-btn" data-key="{safe_key}"'
+                f' onclick="pnlSelect(\'{safe_key}\')">{prod}</button>'
+            )
+    pnl_filter_bar += "</div>"
+
+    js_fns += _pnl_chart_js(equity, ppe, day_boundaries)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1398,7 +1518,8 @@ def generate_html(
   {stats_html}
 
   <div class="section">
-    <h2>Portfolio PnL</h2>
+    <h2>PnL</h2>
+    {pnl_filter_bar}
     <div class="chart-container"><div id="pnl_chart" class="chart-med"></div></div>
   </div>
 
@@ -1479,6 +1600,7 @@ def main() -> None:
             quotes=d["quotes"],
             features=d["features"],
             equity=d["equity"],
+            per_product_equity=d["per_product_equity"],
             output_path=out_path,
             title=title,
             product_filter=args.product,
