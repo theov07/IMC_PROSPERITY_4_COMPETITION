@@ -92,6 +92,14 @@ def _json_list(values: list) -> str:
     return "[" + ",".join(parts) + "]"
 
 
+def _feature_value(row: Dict[str, Any], *keys: str) -> Optional[float]:
+    for key in keys:
+        value = _to_float(row.get(key))
+        if value is not None:
+            return value
+    return None
+
+
 # ── Data loading ───────────────────────────────────────────────────────────────
 
 def _load_backtest_json(path: Path) -> Dict[str, Any]:
@@ -572,8 +580,12 @@ def _load_from_imclog(path: Path) -> Dict[str, Any]:
     features = _parse_lambdalog_entries(runtime_logs, default_product=primary_product)
 
     strategy_name = raw.get("submissionId", path.stem)[:32]
-    n_feat = len([f for f in features if "FairValue" in f or "DevSmooth" in f])
-    n_m14  = len([f for f in features if "M14Signal"  in f])
+    n_feat = len([
+        f for f in features
+        if _feature_value(f, "FairValue", "fair_value") is not None
+        or _feature_value(f, "DevSmooth", "deviation") is not None
+    ])
+    n_m14  = len([f for f in features if _feature_value(f, "M14Signal", "m14_signal") is not None])
     print(f"  Products: {sorted(market_prices.keys())}")
     print(f"  Own fills: {len(our_fills)}, market trades: {len(market_trades)}")
     print(f"  Features: {n_feat} A-blocks (FairValue/DevSmooth), {n_m14} C-blocks (M14Signal)")
@@ -930,6 +942,48 @@ def _m14_chart_js(product: str, v5: Dict) -> str:
           line:{{color:'#f38ba8',width:1,dash:'dot'}}}},
       ],
       margin:{{t:30,b:36,l:65,r:20}},
+    }}),{{responsive:true}});
+  }}"""
+
+
+def _adaptive_regime_chart_js(product: str, v5: Dict) -> str:
+    safe = _jsid(product)
+    has_conf = bool(v5.get("conf_ts"))
+    has_drift = bool(v5.get("drift_ts"))
+    if not has_conf and not has_drift:
+        return f"""
+  function plot_regime_{safe}() {{
+    document.getElementById('regime_{safe}').innerHTML =
+      '<p style="color:#6c7086;padding:1em">No adaptive fair diagnostics for this strategy.</p>';
+  }}"""
+
+    traces: List[str] = []
+    if has_conf:
+        traces.append(f"""{{
+      x:{_json_list(v5["conf_ts"])},y:{_json_list(v5["conf"])},
+      name:'Anchor confidence',mode:'lines',
+      line:{{color:'#94e2d5',width:1.8}},yaxis:'y',
+      hovertemplate:'confidence: %{{y:.3f}}<extra></extra>'
+    }}""")
+    if has_drift:
+        traces.append(f"""{{
+      x:{_json_list(v5["drift_ts"])},y:{_json_list(v5["drift"])},
+      name:'Anchor drift EWMA',mode:'lines',
+      line:{{color:'#f9e2af',width:1.2,dash:'dot'}},yaxis:'y2',
+      hovertemplate:'drift: %{{y:.2f}}<extra></extra>'
+    }}""")
+
+    traces_js = ",\n    ".join(traces)
+    layout_extra = """
+      yaxis2: {title:'drift (ticks)',overlaying:'y',side:'right',
+               gridcolor:'#313244',showgrid:false,tickfont:{color:'#6c7086'}},"""
+    return f"""
+  function plot_regime_{safe}() {{
+    Plotly.newPlot('regime_{safe}',[{traces_js}],
+    Object.assign({{}},{_layout_js(layout_extra)},{{
+      title:'{product} — Adaptive Fair Regime',
+      yaxis:{{title:'anchor confidence',range:[0,1.05],gridcolor:'#313244',zeroline:false}},
+      margin:{{t:30,b:36,l:65,r:70}},
     }}),{{responsive:true}});
   }}"""
 
@@ -1461,6 +1515,7 @@ def generate_html(
   <div class="chart-container"><div id="dev_{safe}"   class="chart-med"></div></div>
   <div class="chart-container"><div id="mom_{safe}"   class="chart-med"></div></div>
   <div class="chart-container"><div id="pos_{safe}"   class="chart-med"></div></div>
+  <div class="chart-container"><div id="regime_{safe}" class="chart-med"></div></div>
   <div class="chart-container"><div id="m14_{safe}"   class="chart-short"></div></div>
 </div>"""
 
@@ -1469,6 +1524,7 @@ def generate_html(
             js_fns += _deviation_chart_js(prod, v5, taker_edge)
             js_fns += _ar_momentum_chart_js(prod, v5)
             js_fns += _position_sizing_chart_js(prod, our_fills, v5, day_boundaries)
+            js_fns += _adaptive_regime_chart_js(prod, v5)
             js_fns += _m14_chart_js(prod, v5)
 
         else:
