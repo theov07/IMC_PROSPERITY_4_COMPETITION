@@ -10412,6 +10412,28 @@ MEMBER_OVERRIDES["hydro_mv_v10"] = {
 # 3-day backtest: 169,512 PnL | 19,662 abs DD | 11.6% | PnL/DD=8.6 (94.8% of v6b)
 # M14 gate fires when m14_cum >= 75 (v8 live: M14 bought 75 exactly → gate fires).
 # ─────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v13"] = {
+    # Dual gate: v9 M14-HYDRO cumulative + v12 VEV_4000 hedge signal
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v13", position_limit=200,
+        params=dict(
+            anchor_price=10000, anchor_alpha=0.005, anchor_pos_threshold=0.30,
+            ar_gain=8.0, ar_smooth_half_life=5, mid_smooth_half_life=20,
+            dev_smooth_half_life=5, ar_taker_edge=12.0, ar_taker_size_pct=0.30,
+            sell_cap_pct=1.0, buy_cap_pct=1.0,
+            maker_size_base_pct=0.12, inv_skew_ticks=4,
+            # Gate 1: M14 HYDROGEL cumulative (v9 gate)
+            m14_trader="Mark 14",
+            m14_hydro_threshold=75.0,
+            # Gate 2: M14 VEV_4000 cross-asset hedge (v12 gate)
+            vev_gate_product="VEV_4000",
+            vev_gate_trader="Mark 14",
+            vev_gate_hl=100.0,
+            vev_gate_threshold=5.0,
+            last_ts_value=999900, quote_trace_enabled=True, log_flush_ts=1000,
+        ),
+    )}
+}
 MEMBER_OVERRIDES["hydro_mv_v9"] = {
     4: {"HYDROGEL_PACK": ProductConfig(
         symbol="HYDROGEL_PACK", strategy="hydro_mv_v9", position_limit=200,
