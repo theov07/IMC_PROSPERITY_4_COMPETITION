@@ -92,6 +92,12 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "theo_best_clean_generalized_v4": ("prosperity.strategies.round_2.theo.theo_best_clean_generalized", "TheoBestCleanGeneralizedV4Strategy"),
     # ── Round 3 ──
     "option_mm_bs": ("prosperity.strategies.round_3.option_mm_bs", "OptionMMBSStrategy"),
+    # ── HEAD-only (keen-tharp worktree) ──
+    "r3_gamma_scalp_zgated": ("prosperity.strategies.round_3.velvet_option_layers", "GammaScalpZGatedStrategy"),
+    "r3_smile_iv_scalper": ("prosperity.strategies.round_3.velvet_option_layers", "SmileIVScalperStrategy"),
+    "r3_live_defensive_mm": ("prosperity.strategies.round_3.live_defensive_mm", "R3LiveDefensiveMMStrategy"),
+    "r3_hydro_reversion_mm": ("prosperity.strategies.round_3.hydro_reversion_mm", "R3HydroReversionMMStrategy"),
+    # ── origin/main ──
     "r3_gamma_scalp_zgated": ("prosperity.strategies.round_3.velvet_option_layers", "GammaScalpZGatedStrategy"),
     "r3_smile_iv_scalper": ("prosperity.strategies.round_3.velvet_option_layers", "SmileIVScalperStrategy"),
     "r3_live_defensive_mm": ("prosperity.strategies.round_3.live_defensive_mm", "R3LiveDefensiveMMStrategy"),
@@ -217,6 +223,57 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "gamma_scalp_v200":    ("prosperity.strategies.round_3.tibo.velvet_strat_v200", "GammaScalpV200"),
     # v200: HYDROGEL standalone
     "hydro_mm_v200":       ("prosperity.strategies.round_3.tibo.hydro_strat_v200", "HydroMMV200"),
+    # ── HEAD-only Round 3 (kept) ──
+    "theo_r3_vol_arb_v1": ("prosperity.strategies.round_3.theo.theo_r3_vol_arb_v1", "TheoR3VolArbV1Strategy"),
+    # ── Round 4 ──
+    "oracle_replay_r4d3": ("prosperity.strategies.round_4.oracle_replay_d3", "OracleReplayR4D3Strategy"),
+    "forced_long_buyer": ("prosperity.strategies.round_4.forced_long_buyer", "ForcedLongBuyerStrategy"),
+    "live_alpha_probe": ("prosperity.strategies.round_4.live_alpha_probe", "LiveAlphaProbeStrategy"),
+    "live_alpha_probe_extreme": ("prosperity.strategies.round_4.live_alpha_probe_extreme", "LiveAlphaProbeExtremeStrategy"),
+    "live_alpha_probe_shadow": ("prosperity.strategies.round_4.live_alpha_probe_shadow", "LiveAlphaProbeShadowStrategy"),
+    "live_alpha_probe_onoff": ("prosperity.strategies.round_4.live_alpha_probe_onoff", "LiveAlphaProbeOnOffStrategy"),
+    "live_alpha_probe_size": ("prosperity.strategies.round_4.live_alpha_probe_size", "LiveAlphaProbeSizeStrategy"),
+    # ── Tibo Round 3 ──
+    "gamma_scalp_zgated":  ("prosperity.strategies.round_3.tibo.gamma_scalp_zgated", "GammaScalpZGatedStrategy"),
+    "velvet_strat":        ("prosperity.strategies.round_3.tibo.velvet_strat",    "VelvetStratV1"),
+    "velvet_strat_v25_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v25", "VelvetMMV25"),
+    "velvet_strat_v25_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v25", "VEVOptionMMV25"),
+    "gamma_scalp_v25":      ("prosperity.strategies.round_3.tibo.velvet_strat_v25", "GammaScalpV25"),
+    "velvet_strat_v26_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v26", "VelvetMMV26"),
+    "velvet_strat_v26_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v26", "VEVOptionMMV26"),
+    "gamma_scalp_v26":      ("prosperity.strategies.round_3.tibo.velvet_strat_v26", "GammaScalpV26"),
+    "velvet_strat_v2_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v2", "VelvetMMV2"),
+    "velvet_strat_v2_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v2", "VEVOptionMMV2"),
+    "velvet_strat_v3_mm":  ("prosperity.strategies.round_3.tibo.velvet_strat_v3", "VelvetMMV3"),
+    "velvet_strat_v3_opt": ("prosperity.strategies.round_3.tibo.velvet_strat_v3", "VEVOptionMMV3"),
+    "smile_iv_scalper":          ("prosperity.strategies.round_3.tibo.smile_iv_scalper", "SmileIVScalerStrategy"),
+    "smile_iv_scaler_v27":       ("prosperity.strategies.round_3.tibo.velvet_strat_v27", "SmileIVScalerV27"),
+    "gamma_scalp_zgated_mixin":  ("prosperity.strategies.round_3.tibo.smile_iv_scalper", "GammaScalpZGatedMixinStrategy"),
+    "theo_v7_velvet_mm":         ("prosperity.strategies.round_3.tibo.velvet_strat_theo_v7", "TheoV7VelvetMM"),
+    "theo_v7_gamma_scalp":       ("prosperity.strategies.round_3.tibo.velvet_strat_theo_v7", "TheoV7GammaScalp"),
+    "r3_guarded_anchor_mm":      ("prosperity.strategies.round_3.tibo.mm_first_v4_combo", "R3GuardedAnchorMMStrategy"),
+    "dynamic_anchor_mm":         ("prosperity.strategies.round_3.tibo.mm_first_v4_combo", "DynamicAnchorMMStrategy"),
+    "velvet_strat_v28_mm":       ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "TheoV7VelvetMMV28"),
+    "gamma_scalp_v28":           ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "TheoV7GammaScalpV28"),
+    "velvet_strat_v28_opt":      ("prosperity.strategies.round_3.tibo.velvet_strat_v28", "VEVOptionMMV28"),
+    # v40: true 2-sided MM
+    "symmetric_option_mm_v40":   ("prosperity.strategies.round_3.tibo.velvet_strat_v40", "SymmetricOptionMMV40"),
+    "gamma_scalp_with_ask_v40":  ("prosperity.strategies.round_3.tibo.velvet_strat_v40", "GammaScalpWithAskV40"),
+    # v30: four targeted option ideas
+    "gamma_scalp_smile_v30_vev4500":    ("prosperity.strategies.round_3.tibo.velvet_strat_v30", "GammaScalpSmileV30VEV4500"),
+    "gamma_scalp_with_ask_v30_vev5100": ("prosperity.strategies.round_3.tibo.velvet_strat_v30", "GammaScalpWithAskV30VEV5100"),
+    "gamma_scalp_smile_v30_vev5200":    ("prosperity.strategies.round_3.tibo.velvet_strat_v30", "GammaScalpSmileV30VEV5200"),
+    "delta_one_mm_v30":                 ("prosperity.strategies.round_3.tibo.velvet_strat_v30", "DeltaOneMMV30"),
+    # v100: canonical standalone (direct imports, no intermediate wrapper chain)
+    "velvet_mm_v100":      ("prosperity.strategies.round_3.tibo.velvet_strat_v100", "VelvetMMV100"),
+    "gamma_scalp_v100":    ("prosperity.strategies.round_3.tibo.velvet_strat_v100", "GammaScalpV100"),
+    "vev_option_mm_v100":  ("prosperity.strategies.round_3.tibo.velvet_strat_v100", "VEVOptionMMV100"),
+    "hydro_mm_v100":       ("prosperity.strategies.round_3.tibo.velvet_strat_v100", "HydroMMV100"),
+    # v200: hybrid hydro + velvet port
+    "velvet_mm_v200":      ("prosperity.strategies.round_3.tibo.velvet_strat_v200", "VelvetMMV200"),
+    "gamma_scalp_v200":    ("prosperity.strategies.round_3.tibo.velvet_strat_v200", "GammaScalpV200"),
+    # v200: HYDROGEL standalone
+    "hydro_mm_v200":       ("prosperity.strategies.round_3.tibo.hydro_strat_v200", "HydroMMV200"),
     # v200r4: HYDROGEL standalone (round 4 — direct BaseStrategy subclass, same logic)
     "hydro_mm_v200_r4":    ("prosperity.strategies.round_4.tibo.hydro_strat_v200", "HydroMMV200"),
     # mv_v1: z-score mean-reversion + Mark 14 gate
@@ -231,6 +288,20 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydro_mv_v5":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v5", "HydroMVV5"),
     # mv_v6: dynamic anchor variants (slow_ewma / rolling_median / regime_switch / inv_protected)
     "hydro_mv_v6":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v6", "HydroMVV6"),
+    # mv_v7: two-component MM (anchor AR taker + fast passive MM both sides)
+    "hydro_mv_v7":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v7", "HydroMVV7"),
+    # mv_v8: hysteresis on AR taker + inventory-skewed MM
+    "hydro_mv_v8":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v8", "HydroMVV8"),
+    # mv_v9: v6b + hard cap ALL orders + M14 cumulative gate + inv skew
+    "hydro_mv_v9":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v9", "HydroMVV9"),
+    # mv_v10: active MM with hard inventory cap + vol gate
+    "hydro_mv_v10":                ("prosperity.strategies.round_4.tibo.hydro_mv_v10", "HydroMVV10"),
+    # mv_v11: v9 base + M38 streak gate (data-driven: M38 is the aggressor)
+    "hydro_mv_v11":                ("prosperity.strategies.round_4.tibo.hydro_mv_v11", "HydroMVV11"),
+    # mv_v12: v9 base + M14 VEV_4000 cross-asset hedge signal
+    "hydro_mv_v12":                ("prosperity.strategies.round_4.tibo.hydro_mv_v12", "HydroMVV12"),
+    # mv_v13: dual gate = v9 M14-HYDRO gate + v12 VEV_4000 hedge gate
+    "hydro_mv_v13":                ("prosperity.strategies.round_4.tibo.hydro_mv_v13", "HydroMVV13"),
     # v201: Mark 14 informed-trader gate (3 variants)
     "hydro_mm_v201_ruled":         ("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201Ruled"),
     "hydro_mm_v201_influenced":    ("prosperity.strategies.round_4.tibo.hydro_strat_v201_influenced", "HydroMMV201Influenced"),

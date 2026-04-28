@@ -261,43 +261,42 @@ def _merge_equity(bt_days: List[Dict], round_num: int, days: List[str], data_dir
 # ── Feature extraction ────────────────────────────────────────────────────────
 
 def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -> Dict[str, Any]:
-    """Extract v5/v6-specific time series from feature_ticks and quotes."""
+    """Extract v5/v6/v7-specific time series from feature_ticks and quotes."""
     (fv_ts, fv_vals, dev_ts, dev_vals, m14_ts, m14_vals,
      anc_ts, anc_vals, mom_ts, mom_vals,
      guard_ts, guard_vals, tsell_ts, tsell_vals, tbuy_ts, tbuy_vals,
-     fsz_ts, f_bid_sz, f_ask_sz, fbase_ts, fbase_vals,
-     conf_ts, conf_vals, drift_ts, drift_vals) = ([] for _ in range(25))
+     fsz_ts, f_bid_sz, f_ask_sz,
+     fmid_ts, fmid_vals, alim_ts, alim_vals) = ([] for _ in range(23))
 
     for ft in features:
         if ft.get("symbol") != product:
             continue
         ts = ft["timestamp"]
-        fv   = _feature_value(ft, "FairValue", "fair_value")
-        dv   = _feature_value(ft, "DevSmooth", "deviation")
-        m14  = _feature_value(ft, "M14Signal", "m14_signal")
-        anc  = _feature_value(ft, "Anchor", "anchor")
-        mom  = _feature_value(ft, "ar_mom", "ArMomentum")
-        grd  = _feature_value(ft, "guard", "Guard")
-        ts_  = _feature_value(ft, "taker_sell", "TakerSell")
-        tb_  = _feature_value(ft, "taker_buy", "TakerBuy")
-        bsz  = _feature_value(ft, "bid_size", "BidSize")
-        asz  = _feature_value(ft, "ask_size", "AskSize")
-        fbase = _feature_value(ft, "FairBase", "fair_base")
-        conf = _feature_value(ft, "AnchorConfidence", "anchor_confidence")
-        drift = _feature_value(ft, "AnchorDriftEwma", "anchor_drift_ewma", "AnchorDrift")
-        if fv  is not None: fv_ts.append(ts);     fv_vals.append(fv)
-        if dv  is not None: dev_ts.append(ts);    dev_vals.append(dv)
-        if m14 is not None: m14_ts.append(ts);    m14_vals.append(m14)
-        if anc is not None: anc_ts.append(ts);    anc_vals.append(anc)
-        if mom is not None: mom_ts.append(ts);    mom_vals.append(mom)
-        if grd is not None: guard_ts.append(ts);  guard_vals.append(grd)
-        if ts_ is not None: tsell_ts.append(ts);  tsell_vals.append(ts_)
-        if tb_ is not None: tbuy_ts.append(ts);   tbuy_vals.append(tb_)
-        if bsz is not None and asz is not None:
+        fv   = _to_float(ft.get("FairValue"))
+        dv   = _to_float(ft.get("DevSmooth"))
+        m14  = _to_float(ft.get("M14Signal"))
+        anc  = _to_float(ft.get("Anchor"))
+        mom  = _to_float(ft.get("ar_mom"))
+        grd  = _to_float(ft.get("guard"))
+        ts_  = _to_float(ft.get("taker_sell"))
+        tb_  = _to_float(ft.get("taker_buy"))
+        # v6 uses bid_size/ask_size; v7 uses mm_bid_qty/mm_ask_qty
+        bsz  = _to_float(ft.get("bid_size") if ft.get("bid_size") is not None else ft.get("mm_bid_qty"))
+        asz  = _to_float(ft.get("ask_size") if ft.get("ask_size") is not None else ft.get("mm_ask_qty"))
+        fmid = _to_float(ft.get("fast_mid"))          # v7: reactive EWMA fair value for MM
+        alim = _to_float(ft.get("anchor_limit"))      # v7: AR taker position boundary
+        if fv   is not None: fv_ts.append(ts);     fv_vals.append(fv)
+        if dv   is not None: dev_ts.append(ts);    dev_vals.append(dv)
+        if m14  is not None: m14_ts.append(ts);    m14_vals.append(m14)
+        if anc  is not None: anc_ts.append(ts);    anc_vals.append(anc)
+        if mom  is not None: mom_ts.append(ts);    mom_vals.append(mom)
+        if grd  is not None: guard_ts.append(ts);  guard_vals.append(grd)
+        if ts_  is not None: tsell_ts.append(ts);  tsell_vals.append(ts_)
+        if tb_  is not None: tbuy_ts.append(ts);   tbuy_vals.append(tb_)
+        if bsz  is not None and asz is not None:
             fsz_ts.append(ts); f_bid_sz.append(bsz); f_ask_sz.append(asz)
-        if fbase is not None: fbase_ts.append(ts); fbase_vals.append(fbase)
-        if conf is not None: conf_ts.append(ts); conf_vals.append(conf)
-        if drift is not None: drift_ts.append(ts); drift_vals.append(drift)
+        if fmid is not None: fmid_ts.append(ts);   fmid_vals.append(fmid)
+        if alim is not None: alim_ts.append(ts);   alim_vals.append(alim)
 
     # sizes: prefer quote-trace from features; fall back to quotes buffer
     if not fsz_ts:
@@ -318,9 +317,8 @@ def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -
         "tsell_ts":   tsell_ts, "tsell":       tsell_vals,
         "tbuy_ts":    tbuy_ts,  "tbuy":        tbuy_vals,
         "size_ts":    fsz_ts,   "bid_size":    f_bid_sz,  "ask_size": f_ask_sz,
-        "fbase_ts":   fbase_ts, "fbase":       fbase_vals,
-        "conf_ts":    conf_ts,  "conf":        conf_vals,
-        "drift_ts":   drift_ts, "drift":       drift_vals,
+        "fmid_ts":    fmid_ts,  "fmid":        fmid_vals,
+        "alim_ts":    alim_ts,  "alim":        alim_vals,
     }
 
 
@@ -377,10 +375,11 @@ def _position_curve(
 
 # ── IMC log mode: load everything from an uploaded submission log ──────────────
 
-def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict]:
-    """Parse activitiesLog CSV → market_prices per product + equity curve."""
+def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict, Dict[str, Dict]]:
+    """Parse activitiesLog CSV → market_prices, total equity, per-product equity."""
     rows_by_prod: Dict[str, List[Tuple]] = defaultdict(list)
     pnl_by_ts: Dict[int, float] = {}
+    pnl_by_prod_ts: Dict[str, Dict[int, float]] = defaultdict(dict)
 
     for row in csv.DictReader(activities_text.strip().splitlines(), delimiter=";"):
         prod = (row.get("product") or "").strip()
@@ -396,6 +395,7 @@ def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict]:
         pnl = _to_float(row.get("profit_and_loss", ""))
         if pnl is not None:
             pnl_by_ts[ts] = pnl_by_ts.get(ts, 0.0) + pnl
+            pnl_by_prod_ts[prod][ts] = pnl
 
     market_prices: Dict[str, Any] = {}
     for prod, rows in rows_by_prod.items():
@@ -407,7 +407,13 @@ def _parse_activities(activities_text: str) -> Tuple[Dict[str, Any], Dict]:
 
     ts_sorted = sorted(pnl_by_ts)
     equity = {"ts": ts_sorted, "pnl": [pnl_by_ts[t] for t in ts_sorted]}
-    return market_prices, equity
+
+    per_product_equity: Dict[str, Dict] = {}
+    for prod, pm in pnl_by_prod_ts.items():
+        ts_p = sorted(pm)
+        per_product_equity[prod] = {"ts": ts_p, "pnl": [pm[t] for t in ts_p]}
+
+    return market_prices, equity, per_product_equity
 
 
 def _parse_trade_history(trade_raw) -> Tuple[List[Dict], List[Dict]]:
@@ -527,10 +533,15 @@ def _parse_lambdalog_entries(runtime_logs: list, default_product: str = "") -> L
 
 
 def _load_from_imclog(path: Path) -> Dict[str, Any]:
-    """Load ALL visualizer data from a single IMC log file.
+    """Load ALL visualizer data from a single IMC log file (.log or .json).
+
+    Accepts both the .log format (has tradeHistory + activitiesLog + lambdaLog)
+    and the .json format (has activitiesLog + graphLog but NO tradeHistory).
+    When a .json file is loaded, automatically looks for a companion .log file
+    in the same directory to recover the trade history.
 
     Returns the same data shape as the backtest pipeline so generate_html()
-    works identically for both modes. No backtest data is mixed in.
+    works identically for both modes.
     """
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -539,16 +550,34 @@ def _load_from_imclog(path: Path) -> Dict[str, Any]:
         sys.exit(1)
 
     activities_text = (raw.get("activitiesLog") or raw.get("activityLog") or "")
-    market_prices, equity = _parse_activities(activities_text)
+    market_prices, equity, per_product_equity = _parse_activities(activities_text)
 
     trade_raw = raw.get("tradeHistory") or raw.get("tradeLog") or []
+    runtime_logs = raw.get("logs", [])
+
+    # .json files have no tradeHistory — try companion .log file for trade data
+    if not trade_raw and path.suffix == ".json":
+        companion = path.with_suffix(".log")
+        if companion.exists():
+            print(f"  Auto-loading trade history from companion {companion.name} ...")
+            try:
+                companion_raw = json.loads(companion.read_text(encoding="utf-8"))
+                trade_raw = companion_raw.get("tradeHistory") or companion_raw.get("tradeLog") or []
+                # Also use lambdaLog from the .log if the .json lacks it
+                if not runtime_logs:
+                    runtime_logs = companion_raw.get("logs", [])
+            except Exception as e:
+                print(f"  Warning: could not read companion .log file: {e}")
+        else:
+            print(f"  ⚠  No tradeHistory in .json and no companion {companion.name} found — market trades will be empty")
+
     our_fills, market_trades = _parse_trade_history(trade_raw)
 
     # Infer primary product from our fills so old logs (without "product" in blk
     # dicts) still get their feature entries attributed to the right symbol.
     _syms = [f["symbol"] for f in our_fills if f.get("symbol")]
     primary_product = max(set(_syms), key=_syms.count) if _syms else ""
-    features = _parse_lambdalog_entries(raw.get("logs", []), default_product=primary_product)
+    features = _parse_lambdalog_entries(runtime_logs, default_product=primary_product)
 
     strategy_name = raw.get("submissionId", path.stem)[:32]
     n_feat = len([
@@ -564,14 +593,15 @@ def _load_from_imclog(path: Path) -> Dict[str, Any]:
         print("  ⚠  No FairValue/DevSmooth in lambdaLog — v5 chart will show price/fills only")
 
     return {
-        "market_prices":  market_prices,
-        "market_trades":  market_trades,
-        "our_fills":      our_fills,
-        "quotes":         [],          # passive quote prices not logged in live
-        "features":       features,
-        "equity":         equity,
-        "strategy_name":  strategy_name,
-        "day_boundaries": [],          # single-day live run — no resets
+        "market_prices":        market_prices,
+        "market_trades":        market_trades,
+        "our_fills":            our_fills,
+        "quotes":               [],          # passive quote prices not logged in live
+        "features":             features,
+        "equity":               equity,
+        "per_product_equity":   per_product_equity,
+        "strategy_name":        strategy_name,
+        "day_boundaries":       [],          # single-day live run — no resets
     }
 
 
@@ -645,16 +675,17 @@ def _price_chart_js_v5(
     if v5.get("anc_ts"):
         anc_ts = _json_list(v5["anc_ts"])
         anc_v  = _json_list(v5["anc"])
-        traces.append(f"""{{x:{anc_ts},y:{anc_v},name:'Anchor',mode:'lines',
+        traces.append(f"""{{x:{anc_ts},y:{anc_v},name:'Anchor (slow)',mode:'lines',
           line:{{color:'#fab387',width:1.2,dash:'dash'}},opacity:0.8,
           hovertemplate:'Anchor: %{{y:.2f}}<extra></extra>'}}""")
 
-    if v5.get("fbase_ts"):
-        fbase_ts = _json_list(v5["fbase_ts"])
-        fbase_v  = _json_list(v5["fbase"])
-        traces.append(f"""{{x:{fbase_ts},y:{fbase_v},name:'FairBase (adaptive)',mode:'lines',
-          line:{{color:'#94e2d5',width:1.1,dash:'dot'}},opacity:0.9,
-          hovertemplate:'FairBase: %{{y:.2f}}<extra></extra>'}}""")
+    # FastMid — v7 reactive EWMA used as MM fair value (tracks price closely)
+    if v5.get("fmid_ts"):
+        fmid_ts = _json_list(v5["fmid_ts"])
+        fmid_v  = _json_list(v5["fmid"])
+        traces.append(f"""{{x:{fmid_ts},y:{fmid_v},name:'FastMid (MM ref)',mode:'lines',
+          line:{{color:'#a6e3a1',width:1.2,dash:'dash'}},opacity:0.85,
+          hovertemplate:'FastMid: %{{y:.2f}}<extra></extra>'}}""")
 
     # Our submitted passive quotes (subsample every 5th for file size)
     q_prod = [q for q in quotes if q.get("symbol") == product]
@@ -831,14 +862,31 @@ def _position_sizing_chart_js(
         bsz   = _json_list(v5["bid_size"])
         asz   = _json_list(v5["ask_size"])
         size_traces = f""",{{
-      x:{sz_ts},y:{bsz},name:'Bid size',mode:'lines',
+      x:{sz_ts},y:{bsz},name:'Bid size (MM)',mode:'lines',
       line:{{color:'#74c7ec',width:1,dash:'dot'}},yaxis:'y2',
       hovertemplate:'bid_sz: %{{y}}<extra></extra>'
     }},{{
-      x:{sz_ts},y:{asz},name:'Ask size',mode:'lines',
+      x:{sz_ts},y:{asz},name:'Ask size (MM)',mode:'lines',
       line:{{color:'#f38ba8',width:1,dash:'dot'}},yaxis:'y2',
       hovertemplate:'ask_sz: %{{y}}<extra></extra>'
     }}"""
+
+    # v7: anchor_limit reference lines — show the AR taker position boundary
+    anchor_shapes = ""
+    if v5.get("alim_ts") and v5["alim_ts"]:
+        alim = v5["alim"][0]  # static per session
+        anchor_shapes = f"""
+        {{type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:{alim},y1:{alim},
+          line:{{color:'#fab387',width:1,dash:'dot'}}}},
+        {{type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:-{alim},y1:-{alim},
+          line:{{color:'#fab387',width:1,dash:'dot'}}}},"""
+        anchor_annot = f"""
+        {{xref:'paper',yref:'y',x:0.99,y:{alim},text:'anchor +{int(alim)}u',
+          showarrow:false,font:{{color:'#fab387',size:9}},xanchor:'right'}},
+        {{xref:'paper',yref:'y',x:0.99,y:-{alim},text:'anchor -{int(alim)}u',
+          showarrow:false,font:{{color:'#fab387',size:9}},xanchor:'right'}},"""
+    else:
+        anchor_annot = ""
 
     layout_extra = """
       yaxis2: {title:'quote size',overlaying:'y',side:'right',gridcolor:'#313244',
@@ -848,9 +896,11 @@ def _position_sizing_chart_js(
   function plot_pos_{safe}() {{
     Plotly.newPlot('pos_{safe}',[{pos_trace}{size_traces}],
     Object.assign({{}},{_layout_js(layout_extra)},{{
-      title:'{product} — Position (left) + Quote Sizes / Inventory Bias (right)',
+      title:'{product} — Position (left) + MM Quote Sizes (right)',
       yaxis:{{title:'units',gridcolor:'#313244',zeroline:true}},
       margin:{{t:30,b:36,l:65,r:65}},
+      shapes:[{anchor_shapes}],
+      annotations:[{anchor_annot}],
     }}),{{responsive:true}});
   }}"""
 
@@ -1020,50 +1070,137 @@ def _ar_momentum_chart_js(product: str, v5: Dict) -> str:
   }}"""
 
 
+# ── Per-product equity from fills (backtest mode) ─────────────────────────────
+
+def _compute_product_equity_from_fills(
+    our_fills: List[Dict],
+    market_prices: Dict[str, Any],
+    products: List[str],
+) -> Dict[str, Dict]:
+    """Reconstruct per-product PnL curve from fills + mid prices.
+
+    PnL = -cost_basis + position × mid  (realized + unrealized, matches IMC formula).
+    Used in backtest mode where activitiesLog is not available.
+    """
+    per_product: Dict[str, Dict] = {}
+    for product in products:
+        prod_fills = sorted(
+            [f for f in our_fills if f.get("symbol") == product],
+            key=lambda x: x["ts"],
+        )
+        mid_ts   = market_prices.get(product, {}).get("ts",  [])
+        mid_vals = market_prices.get(product, {}).get("mid", [])
+        if not mid_ts:
+            continue
+
+        position   = 0
+        cost_basis = 0.0
+        fi         = 0
+        ts_list:  List[int]   = []
+        pnl_list: List[float] = []
+
+        for i, ts in enumerate(mid_ts):
+            mid = mid_vals[i]
+            if mid is None:
+                continue
+            while fi < len(prod_fills) and prod_fills[fi]["ts"] <= ts:
+                f   = prod_fills[fi]
+                qty = f.get("qty", f.get("quantity", 0))
+                px  = f["price"]
+                if f["side"] == "BUY":
+                    cost_basis += px * qty
+                    position   += qty
+                else:
+                    cost_basis -= px * qty
+                    position   -= qty
+                fi += 1
+            ts_list.append(ts)
+            pnl_list.append(-cost_basis + position * mid)
+
+        if ts_list:
+            # subsample: keep at most 1 000 points (pure visualisation)
+            step = max(1, len(ts_list) // 1000)
+            per_product[product] = {
+                "ts":  ts_list[::step],
+                "pnl": pnl_list[::step],
+            }
+    return per_product
+
+
 # ── Chart: PnL ────────────────────────────────────────────────────────────────
 
-def _pnl_chart_js(equity: Dict, day_boundaries: Optional[List[int]] = None) -> str:
+def _pnl_chart_js(
+    equity: Dict,
+    per_product_equity: Dict[str, Dict],
+    day_boundaries: Optional[List[int]] = None,
+) -> str:
     if not equity["ts"]:
-        return "function plot_pnl() {}"
+        return "function plot_pnl() {} function pnlSelect(k) {}"
 
-    pnl_vals = equity["pnl"]
+    def _build_dd(pnl_vals: List[float]) -> List[float]:
+        peak = 0.0
+        dd: List[float] = []
+        for p in pnl_vals:
+            if p > peak:
+                peak = p
+            dd.append(p - peak)
+        return dd
 
-    # Drawdown: running peak − current (always ≤ 0)
-    peak = 0.0
-    dd_vals = []
-    for p in pnl_vals:
-        if p > peak:
-            peak = p
-        dd_vals.append(p - peak)
-
-    # Vertical day-separator lines
+    # Vertical day-separator shapes
     boundary_shapes = ""
     for b in (day_boundaries or [])[1:]:
         boundary_shapes += f"""
       {{type:'line',xref:'x',yref:'paper',x0:{b},x1:{b},y0:0,y1:1,
         line:{{color:'#45475a',width:1,dash:'dot'}}}},"""
 
-    ts_js  = json.dumps(equity["ts"])
-    pnl_js = _json_list(pnl_vals)
-    dd_js  = _json_list(dd_vals)
+    # Build JS data object: one entry per view (all + each product)
+    entries: List[str] = []
+
+    all_dd = _build_dd(equity["pnl"])
+    entries.append(
+        f"  all: {{ts:{json.dumps(equity['ts'])},"
+        f"pnl:{_json_list(equity['pnl'])},"
+        f"dd:{_json_list(all_dd)},"
+        f"label:'Portfolio'}}"
+    )
+
+    for prod, eq in per_product_equity.items():
+        if not eq.get("ts"):
+            continue
+        p_dd = _build_dd(eq["pnl"])
+        entries.append(
+            f"  {_jsid(prod)}: {{ts:{json.dumps(eq['ts'])},"
+            f"pnl:{_json_list(eq['pnl'])},"
+            f"dd:{_json_list(p_dd)},"
+            f"label:{json.dumps(prod)}}}"
+        )
+
+    data_js = "{\n" + ",\n".join(entries) + "\n}"
+    layout_extra = "yaxis:{title:'PnL / DD (SeaShells)',gridcolor:'#313244',zeroline:true},"
+    layout_extra += f"shapes:[{boundary_shapes}],margin:{{t:30,b:36,l:75,r:20}},"
 
     return f"""
-  function plot_pnl() {{
-    Plotly.newPlot('pnl_chart',[
-      {{x:{ts_js},y:{pnl_js},name:'PnL',mode:'lines',fill:'tozeroy',
+  var _pnl_data = {data_js};
+  var _pnl_layout = Object.assign({{}},{_layout_js()},{{{layout_extra}}});
+
+  function plot_pnl() {{ pnlSelect('all'); }}
+
+  function pnlSelect(key) {{
+    var d = _pnl_data[key]; if (!d) return;
+    document.querySelectorAll('.pnl-filter-btn').forEach(function(b) {{
+      b.classList.toggle('active', b.dataset.key === key);
+    }});
+    Plotly.react('pnl_chart', [
+      {{x:d.ts,y:d.pnl,name:'PnL',mode:'lines',fill:'tozeroy',
         fillcolor:'rgba(203,166,247,0.15)',
         line:{{color:'#cba6f7',width:2}},
         hovertemplate:'PnL: %{{y:,.0f}}<extra></extra>'}},
-      {{x:{ts_js},y:{dd_js},name:'Drawdown',mode:'lines',fill:'tozeroy',
+      {{x:d.ts,y:d.dd,name:'Drawdown',mode:'lines',fill:'tozeroy',
         fillcolor:'rgba(243,139,168,0.15)',
         line:{{color:'#f38ba8',width:1.5}},
         hovertemplate:'DD: %{{y:,.0f}}<extra></extra>'}}
-    ], Object.assign({{}},{_layout_js()},{{
-      title:'Portfolio Equity Curve + Drawdown',
-      yaxis:{{title:'PnL / DD (SeaShells)',gridcolor:'#313244',zeroline:true}},
-      shapes:[{boundary_shapes}],
-      margin:{{t:30,b:36,l:75,r:20}},
-    }}),{{responsive:true}});
+    ], Object.assign({{}}, _pnl_layout, {{title: d.label + ' — Equity + Drawdown'}}),
+    {{responsive:true}});
   }}"""
 
 
@@ -1283,6 +1420,7 @@ def generate_html(
     features: List[Dict],
     equity: Dict,
     output_path: Path,
+    per_product_equity: Optional[Dict[str, Dict]] = None,
     title: str = "",
     product_filter: Optional[str] = None,
     taker_edge: float = 12.0,
@@ -1292,12 +1430,16 @@ def generate_html(
     if product_filter:
         products = [p for p in products if p == product_filter]
 
-    # Detect v5/v6/v9 mode using both historical and newer aliases.
-    is_v5 = any(
-        _feature_value(ft, "DevSmooth", "deviation") is not None
-        or _feature_value(ft, "FairValue", "fair_value") is not None
-        for ft in features
-    )
+    # Per-product equity: use provided dict (IMC log mode) or compute from fills
+    if per_product_equity is None:
+        per_product_equity = _compute_product_equity_from_fills(
+            our_fills, market_prices, products,
+        )
+    # Filter to displayed products only
+    ppe = {p: v for p, v in per_product_equity.items() if p in products}
+
+    # Detect v5 mode: DevSmooth in feature_ticks
+    is_v5 = any("DevSmooth" in ft for ft in features)
     print(f"  Mode: {'v5 (passive MM + AR taker)' if is_v5 else 'generic'}")
 
     all_traders = sorted({f["buyer"] for f in market_trades}
@@ -1340,13 +1482,15 @@ def generate_html(
         prod_pnl = 0.0
         for day_data in bt.get("days", []):
             prod_pnl += day_data.get("product_summaries", {}).get(prod, {}).get("pnl", 0.0)
+        # Fall back to last point of per-product equity curve if bt days unavailable
+        if prod_pnl == 0.0 and prod in ppe and ppe[prod].get("pnl"):
+            prod_pnl = ppe[prod]["pnl"][-1]
         n_prod_taker = sum(1 for f in prod_fills if f.get("aggressive", True))
         n_prod_maker = len(prod_fills) - n_prod_taker
 
         if is_v5:
             v5 = _extract_v5_series(features, quotes, prod)
 
-            # Build v5 panel HTML
             panels += f"""
 <div id="prod_panel_{safe}" class="product-panel">
   <div class="stat-row">
@@ -1360,9 +1504,10 @@ def generate_html(
     <span class="legend-item">● blue = MAKER BUY</span>
     <span class="legend-item">● pink = MAKER SELL</span>
     <span class="legend-item">■ = other trader</span>
-    <span class="legend-item">yellow = AR FairValue</span>
-    <span class="legend-item">orange dashed = Anchor (v6)</span>
-    <span class="legend-item">teal dotted = FairBase / adaptive fair base (v9)</span>
+    <span class="legend-item">yellow = AR FairValue (slow)</span>
+    <span class="legend-item">orange dashed = Anchor (v6/v7 slow)</span>
+    <span class="legend-item">green dashed = FastMid (v7 MM reference)</span>
+    <span class="legend-item">orange dotted = anchor_limit ± (v7 AR taker boundary)</span>
     <span class="legend-item">green band = BUY entry zone (FV - {taker_edge})</span>
     <span class="legend-item">red band = SELL entry zone (FV + {taker_edge})</span>
   </div>
@@ -1400,7 +1545,20 @@ def generate_html(
             js_fns += _position_chart_js_generic(prod, our_fills, day_boundaries)
 
     tab_bar += "</div>"
-    js_fns  += _pnl_chart_js(equity, day_boundaries)
+
+    # PnL filter bar: All + one button per product that has equity data
+    pnl_filter_bar = '<div class="tab-bar">'
+    pnl_filter_bar += '<button class="pnl-filter-btn tab-btn active" data-key="all" onclick="pnlSelect(\'all\')">All</button>'
+    for prod in products:
+        if prod in ppe:
+            safe_key = _jsid(prod)
+            pnl_filter_bar += (
+                f'<button class="pnl-filter-btn tab-btn" data-key="{safe_key}"'
+                f' onclick="pnlSelect(\'{safe_key}\')">{prod}</button>'
+            )
+    pnl_filter_bar += "</div>"
+
+    js_fns += _pnl_chart_js(equity, ppe, day_boundaries)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1416,7 +1574,8 @@ def generate_html(
   {stats_html}
 
   <div class="section">
-    <h2>Portfolio PnL</h2>
+    <h2>PnL</h2>
+    {pnl_filter_bar}
     <div class="chart-container"><div id="pnl_chart" class="chart-med"></div></div>
   </div>
 
@@ -1449,7 +1608,10 @@ def main() -> None:
             "Mode A — backtest analysis:\n"
             "  python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v5_best.json\n\n"
             "Mode B — live IMC log analysis:\n"
-            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.log\n\n"
+            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.log\n"
+            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.json\n\n"
+            "Both .log and .json IMC files are accepted. When a .json is passed, the tool\n"
+            "automatically loads trade history from the sibling .log file (same name, .log ext).\n"
             "The two modes are mutually exclusive. --log uses ONLY live data; no backtest\n"
             "features are mixed in."
         ),
@@ -1457,7 +1619,10 @@ def main() -> None:
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--backtest-json", help="Path to backtest result JSON")
-    group.add_argument("--log",           help="Path to IMC submission log (.log file)")
+    group.add_argument("--log",           help="Path to IMC submission log (.log or .json file). "
+                                               "When passing a .json file that lacks tradeHistory, "
+                                               "the tool auto-loads the companion .log file from "
+                                               "the same directory.")
     parser.add_argument("--product",       default=None)
     parser.add_argument("--out",           default=None)
     parser.add_argument("--data-dir",      default=None)
@@ -1491,6 +1656,7 @@ def main() -> None:
             quotes=d["quotes"],
             features=d["features"],
             equity=d["equity"],
+            per_product_equity=d["per_product_equity"],
             output_path=out_path,
             title=title,
             product_filter=args.product,

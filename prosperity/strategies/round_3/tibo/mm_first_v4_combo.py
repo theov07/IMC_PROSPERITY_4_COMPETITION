@@ -895,6 +895,47 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
         position: int,
         memory: Dict[str, Any],
     ) -> Tuple[List[Order], int]:
+        # Counterparty bias layer (opt-in via params): compute trader-flow signal
+        # Mark 55+67 follow / Mark 01+14 fade → returns weighted net flow signal
+        # Mark this strategy as handling cp_bias internally — avoid double-application from on_tick
+        self.params["_cp_bias_handled_internally"] = True
+
+        cp_offset = 0
+        if bool(self.params.get("counterparty_bias_enabled", False)):
+            cp_signal = self._counterparty_signal(state, memory)
+            cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
+            cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
+            cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
+            if abs(cp_signal) > cp_threshold:
+                cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
+
+        # Original guard logic
+        orders, conv = self._compute_guarded(state, book, order_depth, position, memory)
+
+        # Apply cp_bias as uniform price shift on all orders (post-strategy)
+        if cp_offset != 0 and orders:
+            shifted = []
+            best_bid = book.best_bid
+            best_ask = book.best_ask
+            for o in orders:
+                new_price = int(o.price) + cp_offset
+                # Cap to avoid crossing the book
+                if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
+                    new_price = int(best_ask) - 1
+                elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
+                    new_price = int(best_bid) + 1
+                shifted.append(Order(o.symbol, new_price, o.quantity))
+            return shifted, conv
+        return orders, conv
+
+    def _compute_guarded(
+        self,
+        state: TradingState,
+        book: BookSnapshot,
+        order_depth: OrderDepth,
+        position: int,
+        memory: Dict[str, Any],
+    ) -> Tuple[List[Order], int]:
         mid    = book.mid_price
         anchor = self.params.get("anchor_price")
         if mid is None or anchor is None:
@@ -955,53 +996,3 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
         return out
 
 
-class DynamicAnchorMMStrategy(R3GuardedAnchorMMStrategy):
-    """R3GuardedAnchorMMStrategy with anchor replaced by a slow EWMA of mid price.
-
-    Instead of a fixed anchor_price=5250, the anchor tracks a very slow
-    exponential moving average of the mid price. This lets the strategy
-    adapt when VELVETFRUIT drifts over multi-day periods.
-
-    Key param:
-      anchor_slow_alpha  EWMA alpha for the slow anchor (default 0.0002,
-                         half-life ≈ 3500 ticks ≈ 0.35 days).
-                         Smaller = slower / more stable anchor.
-
-    Set anchor_alpha=0.0 and anchor_drift_bound=0.0 in config so the parent's
-    fast-drift logic is bypassed (the slow EMA is already smooth enough).
-    """
-
-    def _get_dynamic_anchor(self, mid: float, memory: Dict[str, Any]) -> float:
-        alpha = float(self.params.get("anchor_slow_alpha", 0.0002))
-        prev = memory.get("_dynamic_anchor")
-        if prev is None:
-            memory["_dynamic_anchor"] = float(mid)
-            return float(mid)
-        ema = (1.0 - alpha) * float(prev) + alpha * mid
-        memory["_dynamic_anchor"] = ema
-        return ema
-
-    def compute_orders(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
-        mid = book.mid_price
-        if mid is None:
-            return super().compute_orders(state, book, order_depth, position, memory)
-        anchor = self._get_dynamic_anchor(float(mid), memory)
-        old_anchor = self.params.get("anchor_price")
-        try:
-            self.params["anchor_price"] = anchor
-            return super().compute_orders(state, book, order_depth, position, memory)
-        finally:
-            self.params["anchor_price"] = old_anchor
-
-    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
-        out = super().feature_prices(memory)
-        if (a := memory.get("_dynamic_anchor")) is not None:
-            out["DynAnchor"] = float(a)
-        return out
