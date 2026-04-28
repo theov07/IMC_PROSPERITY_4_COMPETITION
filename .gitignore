@@ -40,6 +40,7 @@ logs/round_2/theo
 artifacts/analysis/round_3/backtest_*.json
 
 logs/round_3
+logs/round_3
 # Large backtest JSON dumps (>50MB, blocks GitHub push)
 artifacts/backtests/*.json
 artifacts/backtests/**/*.json
@@ -58,3 +59,31 @@ logs/round_3/*.log
 logs/round_3/*.json
 artifacts/backtest_results/*
 artifacts/backtests/*
+
+# ═══ AUTO-IGNORE all future rounds backtest JSONs ═══
+# Catches round_3, round_4, round_5, ... automatically
+artifacts/analysis/round_*/*.json
+artifacts/analysis/round_*/**/*.json
+artifacts/backtest_results/round_*/*.json
+artifacts/backtest_results/round_*/**/*.json
+artifacts/submissions/round_*/_BASELINE/*.json
+artifacts/submissions/round_*/_BASELINE/*.log
+artifacts/submissions/round_*/_FINAL_DELIVERY/*.json
+artifacts/submissions/round_*/_FINAL_DELIVERY/*.log
+logs/round_*/*.log
+logs/round_*/*.json
+
+# Generic fallback: any JSON > 50MB risk patterns
+artifacts/**/backtest_*.json
+artifacts/**/_3d.json
+artifacts/**/oracle_*.json
+artifacts/backtest_results/*
+artifacts/backtests/*
+artifacts/backtest_cache/
+
+# Large HTML reports (counterparties tool, data explorer) — regenerable from data
+artifacts/analysis/round_*/counterparties_*.html
+artifacts/analysis/round_*/data_explorer_*.html
+artifacts/analysis/round_*/hydro_counterparties.html
+artifacts/analysis/round_*/v[0-9]_dashboard.html
+artifacts/analysis/round_*/v[0-9][0-9]_dashboard.html

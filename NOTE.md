@@ -1,3 +1,49 @@
+## Round 4 Status — Baseline locked (2026-04-27)
+
+**Live IMC R4 = R4 D3 first 10%** (1000 ticks, bit-for-bit deterministic, validated against oracle).
+**R3 D1 = R4 D1**, **R3 D2 = R4 D2** (bit-for-bit identical). Only D3 is genuinely new R4 data.
+
+### R4 Pareto frontier (3-day realistic backtest, HYDROGEL DISABLED)
+
+| Tier | File (in `artifacts/submissions/round_4/_BASELINE/`) | PnL 3d | DD | Ratio |
+|---|---|---:|---:|---:|
+| **BEST RATIO** ★ | `R4_v57_best_ratio__pnl152k_dd62k_ratio246.py` | **151,596** | **61,560** | **2.46** |
+| BALANCED | `R4_v58_balanced__pnl153k_dd64k_ratio239.py` | 153,132 | 64,004 | 2.39 |
+| MAX PnL | `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py` | **157,712** | 72,582 | 2.17 |
+| MINIMAL | `R4_v52_minimal__pnl140k_dd61k_ratio230.py` | 140,488 | 61,195 | 2.30 |
+
+### Recommended upload
+**Default**: `R4_v57_best_ratio` (best risk-adjusted, lowest CV 47.8%).
+**Aggressive**: `R4_BASELINE__r4_velvet_options_only` (max PnL, +6k vs v57, but +11k DD).
+
+### Key R3 → R4 wins (incremental)
+
+| Idea | PnL gain (3d) | Notes |
+|---|---:|---|
+| Toxic flow + passive unwind on VELVET | **+11,108** | The big win (v52 → v57) |
+| Tibo's 2-sided MM on VEV_5200 | +4,295 | v57 → baseline |
+| Enable VEV_5300 (gamma+IV gate) | +1,535 | v57 → v58 |
+| Tibo's 2-sided MM on VEV_5400 | +286 | marginal |
+| Per-strike z thresholds (v55) | NEGATIVE | VEV_5400 z=1.0 bleeds -2.9k on D3 first 10%, killed |
+
+### HYDROGEL is OFF for R4
+
+R3-best `v7b_guarded_loose` HYDROGEL config bleeds **-104k on R4 D3** (3-day total -23,121).
+Anchor at 10000 over-trades and gets adversely picked. **Re-tune required for R4** before re-enabling.
+Possible direction: pure passive small-size only (live-confirmed +5.78 markout in tiny passive mode).
+
+### R4 wiki notes
+- TTE live = 4 days (vs 5 in R3). Backtest days have TTE=7/6/5 historical.
+- R4 exposes counterparty info ("Mark" tracker) — opportunity for participant classification.
+- Manual challenge: AETHER_CRYSTAL exotics (chooser, binary put, knock-out put). 251% annualized vol, 4-step grid per day.
+
+### Next iteration (LIVE alpha exploration only)
+1. Re-tune HYDROGEL for R4 — debug why D3 bleeds, try pure-passive small-size mode.
+2. Counterparty classification using newly exposed buyer/seller names.
+3. Faster gamma_scalp warm-up (zscore_window=500 → 100-200 for faster D3 capture).
+
+---
+
 ## Round 3 Status — **LIVE = day 2 CONFIRMED** (2026-04-24 late)
 
 **CRITICAL** : Codex confirmed the live sim is `data/round_3/prices_round_3_day_2.csv[0..99900]`

@@ -1,9 +1,4 @@
-"""Backtester entrypoint — hydro_mv_v6b.
-
-Local backtesting wrapper only.
-DO NOT upload this file to Prosperity/IMC.
-Upload the generated artifact under artifacts/submissions instead.
-"""
+"""Backtester entrypoint — hydro_mv_v6b."""
 
 from prosperity.config import get_round_config
 from prosperity.persistence import dump_state, load_state
