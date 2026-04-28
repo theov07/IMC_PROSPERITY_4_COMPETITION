@@ -54,9 +54,72 @@ class BaseStrategy(ABC):
         )
 
         orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
+        orders = self._apply_vol_size_cut(state, position, orders, book, memory)
         orders = self._apply_cp_bias(state, position, orders, book, memory)
+        orders = self._apply_xa(state, position, orders, book, memory)
         orders = self._apply_inventory_unwind(state, position, orders, book, memory)
         return orders, conversions
+
+    def _apply_xa(self, state, position, orders, book, memory):
+        """Cross-asset shift from source trader flow on source symbol."""
+        p = self.params
+        if not bool(p.get("cross_asset_enabled", False)) or not orders:
+            return orders
+        ss = p.get("cross_asset_source_symbol", "")
+        st = p.get("cross_asset_source_trader", "")
+        if not ss or not st:
+            return orders
+        ts = int(getattr(state, "timestamp", 0))
+        buf = memory.setdefault("_xa_buf", [])
+        for t in ((state.market_trades or {}).get(ss) or []):
+            q = float(getattr(t, "quantity", 0))
+            if q <= 0:
+                continue
+            if getattr(t, "buyer", "") == st:
+                buf.append([ts, q])
+            elif getattr(t, "seller", "") == st:
+                buf.append([ts, -q])
+        cut = ts - int(p.get("cross_asset_window_ts", 10000))
+        while buf and buf[0][0] < cut:
+            buf.pop(0)
+        sig = float(p.get("cross_asset_weight", 0.0)) * sum(q for _, q in buf)
+        if abs(sig) <= float(p.get("cross_asset_threshold", 5.0)):
+            return orders
+        mx = float(p.get("cross_asset_max_offset", 2.0))
+        off = int(round(max(-mx, min(mx, sig * float(p.get("cross_asset_scale", 0.05))))))
+        if off == 0:
+            return orders
+        bb, ba = book.best_bid, book.best_ask
+        out = []
+        for o in orders:
+            np_ = int(o.price) + off
+            if o.quantity > 0 and ba is not None and np_ >= ba:
+                np_ = int(ba) - 1
+            elif o.quantity < 0 and bb is not None and np_ <= bb:
+                np_ = int(bb) + 1
+            out.append(Order(o.symbol, np_, o.quantity))
+        return out
+
+    def _apply_vol_size_cut(self, state, position, orders, book, memory):
+        """Defensive: cut sizes by `factor` when realized vol > threshold."""
+        p = self.params
+        if not bool(p.get("vol_size_cut_enabled", False)) or not orders or book.mid_price is None:
+            return orders
+        buf = memory.setdefault("_vol_buf", [])
+        buf.append(float(book.mid_price))
+        max_n = int(p.get("vol_size_cut_window", 50))
+        if len(buf) > max_n:
+            del buf[: len(buf) - max_n]
+        if len(buf) < 10:
+            return orders
+        rets = [(buf[i] - buf[i-1]) / max(buf[i-1], 1e-9) for i in range(1, len(buf))]
+        mean = sum(rets) / len(rets)
+        std = (sum((r - mean) ** 2 for r in rets) / len(rets)) ** 0.5
+        if std <= float(p.get("vol_size_cut_threshold", 0.005)):
+            return orders
+        cut = float(p.get("vol_size_cut_factor", 0.5))
+        return [Order(o.symbol, o.price, int(o.quantity * cut))
+                for o in orders if int(o.quantity * cut) != 0]
 
     def _apply_inventory_unwind(self, state, position, orders, book, memory):
         """Inventory-based unwind. Triggers when |pos|>threshold*limit, reduces toward target."""
@@ -99,7 +162,7 @@ class BaseStrategy(ABC):
         return new_orders
 
     def _apply_cp_bias(self, state, position, orders, book, memory):
-        """Per-product cp_bias overlay."""
+        """Per-product cp_bias overlay (with optional regime gate via vol buffer)."""
         p = self.params
         if not bool(p.get("counterparty_bias_enabled", False)):
             return orders
@@ -381,70 +444,38 @@ class BaseStrategy(ABC):
     # Order Book Imbalance (OBI) SIZE tilt — adjust own quote SIZES (not prices).
     # Avoids spread cost from price tilt. Captures alpha through inventory shift.
     # ------------------------------------------------------------------
-    def _apply_obi_size_tilt(
-        self,
-        state: TradingState,
-        position: int,
-        orders: List[Order],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> List[Order]:
-        """When L3 OBI is extreme, increase the size of orders going in the predicted direction.
-
-        Bullish OBI (>+threshold):
-          - Multiply BUY orders by `obi_size_boost_factor` (e.g. 1.5x) — accumulate long
-          - Reduce SELL order sizes by `obi_size_reduce_factor` (e.g. 0.5x) — keep long longer
-
-        Bearish OBI (<-threshold): mirror.
-
-        Params:
-          obi_size_enabled         : turn on (default False)
-          obi_size_levels          : aggregation levels (default 3)
-          obi_size_threshold       : abs OBI to fire (default 0.005)
-          obi_size_boost_factor    : multiplier on favored side (default 1.5)
-          obi_size_reduce_factor   : multiplier on opposed side (default 0.7)
-        """
-        if not bool(self.params.get("obi_size_enabled", False)):
+    def _apply_obi_size_tilt(self, state, position, orders, book, memory):
+        """L3 OBI size tilt: boost favored side, reduce opposite side."""
+        p = self.params
+        if not bool(p.get("obi_size_enabled", False)):
             return orders
-
-        levels = int(self.params.get("obi_size_levels", 3))
-        threshold = float(self.params.get("obi_size_threshold", 0.005))
-        boost = float(self.params.get("obi_size_boost_factor", 1.5))
-        reduce = float(self.params.get("obi_size_reduce_factor", 0.7))
-
+        levels = int(p.get("obi_size_levels", 3))
         bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
         ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
         total = bid_total + ask_total
         if total == 0:
             return orders
         obi = (bid_total - ask_total) / total
-        memory["_obi_size"] = obi
-
-        if abs(obi) < threshold:
+        if abs(obi) < float(p.get("obi_size_threshold", 0.005)):
             return orders
-
+        boost = float(p.get("obi_size_boost_factor", 1.5))
+        reduce = float(p.get("obi_size_reduce_factor", 0.7))
         bullish = obi > 0
-        adjusted: List[Order] = []
+        adjusted = []
         for o in orders:
-            if o.quantity > 0:  # BUY
+            if o.quantity > 0:
                 factor = boost if bullish else reduce
-            elif o.quantity < 0:  # SELL
+            elif o.quantity < 0:
                 factor = reduce if bullish else boost
             else:
-                adjusted.append(o)
-                continue
+                adjusted.append(o); continue
             new_qty = int(o.quantity * factor)
-            # Respect position limits
             if new_qty > 0:
-                cap = max(0, self.position_limit() - position)
-                new_qty = min(new_qty, cap) if cap >= 0 else new_qty
+                new_qty = min(new_qty, max(0, self.position_limit() - position))
             elif new_qty < 0:
-                cap = max(0, self.position_limit() + position)
-                new_qty = max(new_qty, -cap)
+                new_qty = max(new_qty, -max(0, self.position_limit() + position))
             if new_qty != 0:
                 adjusted.append(Order(o.symbol, o.price, new_qty))
-
-        memory["_obi_size_dir"] = "BULL" if bullish else "BEAR"
         return adjusted
 
     def _counterparty_signal(

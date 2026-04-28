@@ -15372,6 +15372,285 @@ MEMBER_OVERRIDES["r4_v17_both_80_50"] = _v17_both_mode(0.8, 0.5, max_taker=5, pa
 MEMBER_OVERRIDES["r4_v17_both_70_50"] = _v17_both_mode(0.7, 0.5, max_taker=5, passive_size=30)
 
 
+# ═══════════════════════════════════════════════════════════════
+# v18 — EXTEND inventory unwind to VELVET (current champion only has it on options)
+# ═══════════════════════════════════════════════════════════════
+# v17b VELVET is hitting 197-198 / 200 = 98.5% of limit on all 3 days.
+# Add passive penny-improve unwind on VELVET too. Params adapted for VELVET
+# (more frequent trades, balanced flow → can use earlier kick-in safely).
+
+def _v18_with_velvet_unwind(velvet_threshold=0.7, velvet_target=0.5,
+                             velvet_passive_size=40, velvet_offset=-1):
+    """v17b base + passive unwind ALSO on VELVET."""
+    base = MEMBER_OVERRIDES["r4_v17_passive_70_50_pi"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None
+            continue
+        if sym == "VELVETFRUIT_EXTRACT":
+            params = {k: v for k, v in cfg.params.items()
+                      if k not in ("position_limit", "inv_unwind_enabled",
+                                   "inv_unwind_threshold_pct", "inv_unwind_target_pct",
+                                   "inv_unwind_max_per_tick", "inv_unwind_mode",
+                                   "inv_unwind_passive_size", "inv_unwind_passive_offset")}
+            out[sym] = _override(
+                cfg,
+                **params,
+                inv_unwind_enabled=True,
+                inv_unwind_threshold_pct=velvet_threshold,
+                inv_unwind_target_pct=velvet_target,
+                inv_unwind_max_per_tick=10,
+                inv_unwind_mode="passive",
+                inv_unwind_passive_size=velvet_passive_size,
+                inv_unwind_passive_offset=velvet_offset,
+            )
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+# v18a — VELVET unwind 70/50 with penny-improve (same params as options)
+MEMBER_OVERRIDES["r4_v18_velvet_unwind_70_50"] = _v18_with_velvet_unwind(0.7, 0.5)
+
+# v18b — VELVET earlier kick-in 60/40
+MEMBER_OVERRIDES["r4_v18_velvet_unwind_60_40"] = _v18_with_velvet_unwind(0.6, 0.4)
+
+# v18c — VELVET aggressive 50/30
+MEMBER_OVERRIDES["r4_v18_velvet_unwind_50_30"] = _v18_with_velvet_unwind(0.5, 0.3)
+
+
+# v19 — REDUCE VELVET position_limit on top of v17b (defensive simple)
+def _v19_with_velvet_lim(velvet_lim):
+    base = MEMBER_OVERRIDES["r4_v17_passive_70_50_pi"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        if sym == "VELVETFRUIT_EXTRACT":
+            params = {k: v for k, v in cfg.params.items() if k != "position_limit"}
+            out[sym] = _override(cfg, **params, position_limit=velvet_lim)
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v19_velvet_lim150"] = _v19_with_velvet_lim(150)
+MEMBER_OVERRIDES["r4_v19_velvet_lim100"] = _v19_with_velvet_lim(100)
+
+
+# v20 — VOL-BASED SIZE REDUCTION on options (defensive against Day 3 crash)
+def _v20_with_vol_cut(threshold=0.005, factor=0.5, window=50, apply_to_options=True):
+    base = MEMBER_OVERRIDES["r4_v17_passive_70_50_pi"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        if (apply_to_options and sym.startswith("VEV_")) or (not apply_to_options):
+            params = {k: v for k, v in cfg.params.items()
+                      if k not in ("position_limit", "vol_size_cut_enabled",
+                                   "vol_size_cut_threshold", "vol_size_cut_factor",
+                                   "vol_size_cut_window")}
+            out[sym] = _override(
+                cfg, **params,
+                vol_size_cut_enabled=True,
+                vol_size_cut_threshold=threshold,
+                vol_size_cut_factor=factor,
+                vol_size_cut_window=window,
+            )
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v20_vol_cut_options"] = _v20_with_vol_cut(0.005, 0.5)
+MEMBER_OVERRIDES["r4_v20_vol_cut_aggressive"] = _v20_with_vol_cut(0.003, 0.3)
+MEMBER_OVERRIDES["r4_v20_vol_cut_loose"] = _v20_with_vol_cut(0.010, 0.5)
+MEMBER_OVERRIDES["r4_v20_vol_cut_007"] = _v20_with_vol_cut(0.007, 0.5)
+MEMBER_OVERRIDES["r4_v20_vol_cut_008"] = _v20_with_vol_cut(0.008, 0.5)
+
+
+# v21 — v20_008 + drop VEVOptionMMV3 strategy (use gamma_scalp_zgated for VEV_5200/5400)
+def _v21_unify_options():
+    base = MEMBER_OVERRIDES["r4_v20_vol_cut_008"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        if sym in ("VEV_5200", "VEV_5400"):
+            # Use gamma_scalp_zgated like other options
+            new_cfg = _r3_v24_gamma_option(int(sym.split("_")[1]))
+            params = dict(new_cfg.params)
+            params.pop("position_limit", None)
+            # Inherit cp_bias / inv_unwind / vol_size_cut from base
+            params["counterparty_bias_enabled"] = cfg.params.get("counterparty_bias_enabled", False)
+            params["cp_trader_weights"] = cfg.params.get("cp_trader_weights", {})
+            params["cp_window_ts"] = cfg.params.get("cp_window_ts", 10000)
+            params["cp_signal_threshold"] = cfg.params.get("cp_signal_threshold", 1.0)
+            params["cp_max_anchor_offset"] = cfg.params.get("cp_max_anchor_offset", 2.0)
+            params["cp_anchor_scale_per_unit"] = cfg.params.get("cp_anchor_scale_per_unit", 0.15)
+            params["inv_unwind_enabled"] = cfg.params.get("inv_unwind_enabled", False)
+            params["inv_unwind_threshold_pct"] = cfg.params.get("inv_unwind_threshold_pct", 0.7)
+            params["inv_unwind_target_pct"] = cfg.params.get("inv_unwind_target_pct", 0.5)
+            params["inv_unwind_mode"] = cfg.params.get("inv_unwind_mode", "passive")
+            params["inv_unwind_passive_size"] = cfg.params.get("inv_unwind_passive_size", 30)
+            params["inv_unwind_passive_offset"] = cfg.params.get("inv_unwind_passive_offset", -1)
+            params["vol_size_cut_enabled"] = cfg.params.get("vol_size_cut_enabled", False)
+            params["vol_size_cut_threshold"] = cfg.params.get("vol_size_cut_threshold", 0.008)
+            params["vol_size_cut_factor"] = cfg.params.get("vol_size_cut_factor", 0.5)
+            out[sym] = _override(new_cfg, **params)
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v21_unified_options"] = _v21_unify_options()
+
+
+# v22 — v20 (current best) WITHOUT cp_bias (measure trader-ID contribution per day)
+def _v22_no_cp_bias():
+    base = MEMBER_OVERRIDES["r4_v20_vol_cut_008"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        params = {k: v for k, v in cfg.params.items()
+                  if k not in ("position_limit", "counterparty_bias_enabled",
+                               "cp_trader_weights", "cp_conditional_traders")}
+        out[sym] = _override(cfg, **params,
+                             counterparty_bias_enabled=False,
+                             cp_trader_weights={},
+                             cp_conditional_traders=[])
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v22_no_cp_bias"] = _v22_no_cp_bias()
+
+
+# v23 — v20 + cp_bias REGIME GATE (disable cp_bias in trending regime → save Day 3)
+def _v23_with_regime_gate(vol_thresh=0.008, drift_thresh=0.005):
+    base = MEMBER_OVERRIDES["r4_v20_vol_cut_008"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        params = {k: v for k, v in cfg.params.items()
+                  if k not in ("position_limit", "cp_regime_gate_enabled",
+                               "cp_regime_vol_thresh", "cp_regime_drift_thresh")}
+        out[sym] = _override(cfg, **params,
+                             cp_regime_gate_enabled=True,
+                             cp_regime_vol_thresh=vol_thresh,
+                             cp_regime_drift_thresh=drift_thresh)
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v23_regime_gate"] = _v23_with_regime_gate(0.008, 0.005)
+MEMBER_OVERRIDES["r4_v23_regime_gate_loose"] = _v23_with_regime_gate(0.012, 0.008)
+MEMBER_OVERRIDES["r4_v23_regime_gate_tight"] = _v23_with_regime_gate(0.005, 0.003)
+
+
+# v23b — drift-only gate with LONG buffer (300 ticks)
+def _v23b_with_long_drift(drift_thresh=0.005, trend_window=300):
+    base = MEMBER_OVERRIDES["r4_v20_vol_cut_008"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        params = {k: v for k, v in cfg.params.items()
+                  if k not in ("position_limit", "cp_regime_gate_enabled",
+                               "cp_regime_drift_thresh", "trend_window")}
+        out[sym] = _override(cfg, **params,
+                             cp_regime_gate_enabled=True,
+                             cp_regime_drift_thresh=drift_thresh,
+                             trend_window=trend_window)
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v23b_drift_005"] = _v23b_with_long_drift(0.005, 300)
+MEMBER_OVERRIDES["r4_v23b_drift_008"] = _v23b_with_long_drift(0.008, 300)
+MEMBER_OVERRIDES["r4_v23b_drift_010"] = _v23b_with_long_drift(0.010, 300)
+MEMBER_OVERRIDES["r4_v23b_drift_005_w500"] = _v23b_with_long_drift(0.005, 500)
+
+
+# v24 — CROSS-ASSET BIAS: Mark 14 VELVET flow → fade VEV_5100/5200/4500
+# Data: corr Mark 14 VELVET flow ↔ VEV_5200 50t-return = -0.106 over 642 points (strong)
+def _v24_cross_asset(target_options, weight=-0.5, threshold=5.0, scale=0.10, window=10000):
+    base = MEMBER_OVERRIDES["r4_v20_vol_cut_008"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        if sym in target_options:
+            params = {k: v for k, v in cfg.params.items()
+                      if k not in ("position_limit", "cross_asset_enabled",
+                                   "cross_asset_source_symbol", "cross_asset_source_trader",
+                                   "cross_asset_weight", "cross_asset_window_ts",
+                                   "cross_asset_threshold", "cross_asset_max_offset",
+                                   "cross_asset_scale")}
+            out[sym] = _override(cfg, **params,
+                                  cross_asset_enabled=True,
+                                  cross_asset_source_symbol="VELVETFRUIT_EXTRACT",
+                                  cross_asset_source_trader="Mark 14",
+                                  cross_asset_weight=weight,
+                                  cross_asset_window_ts=window,
+                                  cross_asset_threshold=threshold,
+                                  cross_asset_max_offset=2.0,
+                                  cross_asset_scale=scale)
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+# Apply on the 3 options where Mark 14 cross-asset corr is strongest
+MEMBER_OVERRIDES["r4_v24_xa_M14_velvet"] = _v24_cross_asset(
+    ("VEV_5100", "VEV_5200", "VEV_4500"), weight=-0.5
+)
+MEMBER_OVERRIDES["r4_v24_xa_w03"] = _v24_cross_asset(
+    ("VEV_5100", "VEV_5200", "VEV_4500"), weight=-0.3
+)
+MEMBER_OVERRIDES["r4_v24_xa_w02"] = _v24_cross_asset(
+    ("VEV_5100", "VEV_5200", "VEV_4500"), weight=-0.2
+)
+# Only the most-correlated target (VEV_5200)
+MEMBER_OVERRIDES["r4_v24_xa_5200_only"] = _v24_cross_asset(
+    ("VEV_5200",), weight=-0.5
+)
+
+
+# v25 — v24 5200_only + switch VEV_5200/5400 to gamma_scalp_zgated (drop VEVOptionMMV3 = -27KB)
+def _v25_unified_options():
+    base = MEMBER_OVERRIDES["r4_v24_xa_5200_only"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        if sym in ("VEV_5200", "VEV_5400"):
+            new_cfg = _r3_v24_gamma_option(int(sym.split("_")[1]))
+            params = {k: v for k, v in cfg.params.items()
+                      if k not in ("position_limit", "strategy")
+                      and not k.startswith("strike")}
+            params.update({
+                "tte_days_initial": new_cfg.params.get("tte_days_initial", 5.0),
+                "historical_tte_by_day": new_cfg.params.get("historical_tte_by_day"),
+                "timestamp_units_per_day": new_cfg.params.get("timestamp_units_per_day", 1000000),
+                "implied_vol_prior": new_cfg.params.get("implied_vol_prior", 0.0125),
+                "prior_vol": new_cfg.params.get("prior_vol", 0.0125),
+                "sigma_floor": new_cfg.params.get("sigma_floor", 0.005),
+                "sigma_cap": new_cfg.params.get("sigma_cap", 0.10),
+                "min_quote_price": new_cfg.params.get("min_quote_price", 2.0),
+                "edge_ticks": new_cfg.params.get("edge_ticks", 0.0),
+                "target_qty": new_cfg.params.get("target_qty", 300),
+                "strike": int(sym.split("_")[1]),
+            })
+            out[sym] = _override(new_cfg, position_limit=300, **params)
+        else:
+            out[sym] = cfg
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v25_unified"] = _v25_unified_options()
+
+
 # r4_velvet_cp_bias_pure_followers — only follow Mark 55 + Mark 67, ignore fades
 MEMBER_OVERRIDES["r4_velvet_cp_bias_pure_followers"] = {
     4: {
