@@ -2,13 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datamodel import Order, OrderDepth, TradingState
-from datamodel import OrderDepth
-from typing import Any, Dict
-from typing import Any, Dict, List, Optional, Set, Tuple
-from typing import Any, Dict, List, Optional, Tuple
-from typing import Any, Dict, List, Tuple
-from typing import Any, Mapping
-from typing import List, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 import json
 import math
 PriceLevel = Tuple[int, int]
@@ -25,11 +19,11 @@ class BookSnapshot:
     microprice: float | None
     spread: int | None
     imbalance: float | None
-def _sorted_bid_levels(order_depth: OrderDepth) -> List[PriceLevel]:
+def _sorted_bid_levels(order_depth):
     return sorted(order_depth.buy_orders.items(), key=lambda item: item[0], reverse=True)
-def _sorted_ask_levels(order_depth: OrderDepth) -> List[PriceLevel]:
+def _sorted_ask_levels(order_depth):
     return sorted(((price, -volume) for price, volume in order_depth.sell_orders.items()), key=lambda item: item[0])
-def snapshot_from_order_depth(symbol: str, order_depth: OrderDepth) -> BookSnapshot:
+def snapshot_from_order_depth(symbol, order_depth):
     bid_levels = _sorted_bid_levels(order_depth)
     ask_levels = _sorted_ask_levels(order_depth)
     best_bid = bid_levels[0][0] if bid_levels else None
@@ -45,24 +39,10 @@ def snapshot_from_order_depth(symbol: str, order_depth: OrderDepth) -> BookSnaps
         mid_price = (best_bid + best_ask) / 2.0
         total_top = best_bid_volume + best_ask_volume
         if total_top > 0:
-            microprice = (
-                best_bid * best_ask_volume + best_ask * best_bid_volume
-            ) / total_top
+            microprice = (best_bid * best_ask_volume + best_ask * best_bid_volume) / total_top
             imbalance = (best_bid_volume - best_ask_volume) / total_top
-    return BookSnapshot(
-        symbol=symbol,
-        bid_levels=bid_levels,
-        ask_levels=ask_levels,
-        best_bid=best_bid,
-        best_bid_volume=best_bid_volume,
-        best_ask=best_ask,
-        best_ask_volume=best_ask_volume,
-        mid_price=mid_price,
-        microprice=microprice,
-        spread=spread,
-        imbalance=imbalance,
-    )
-def load_state(raw_state: str) -> Dict[str, Any]:
+    return BookSnapshot(symbol=symbol, bid_levels=bid_levels, ask_levels=ask_levels, best_bid=best_bid, best_bid_volume=best_bid_volume, best_ask=best_ask, best_ask_volume=best_ask_volume, mid_price=mid_price, microprice=microprice, spread=spread, imbalance=imbalance)
+def load_state(raw_state):
     if not raw_state:
         return {}
     try:
@@ -70,109 +50,98 @@ def load_state(raw_state: str) -> Dict[str, Any]:
         return loaded if isinstance(loaded, dict) else {}
     except Exception:
         return {}
-def dump_state(state: Dict[str, Any]) -> str:
-    return json.dumps(state, separators=(",", ":"))
+def dump_state(state):
+    return json.dumps(state, separators=(',', ':'))
 class BaseStrategy(ABC):
-    def __init__(self, product: str, params: Dict[str, Any]):
+    def __init__(self, product, params):
         self.product = product
         self.params = params
-    def on_tick(
-        self,
-        state: TradingState,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
-        self._memory = memory  # available to all helper methods via self._memory
+    def on_tick(self, state, memory):
+        self._memory = memory
         order_depth = state.order_depths.get(self.product)
         if order_depth is None:
-            return [], 0
+            return ([], 0)
         position = state.position.get(self.product, 0)
         book = snapshot_from_order_depth(self.product, order_depth)
-        orders, conversions = self.compute_orders(
-            state=state,
-            book=book,
-            order_depth=order_depth,
-            position=position,
-            memory=memory,
-        )
+        orders, conversions = self.compute_orders(state=state, book=book, order_depth=order_depth, position=position, memory=memory)
         orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
         orders = self._apply_vol_size_cut(state, position, orders, book, memory)
         orders = self._apply_cp_bias(state, position, orders, book, memory)
         orders = self._apply_xa(state, position, orders, book, memory)
         orders = self._apply_inventory_unwind(state, position, orders, book, memory)
-        return orders, conversions
+        return (orders, conversions)
     def _apply_xa(self, state, position, orders, book, memory):
         p = self.params
-        if not bool(p.get("cross_asset_enabled", False)) or not orders:
+        if not bool(p.get('cross_asset_enabled', False)) or not orders:
             return orders
-        ss = p.get("cross_asset_source_symbol", "")
-        st = p.get("cross_asset_source_trader", "")
+        ss = p.get('cross_asset_source_symbol', '')
+        st = p.get('cross_asset_source_trader', '')
         if not ss or not st:
             return orders
-        ts = int(getattr(state, "timestamp", 0))
-        buf = memory.setdefault("_xa_buf", [])
-        for t in ((state.market_trades or {}).get(ss) or []):
-            q = float(getattr(t, "quantity", 0))
+        ts = int(getattr(state, 'timestamp', 0))
+        buf = memory.setdefault('_xa_buf', [])
+        for t in (state.market_trades or {}).get(ss) or []:
+            q = float(getattr(t, 'quantity', 0))
             if q <= 0:
                 continue
-            if getattr(t, "buyer", "") == st:
+            if getattr(t, 'buyer', '') == st:
                 buf.append([ts, q])
-            elif getattr(t, "seller", "") == st:
+            elif getattr(t, 'seller', '') == st:
                 buf.append([ts, -q])
-        cut = ts - int(p.get("cross_asset_window_ts", 10000))
+        cut = ts - int(p.get('cross_asset_window_ts', 10000))
         while buf and buf[0][0] < cut:
             buf.pop(0)
-        sig = float(p.get("cross_asset_weight", 0.0)) * sum(q for _, q in buf)
-        if abs(sig) <= float(p.get("cross_asset_threshold", 5.0)):
+        sig = float(p.get('cross_asset_weight', 0.0)) * sum((q for _, q in buf))
+        if abs(sig) <= float(p.get('cross_asset_threshold', 5.0)):
             return orders
-        mx = float(p.get("cross_asset_max_offset", 2.0))
-        off = int(round(max(-mx, min(mx, sig * float(p.get("cross_asset_scale", 0.05))))))
+        mx = float(p.get('cross_asset_max_offset', 2.0))
+        off = int(round(max(-mx, min(mx, sig * float(p.get('cross_asset_scale', 0.05))))))
         if off == 0:
             return orders
-        bb, ba = book.best_bid, book.best_ask
+        bb, ba = (book.best_bid, book.best_ask)
         out = []
         for o in orders:
             np_ = int(o.price) + off
-            if o.quantity > 0 and ba is not None and np_ >= ba:
+            if o.quantity > 0 and ba is not None and (np_ >= ba):
                 np_ = int(ba) - 1
-            elif o.quantity < 0 and bb is not None and np_ <= bb:
+            elif o.quantity < 0 and bb is not None and (np_ <= bb):
                 np_ = int(bb) + 1
             out.append(Order(o.symbol, np_, o.quantity))
         return out
     def _apply_vol_size_cut(self, state, position, orders, book, memory):
         p = self.params
-        if not bool(p.get("vol_size_cut_enabled", False)) or not orders or book.mid_price is None:
+        if not bool(p.get('vol_size_cut_enabled', False)) or not orders or book.mid_price is None:
             return orders
-        buf = memory.setdefault("_vol_buf", [])
+        buf = memory.setdefault('_vol_buf', [])
         buf.append(float(book.mid_price))
-        max_n = int(p.get("vol_size_cut_window", 50))
+        max_n = int(p.get('vol_size_cut_window', 50))
         if len(buf) > max_n:
-            del buf[: len(buf) - max_n]
+            del buf[:len(buf) - max_n]
         if len(buf) < 10:
             return orders
-        rets = [(buf[i] - buf[i-1]) / max(buf[i-1], 1e-9) for i in range(1, len(buf))]
+        rets = [(buf[i] - buf[i - 1]) / max(buf[i - 1], 1e-09) for i in range(1, len(buf))]
         mean = sum(rets) / len(rets)
-        std = (sum((r - mean) ** 2 for r in rets) / len(rets)) ** 0.5
-        if std <= float(p.get("vol_size_cut_threshold", 0.005)):
+        std = (sum(((r - mean) ** 2 for r in rets)) / len(rets)) ** 0.5
+        if std <= float(p.get('vol_size_cut_threshold', 0.005)):
             return orders
-        cut = float(p.get("vol_size_cut_factor", 0.5))
-        return [Order(o.symbol, o.price, int(o.quantity * cut))
-                for o in orders if int(o.quantity * cut) != 0]
+        cut = float(p.get('vol_size_cut_factor', 0.5))
+        return [Order(o.symbol, o.price, int(o.quantity * cut)) for o in orders if int(o.quantity * cut) != 0]
     def _apply_inventory_unwind(self, state, position, orders, book, memory):
         p = self.params
-        if not bool(p.get("inv_unwind_enabled", False)):
+        if not bool(p.get('inv_unwind_enabled', False)):
             return orders
         limit = self.position_limit()
         if limit <= 0:
             return orders
-        if abs(position) < float(p.get("inv_unwind_threshold_pct", 0.8)) * limit:
+        if abs(position) < float(p.get('inv_unwind_threshold_pct', 0.8)) * limit:
             return orders
-        excess = abs(position) - int(float(p.get("inv_unwind_target_pct", 0.5)) * limit)
+        excess = abs(position) - int(float(p.get('inv_unwind_target_pct', 0.5)) * limit)
         if excess <= 0:
             return orders
-        mode = str(p.get("inv_unwind_mode", "taker")).lower()
+        mode = str(p.get('inv_unwind_mode', 'taker')).lower()
         new_orders = list(orders)
-        if mode in ("taker", "both"):
-            delta = min(excess, int(p.get("inv_unwind_max_per_tick", 10)))
+        if mode in ('taker', 'both'):
+            delta = min(excess, int(p.get('inv_unwind_max_per_tick', 10)))
             if position > 0 and book.best_bid is not None:
                 qty = -min(delta, int(book.best_bid_volume or 0))
                 if qty < 0:
@@ -181,9 +150,9 @@ class BaseStrategy(ABC):
                 qty = min(delta, int(book.best_ask_volume or 0))
                 if qty > 0:
                     new_orders.append(Order(self.product, int(book.best_ask), qty))
-        if mode in ("passive", "both"):
-            psize = min(int(p.get("inv_unwind_passive_size", 20)), excess)
-            offset = int(p.get("inv_unwind_passive_offset", 0))
+        if mode in ('passive', 'both'):
+            psize = min(int(p.get('inv_unwind_passive_size', 20)), excess)
+            offset = int(p.get('inv_unwind_passive_offset', 0))
             if position > 0 and book.best_ask is not None:
                 price = int(book.best_ask) + offset
                 if book.best_bid is not None and price <= int(book.best_bid):
@@ -197,58 +166,51 @@ class BaseStrategy(ABC):
         return new_orders
     def _apply_cp_bias(self, state, position, orders, book, memory):
         p = self.params
-        if not bool(p.get("counterparty_bias_enabled", False)):
+        if not bool(p.get('counterparty_bias_enabled', False)):
             return orders
-        if bool(p.get("_cp_bias_handled_internally", False)):
+        if bool(p.get('_cp_bias_handled_internally', False)):
             return orders
         if not orders:
             return orders
         cp_signal = self._counterparty_signal(state, memory)
-        cp_threshold = float(p.get("cp_signal_threshold", 5.0))
+        cp_threshold = float(p.get('cp_signal_threshold', 5.0))
         if abs(cp_signal) <= cp_threshold:
             return orders
-        cp_max = float(p.get("cp_max_anchor_offset", 3.0))
-        cp_scale = float(p.get("cp_anchor_scale_per_unit", 0.10))
+        cp_max = float(p.get('cp_max_anchor_offset', 3.0))
+        cp_scale = float(p.get('cp_anchor_scale_per_unit', 0.1))
         cp_offset = int(round(max(-cp_max, min(cp_max, cp_signal * cp_scale))))
         if cp_offset == 0:
             return orders
         shifted = []
-        bb, ba = book.best_bid, book.best_ask
+        bb, ba = (book.best_bid, book.best_ask)
         for o in orders:
             np_ = int(o.price) + cp_offset
-            if o.quantity > 0 and ba is not None and np_ >= ba:
+            if o.quantity > 0 and ba is not None and (np_ >= ba):
                 np_ = int(ba) - 1
-            elif o.quantity < 0 and bb is not None and np_ <= bb:
+            elif o.quantity < 0 and bb is not None and (np_ <= bb):
                 np_ = int(bb) + 1
             shifted.append(Order(o.symbol, np_, o.quantity))
         return shifted
     @abstractmethod
-    def compute_orders(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
+    def compute_orders(self, state, book, order_depth, position, memory):
         ...
-    def _microprice(self, book: "BookSnapshot") -> float:
-        bid_total = sum(v for _, v in book.bid_levels)
-        ask_total = sum(v for _, v in book.ask_levels)
-        prev = self._memory.get("_microprice_last", 0.0)
+    def _microprice(self, book):
+        bid_total = sum((v for _, v in book.bid_levels))
+        ask_total = sum((v for _, v in book.ask_levels))
+        prev = self._memory.get('_microprice_last', 0.0)
         if bid_total == 0 or ask_total == 0:
             return float(prev)
-        bid_vwap = sum(p * v for p, v in book.bid_levels) / bid_total
-        ask_vwap = sum(p * v for p, v in book.ask_levels) / ask_total
+        bid_vwap = sum((p * v for p, v in book.bid_levels)) / bid_total
+        ask_vwap = sum((p * v for p, v in book.ask_levels)) / ask_total
         result = (bid_vwap * ask_total + ask_vwap * bid_total) / (bid_total + ask_total)
-        self._memory["_microprice_last"] = result
+        self._memory['_microprice_last'] = result
         return result
-    def _smooth_mid(self, mid: float, memory: Dict[str, Any]) -> float:
-        window = int(self.params.get("mid_smooth_window", 20))
+    def _smooth_mid(self, mid, memory):
+        window = int(self.params.get('mid_smooth_window', 20))
         if window <= 0:
             return mid
-        half_life = float(self.params.get("mid_smooth_half_life", window / 2.0))
-        buf = memory.setdefault("mid_smooth_buf", [])
+        half_life = float(self.params.get('mid_smooth_half_life', window / 2.0))
+        buf = memory.setdefault('mid_smooth_buf', [])
         buf.append(mid)
         if len(buf) > window:
             buf[:] = buf[-window:]
@@ -258,138 +220,102 @@ class BaseStrategy(ABC):
         smoothed = buf[0]
         for p in buf[1:]:
             smoothed = alpha * p + (1.0 - alpha) * smoothed
-        memory["mid_smoothed"] = smoothed
+        memory['mid_smoothed'] = smoothed
         return smoothed
-    def _update_volatility(self, mid: float, memory: Dict[str, Any]) -> float:
-        window = int(self.params.get("sigma_window", 50))
-        prices = memory.setdefault("mid_history", [])
+    def _update_volatility(self, mid, memory):
+        window = int(self.params.get('sigma_window', 50))
+        prices = memory.setdefault('mid_history', [])
         prices.append(mid)
         if len(prices) > window + 1:
             prices[:] = prices[-(window + 1):]
         if len(prices) < 3:
-            return float(self.params.get("sigma_default", 1.0))
+            return float(self.params.get('sigma_default', 1.0))
         returns = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
         n = len(returns)
         mean_r = sum(returns) / n
-        var = sum((r - mean_r) ** 2 for r in returns) / max(n - 1, 1)
-        sigma_raw = math.sqrt(var) if var > 0 else float(self.params.get("sigma_default", 1.0))
-        half_life = float(self.params.get("sigma_half_life", 60))
+        var = sum(((r - mean_r) ** 2 for r in returns)) / max(n - 1, 1)
+        sigma_raw = math.sqrt(var) if var > 0 else float(self.params.get('sigma_default', 1.0))
+        half_life = float(self.params.get('sigma_half_life', 60))
         alpha = 2.0 / (half_life + 1.0)
-        sigma_prev = memory.get("sigma_smoothed", sigma_raw)
+        sigma_prev = memory.get('sigma_smoothed', sigma_raw)
         sigma_smoothed = alpha * sigma_raw + (1.0 - alpha) * sigma_prev
-        memory["sigma_smoothed"] = sigma_smoothed
-        return max(sigma_smoothed, float(self.params.get("sigma_floor", 0.5)))
-    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        memory['sigma_smoothed'] = sigma_smoothed
+        return max(sigma_smoothed, float(self.params.get('sigma_floor', 0.5)))
+    def feature_prices(self, memory):
         return {}
-    def runtime_trace_enabled(self) -> bool:
-        enabled = self.params.get("runtime_trace_enabled")
+    def runtime_trace_enabled(self):
+        enabled = self.params.get('runtime_trace_enabled')
         if enabled is not None:
             return bool(enabled)
         return not bool(False)
-    def log_quote_snapshot(
-        self,
-        *,
-        state: TradingState,
-        memory: Dict[str, Any],
-        bid_price: int | float | None,
-        ask_price: int | float | None,
-        extras: Dict[str, Any] | None = None,
-    ) -> None:
-        if not self.params.get("quote_trace_enabled", False) or not self.runtime_trace_enabled():
+    def log_quote_snapshot(self, *, state, memory, bid_price, ask_price, extras=None):
+        if not self.params.get('quote_trace_enabled', False) or not self.runtime_trace_enabled():
             return
-        row: Dict[str, Any] = {
-            "timestamp": int(state.timestamp),
-            "bid_price": bid_price,
-            "ask_price": ask_price,
-        }
+        row: Dict[str, Any] = {'timestamp': int(state.timestamp), 'bid_price': bid_price, 'ask_price': ask_price}
         if extras:
             row.update(extras)
-        columns = memory.setdefault("_quote_trace_columns", list(row.keys()))
+        columns = memory.setdefault('_quote_trace_columns', list(row.keys()))
         for key in row.keys():
             if key not in columns:
                 columns.append(key)
-        rows = memory.setdefault("_quote_trace_rows", [])
+        rows = memory.setdefault('_quote_trace_rows', [])
         rows.append(row)
-        flush_ts = int(self.params.get("log_flush_ts", 10000))
-        last_tick_ts = self.params.get("last_ts_value")
+        flush_ts = int(self.params.get('log_flush_ts', 10000))
+        last_tick_ts = self.params.get('last_ts_value')
         if last_tick_ts is None:
-            last_tick_ts = int(self.params.get("total_ticks", 200000)) - 100
+            last_tick_ts = int(self.params.get('total_ticks', 200000)) - 100
         else:
             last_tick_ts = int(last_tick_ts)
         end_of_sim = int(state.timestamp) >= last_tick_ts
-        checkpoint = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
+        checkpoint = flush_ts > 0 and int(state.timestamp) % flush_ts == flush_ts - 100
         if not (end_of_sim or checkpoint):
             return
-        print(json.dumps({
-            "product": self.product,
-            "trace": "quote_trace",
-            "chunk_end": int(state.timestamp),
-            "columns": columns,
-            "log": [[row.get(column) for column in columns] for row in rows],
-        }))
-        memory["_quote_trace_rows"] = []
-    def log_taker_fill(
-        self,
-        *,
-        state: TradingState,
-        memory: Dict[str, Any],
-        side: str,
-        price: int,
-        quantity: int,
-        gap_exploit: bool = False,
-    ) -> None:
+        print(json.dumps({'product': self.product, 'trace': 'quote_trace', 'chunk_end': int(state.timestamp), 'columns': columns, 'log': [[row.get(column) for column in columns] for row in rows]}))
+        memory['_quote_trace_rows'] = []
+    def log_taker_fill(self, *, state, memory, side, price, quantity, gap_exploit=False):
         if not self.runtime_trace_enabled():
             return
-        taker_log = memory.setdefault("_taker_log", [])
+        taker_log = memory.setdefault('_taker_log', [])
         entry = [int(state.timestamp), side, price, quantity]
         if gap_exploit:
             entry.append(1)
         taker_log.append(entry)
-        flush_ts = int(self.params.get("log_flush_ts", 10000))
-        ts_increment = int(self.params.get("ts_increment", 100))
-        last_ts = int(self.params.get("last_ts_value", 199900))
+        flush_ts = int(self.params.get('log_flush_ts', 10000))
+        ts_increment = int(self.params.get('ts_increment', 100))
+        last_ts = int(self.params.get('last_ts_value', 199900))
         second_to_last = last_ts - ts_increment
-        is_quote_flush = flush_ts > 0 and (int(state.timestamp) % flush_ts) == (flush_ts - 100)
-        deferred = memory.get("_taker_flush_deferred", False)
-        if len(taker_log) >= 20 and is_quote_flush and not deferred:
-            memory["_taker_flush_deferred"] = True
+        is_quote_flush = flush_ts > 0 and int(state.timestamp) % flush_ts == flush_ts - 100
+        deferred = memory.get('_taker_flush_deferred', False)
+        if len(taker_log) >= 20 and is_quote_flush and (not deferred):
+            memory['_taker_flush_deferred'] = True
             return
-        should_flush = (
-            deferred
-            or int(state.timestamp) >= second_to_last
-            or (len(taker_log) >= 20 and not is_quote_flush)
-        )
+        should_flush = deferred or int(state.timestamp) >= second_to_last or (len(taker_log) >= 20 and (not is_quote_flush))
         if not should_flush:
             return
-        print(json.dumps({
-            "product": self.product,
-            "trace": "taker_fills",
-            "chunk_end": int(state.timestamp),
-            "log": taker_log,
-        }))
-        memory["_taker_log"] = []
-        memory["_taker_flush_deferred"] = False
-    def position_limit(self) -> int:
-        return self.params.get("position_limit", 20)
-    def buy_capacity(self, position: int) -> int:
+        print(json.dumps({'product': self.product, 'trace': 'taker_fills', 'chunk_end': int(state.timestamp), 'log': taker_log}))
+        memory['_taker_log'] = []
+        memory['_taker_flush_deferred'] = False
+    def position_limit(self):
+        return self.params.get('position_limit', 20)
+    def buy_capacity(self, position):
         return max(0, self.position_limit() - position)
-    def sell_capacity(self, position: int) -> int:
+    def sell_capacity(self, position):
         return max(0, self.position_limit() + position)
     def _apply_obi_size_tilt(self, state, position, orders, book, memory):
         p = self.params
-        if not bool(p.get("obi_size_enabled", False)):
+        if not bool(p.get('obi_size_enabled', False)):
             return orders
-        levels = int(p.get("obi_size_levels", 3))
-        bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
-        ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
+        levels = int(p.get('obi_size_levels', 3))
+        bid_total = sum((v for _, v in (book.bid_levels or [])[:levels]))
+        ask_total = sum((v for _, v in (book.ask_levels or [])[:levels]))
         total = bid_total + ask_total
         if total == 0:
             return orders
         obi = (bid_total - ask_total) / total
-        if abs(obi) < float(p.get("obi_size_threshold", 0.005)):
+        if abs(obi) < float(p.get('obi_size_threshold', 0.005)):
             return orders
-        boost = float(p.get("obi_size_boost_factor", 1.5))
-        reduce = float(p.get("obi_size_reduce_factor", 0.7))
+        boost = float(p.get('obi_size_boost_factor', 1.5))
+        reduce = float(p.get('obi_size_reduce_factor', 0.7))
         bullish = obi > 0
         adjusted = []
         for o in orders:
@@ -398,7 +324,8 @@ class BaseStrategy(ABC):
             elif o.quantity < 0:
                 factor = reduce if bullish else boost
             else:
-                adjusted.append(o); continue
+                adjusted.append(o)
+                continue
             new_qty = int(o.quantity * factor)
             if new_qty > 0:
                 new_qty = min(new_qty, max(0, self.position_limit() - position))
@@ -407,32 +334,25 @@ class BaseStrategy(ABC):
             if new_qty != 0:
                 adjusted.append(Order(o.symbol, o.price, new_qty))
         return adjusted
-    def _counterparty_signal(
-        self,
-        state: TradingState,
-        memory: Dict[str, Any],
-    ) -> float:
-        window_ts = int(self.params.get("cp_window_ts", 10000))
-        weights = self.params.get("cp_trader_weights", {
-            "Mark 55": +1.0, "Mark 67": +1.0,
-            "Mark 01": -1.0, "Mark 14": -1.0,
-        })
-        cond_traders = set(self.params.get("cp_conditional_traders", []) or [])
-        cond_zthresh = float(self.params.get("cp_conditional_zthresh", 2.0))
-        cond_stats_ts = int(self.params.get("cp_conditional_stats_window_ts", 50000))
-        cond_min_samples = int(self.params.get("cp_conditional_min_samples", 50))
-        cond_baseline = float(self.params.get("cp_conditional_baseline_weight", 0.0))
-        ts_now = int(getattr(state, "timestamp", 0))
-        buf = memory.setdefault("_cp_buf", [])  # list of [ts, trader, signed_qty]
+    def _counterparty_signal(self, state, memory):
+        window_ts = int(self.params.get('cp_window_ts', 10000))
+        weights = self.params.get('cp_trader_weights', {'Mark 55': +1.0, 'Mark 67': +1.0, 'Mark 01': -1.0, 'Mark 14': -1.0})
+        cond_traders = set(self.params.get('cp_conditional_traders', []) or [])
+        cond_zthresh = float(self.params.get('cp_conditional_zthresh', 2.0))
+        cond_stats_ts = int(self.params.get('cp_conditional_stats_window_ts', 50000))
+        cond_min_samples = int(self.params.get('cp_conditional_min_samples', 50))
+        cond_baseline = float(self.params.get('cp_conditional_baseline_weight', 0.0))
+        ts_now = int(getattr(state, 'timestamp', 0))
+        buf = memory.setdefault('_cp_buf', [])
         try:
             mt = state.market_trades
             trades = (mt or {}).get(self.product, []) or []
         except Exception:
             trades = []
         for t in trades:
-            buyer = getattr(t, "buyer", None) or ""
-            seller = getattr(t, "seller", None) or ""
-            qty = float(getattr(t, "quantity", 0))
+            buyer = getattr(t, 'buyer', None) or ''
+            seller = getattr(t, 'seller', None) or ''
+            qty = float(getattr(t, 'quantity', 0))
             if qty <= 0:
                 continue
             if buyer:
@@ -448,9 +368,9 @@ class BaseStrategy(ABC):
         per_trader = {}
         for _, trader, signed in buf:
             per_trader[trader] = per_trader.get(trader, 0.0) + signed
-        gates = {}  # trader -> effective weight multiplier (1.0 = full, baseline/w otherwise)
+        gates = {}
         if cond_traders:
-            stats_buf = memory.setdefault("_cp_stats_buf", {})
+            stats_buf = memory.setdefault('_cp_stats_buf', {})
             cond_cut = ts_now - cond_stats_ts
             for trader in cond_traders:
                 cur_abs = abs(per_trader.get(trader, 0.0))
@@ -459,14 +379,14 @@ class BaseStrategy(ABC):
                 while hist and hist[0][0] < cond_cut:
                     hist.pop(0)
                 if len(hist) < cond_min_samples:
-                    gates[trader] = 1.0  # not enough data → behave as v5 (always-on)
+                    gates[trader] = 1.0
                     continue
                 vols = [s[1] for s in hist]
                 n = len(vols)
                 mean = sum(vols) / n
-                var = sum((v - mean) ** 2 for v in vols) / n
+                var = sum(((v - mean) ** 2 for v in vols)) / n
                 std = math.sqrt(var) if var > 0 else 0.0
-                z = (cur_abs - mean) / std if std > 0 else (cond_zthresh + 1 if cur_abs > 0 else 0.0)
+                z = (cur_abs - mean) / std if std > 0 else cond_zthresh + 1 if cur_abs > 0 else 0.0
                 gates[trader] = 1.0 if z >= cond_zthresh else 0.0
         signal = 0.0
         for trader, net in per_trader.items():
@@ -475,35 +395,25 @@ class BaseStrategy(ABC):
                 g = gates.get(trader, 1.0)
                 w = g * w + (1.0 - g) * cond_baseline
             signal += w * net
-        memory["_cp_signal"] = signal
-        memory["_cp_per_trader"] = per_trader
+        memory['_cp_signal'] = signal
+        memory['_cp_per_trader'] = per_trader
         if cond_traders:
-            memory["_cp_gates"] = gates
+            memory['_cp_gates'] = gates
         return signal
-DEFAULT_TIMESTAMP_UNITS_PER_DAY = 1_000_000.0
+DEFAULT_TIMESTAMP_UNITS_PER_DAY = 1000000.0
 DEFAULT_TS_INCREMENT = 100.0
 MIN_TTE_DAYS = 0.01
-def timestamp_units_per_day_from_params(params: Mapping[str, Any]) -> float:
-    explicit = params.get("timestamp_units_per_day")
+def timestamp_units_per_day_from_params(params):
+    explicit = params.get('timestamp_units_per_day')
     if explicit is not None:
         return max(float(explicit), 1.0)
-    ticks_per_day = float(params.get("ticks_per_day", DEFAULT_TIMESTAMP_UNITS_PER_DAY / DEFAULT_TS_INCREMENT))
-    ts_increment = float(params.get("ts_increment", DEFAULT_TS_INCREMENT))
+    ticks_per_day = float(params.get('ticks_per_day', DEFAULT_TIMESTAMP_UNITS_PER_DAY / DEFAULT_TS_INCREMENT))
+    ts_increment = float(params.get('ts_increment', DEFAULT_TS_INCREMENT))
     return max(ticks_per_day * ts_increment, 1.0)
-def time_to_expiry_days(
-    timestamp: int | float,
-    initial_tte_days: int | float,
-    *,
-    timestamp_units_per_day: int | float = DEFAULT_TIMESTAMP_UNITS_PER_DAY,
-    min_tte_days: int | float = MIN_TTE_DAYS,
-) -> float:
+def time_to_expiry_days(timestamp, initial_tte_days, *, timestamp_units_per_day=DEFAULT_TIMESTAMP_UNITS_PER_DAY, min_tte_days=MIN_TTE_DAYS):
     elapsed_days = max(float(timestamp), 0.0) / max(float(timestamp_units_per_day), 1.0)
     return max(float(min_tte_days), float(initial_tte_days) - elapsed_days)
-def resolve_initial_tte_days(
-    trader_data: str,
-    default_tte_days: int | float,
-    historical_tte_by_day: Mapping[Any, Any] | None = None,
-) -> float:
+def resolve_initial_tte_days(trader_data, default_tte_days, historical_tte_by_day=None):
     if not historical_tte_by_day or not trader_data:
         return float(default_tte_days)
     try:
@@ -512,10 +422,10 @@ def resolve_initial_tte_days(
         return float(default_tte_days)
     if not isinstance(loaded, dict):
         return float(default_tte_days)
-    meta = loaded.get("_backtest")
-    if not isinstance(meta, dict) or "day" not in meta:
+    meta = loaded.get('_backtest')
+    if not isinstance(meta, dict) or 'day' not in meta:
         return float(default_tte_days)
-    day = meta.get("day")
+    day = meta.get('day')
     candidate_keys = [day, str(day)]
     try:
         candidate_keys.append(int(day))
@@ -529,46 +439,46 @@ def resolve_initial_tte_days(
                 return float(default_tte_days)
     return float(default_tte_days)
 _SQRT_2PI = math.sqrt(2.0 * math.pi)
-def _norm_pdf(x: float) -> float:
+def _norm_pdf(x):
     return math.exp(-0.5 * x * x) / _SQRT_2PI
-def _norm_cdf(x: float) -> float:
+def _norm_cdf(x):
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
-def _d1_d2(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: float = 0.0):
-    if T <= 0.0 or sigma <= 0.0 or S <= 0.0 or K <= 0.0:
-        return None, None
+def _d1_d2(S, K, T, sigma, r=0.0, q=0.0):
+    if T <= 0.0 or sigma <= 0.0 or S <= 0.0 or (K <= 0.0):
+        return (None, None)
     sqrtT = math.sqrt(T)
     d1 = (math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / (sigma * sqrtT)
     d2 = d1 - sigma * sqrtT
-    return d1, d2
-def call_price(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: float = 0.0) -> float:
+    return (d1, d2)
+def call_price(S, K, T, sigma, r=0.0, q=0.0):
     if T <= 0.0 or sigma <= 0.0:
         return max(0.0, S - K)
     d1, d2 = _d1_d2(S, K, T, sigma, r, q)
     if d1 is None:
         return max(0.0, S - K)
     return S * math.exp(-q * T) * _norm_cdf(d1) - K * math.exp(-r * T) * _norm_cdf(d2)
-def call_delta(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: float = 0.0) -> float:
+def call_delta(S, K, T, sigma, r=0.0, q=0.0):
     if T <= 0.0 or sigma <= 0.0:
-        return 1.0 if S > K else (0.0 if S < K else 0.5)
+        return 1.0 if S > K else 0.0 if S < K else 0.5
     d1, _ = _d1_d2(S, K, T, sigma, r, q)
     if d1 is None:
         return 0.5
     return math.exp(-q * T) * _norm_cdf(d1)
-def call_gamma(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: float = 0.0) -> float:
+def call_gamma(S, K, T, sigma, r=0.0, q=0.0):
     if T <= 0.0 or sigma <= 0.0 or S <= 0.0:
         return 0.0
     d1, _ = _d1_d2(S, K, T, sigma, r, q)
     if d1 is None:
         return 0.0
     return math.exp(-q * T) * _norm_pdf(d1) / (S * sigma * math.sqrt(T))
-def call_vega(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: float = 0.0) -> float:
+def call_vega(S, K, T, sigma, r=0.0, q=0.0):
     if T <= 0.0 or sigma <= 0.0:
         return 0.0
     d1, _ = _d1_d2(S, K, T, sigma, r, q)
     if d1 is None:
         return 0.0
     return S * math.exp(-q * T) * _norm_pdf(d1) * math.sqrt(T)
-def call_theta(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: float = 0.0) -> float:
+def call_theta(S, K, T, sigma, r=0.0, q=0.0):
     if T <= 0.0 or sigma <= 0.0:
         return 0.0
     d1, d2 = _d1_d2(S, K, T, sigma, r, q)
@@ -578,23 +488,23 @@ def call_theta(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: fl
     term2 = -r * K * math.exp(-r * T) * _norm_cdf(d2)
     term3 = q * S * math.exp(-q * T) * _norm_cdf(d1)
     return term1 + term2 + term3
-def put_price(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: float = 0.0) -> float:
+def put_price(S, K, T, sigma, r=0.0, q=0.0):
     c = call_price(S, K, T, sigma, r, q)
     return c - S * math.exp(-q * T) + K * math.exp(-r * T)
-def put_delta(S: float, K: float, T: float, sigma: float, r: float = 0.0, q: float = 0.0) -> float:
+def put_delta(S, K, T, sigma, r=0.0, q=0.0):
     return call_delta(S, K, T, sigma, r, q) - math.exp(-q * T)
 class GammaScalpZGatedStrategy(BaseStrategy):
-    def _get_spot(self, state: TradingState) -> Optional[float]:
-        underlying = str(self.params.get("underlying_symbol", "VELVETFRUIT_EXTRACT"))
+    def _get_spot(self, state):
+        underlying = str(self.params.get('underlying_symbol', 'VELVETFRUIT_EXTRACT'))
         od = state.order_depths.get(underlying)
-        if not od or not od.buy_orders or not od.sell_orders:
+        if not od or not od.buy_orders or (not od.sell_orders):
             return None
         bb = max(od.buy_orders.keys())
         ba = min(od.sell_orders.keys())
         return 0.5 * (bb + ba)
-    def _update_zscore(self, S: float, memory: Dict[str, Any], p: Dict[str, Any]) -> Optional[float]:
-        window = p["zscore_window"]
-        buf: List[float] = memory.setdefault("_velvet_buf", [])
+    def _update_zscore(self, S, memory, p):
+        window = p['zscore_window']
+        buf: List[float] = memory.setdefault('_velvet_buf', [])
         buf.append(S)
         if len(buf) > window:
             buf[:] = buf[-window:]
@@ -602,270 +512,214 @@ class GammaScalpZGatedStrategy(BaseStrategy):
             return None
         n = len(buf)
         mean = sum(buf) / n
-        var = sum((x - mean) ** 2 for x in buf) / max(n - 1, 1)
+        var = sum(((x - mean) ** 2 for x in buf)) / max(n - 1, 1)
         std = var ** 0.5
-        if std < 1e-9:
+        if std < 1e-09:
             return None
         return (S - mean) / std
-    def _read_params(self, state: TradingState) -> Dict[str, Any]:
+    def _read_params(self, state):
         params = self.params
-        tte0 = resolve_initial_tte_days(
-            state.traderData,
-            float(params.get("tte_days_initial", 5.0)),
-            params.get("historical_tte_by_day"),
-        )
+        tte0 = resolve_initial_tte_days(state.traderData, float(params.get('tte_days_initial', 5.0)), params.get('historical_tte_by_day'))
         ts_per_day = timestamp_units_per_day_from_params(params)
         T = time_to_expiry_days(int(state.timestamp), tte0, timestamp_units_per_day=ts_per_day)
-        return {
-            "K":                    float(params["strike"]),
-            "T":                    max(0.01, T),
-            "implied_vol_prior":    float(params.get("implied_vol_prior", 0.0125)),
-            "edge_ticks":           float(params.get("edge_ticks", 0.0)),
-            "target_qty":           int(params.get("target_qty", 100)),
-            "entry_size":           int(params.get("entry_size", 10)),
-            "passive_bid_size":     int(params.get("passive_bid_size", 10)),
-            "unwind_tte_threshold": float(params.get("unwind_tte_threshold", 1.5)),
-            "min_quote_price":      float(params.get("min_quote_price", 2.0)),
-            "underlying_symbol":    params.get("underlying_symbol", "VELVETFRUIT_EXTRACT"),
-            "zscore_window":        int(params.get("zscore_window", 500)),
-            "zscore_skip_threshold":  float(params.get("zscore_skip_threshold", 1.0)),
-            "zscore_boost_threshold": float(params.get("zscore_boost_threshold", 1.0)),
-            "skip_when_expensive":  bool(params.get("skip_when_expensive", True)),
-            "boost_when_cheap":     bool(params.get("boost_when_cheap", False)),
-            "entry_size_boost":     float(params.get("entry_size_boost", 1.5)),
-            "sell_when_very_expensive": bool(params.get("sell_when_very_expensive", False)),
-            "zscore_sell_threshold":    float(params.get("zscore_sell_threshold", 1.5)),
-            "sell_size_pct":            float(params.get("sell_size_pct", 0.10)),
-        }
-    def compute_orders(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
+        return {'K': float(params['strike']), 'T': max(0.01, T), 'implied_vol_prior': float(params.get('implied_vol_prior', 0.0125)), 'edge_ticks': float(params.get('edge_ticks', 0.0)), 'target_qty': int(params.get('target_qty', 100)), 'entry_size': int(params.get('entry_size', 10)), 'passive_bid_size': int(params.get('passive_bid_size', 10)), 'unwind_tte_threshold': float(params.get('unwind_tte_threshold', 1.5)), 'min_quote_price': float(params.get('min_quote_price', 2.0)), 'underlying_symbol': params.get('underlying_symbol', 'VELVETFRUIT_EXTRACT'), 'zscore_window': int(params.get('zscore_window', 500)), 'zscore_skip_threshold': float(params.get('zscore_skip_threshold', 1.0)), 'zscore_boost_threshold': float(params.get('zscore_boost_threshold', 1.0)), 'skip_when_expensive': bool(params.get('skip_when_expensive', True)), 'boost_when_cheap': bool(params.get('boost_when_cheap', False)), 'entry_size_boost': float(params.get('entry_size_boost', 1.5)), 'sell_when_very_expensive': bool(params.get('sell_when_very_expensive', False)), 'zscore_sell_threshold': float(params.get('zscore_sell_threshold', 1.5)), 'sell_size_pct': float(params.get('sell_size_pct', 0.1))}
+    def compute_orders(self, state, book, order_depth, position, memory):
         if book.best_bid is None or book.best_ask is None:
-            return [], 0
+            return ([], 0)
         p = self._read_params(state)
         S = self._get_spot(state)
         if S is None:
-            return [], 0
+            return ([], 0)
         z = self._update_zscore(S, memory, p)
-        memory["_velvet_z"] = z
-        fair  = call_price(S, p["K"], p["T"], p["implied_vol_prior"])
-        gamma = call_gamma(S, p["K"], p["T"], p["implied_vol_prior"])
-        delta = call_delta(S, p["K"], p["T"], p["implied_vol_prior"])
-        memory["_gamma"]   = gamma
-        memory["_delta"]   = delta
-        memory["_fair_iv"] = fair
-        memory["_spot"]    = S
-        memory["_T"]       = p["T"]
-        if fair < p["min_quote_price"]:
-            return [], 0
-        orders:   List[Order] = []
-        buy_cap  = self.buy_capacity(position)
+        memory['_velvet_z'] = z
+        fair = call_price(S, p['K'], p['T'], p['implied_vol_prior'])
+        gamma = call_gamma(S, p['K'], p['T'], p['implied_vol_prior'])
+        delta = call_delta(S, p['K'], p['T'], p['implied_vol_prior'])
+        memory['_gamma'] = gamma
+        memory['_delta'] = delta
+        memory['_fair_iv'] = fair
+        memory['_spot'] = S
+        memory['_T'] = p['T']
+        if fair < p['min_quote_price']:
+            return ([], 0)
+        orders: List[Order] = []
+        buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
-        if p["T"] < p["unwind_tte_threshold"] or position >= p["target_qty"]:
+        if p['T'] < p['unwind_tte_threshold'] or position >= p['target_qty']:
             if sell_cap > 0 and position > 0:
                 ask_px = book.best_ask - 1
                 if ask_px <= book.best_bid:
                     ask_px = book.best_bid + 1
-                qty = min(p["passive_bid_size"], sell_cap, position)
+                qty = min(p['passive_bid_size'], sell_cap, position)
                 if qty > 0:
                     orders.append(Order(self.product, ask_px, -qty))
-            memory["_mode"] = "unwind"
-            return orders, 0
-        if (p["sell_when_very_expensive"] and z is not None
-                and z > p["zscore_sell_threshold"] and position > 0 and sell_cap > 0):
+            memory['_mode'] = 'unwind'
+            return (orders, 0)
+        if p['sell_when_very_expensive'] and z is not None and (z > p['zscore_sell_threshold']) and (position > 0) and (sell_cap > 0):
             ask_px = book.best_ask - 1
             if ask_px <= book.best_bid:
                 ask_px = book.best_bid + 1
-            sell_qty = max(1, int(round(position * p["sell_size_pct"])))
-            qty = min(sell_qty, sell_cap, position, p["passive_bid_size"])
+            sell_qty = max(1, int(round(position * p['sell_size_pct'])))
+            qty = min(sell_qty, sell_cap, position, p['passive_bid_size'])
             if qty > 0:
                 orders.append(Order(self.product, ask_px, -qty))
-            memory["_mode"] = "z_profit_take"
-            return orders, 0
-        if p["skip_when_expensive"] and z is not None and z > p["zscore_skip_threshold"]:
-            memory["_mode"] = "z_skipped_expensive"
-            return orders, 0
+            memory['_mode'] = 'z_profit_take'
+            return (orders, 0)
+        if p['skip_when_expensive'] and z is not None and (z > p['zscore_skip_threshold']):
+            memory['_mode'] = 'z_skipped_expensive'
+            return (orders, 0)
         size_mult = 1.0
-        if p["boost_when_cheap"] and z is not None and z < -p["zscore_boost_threshold"]:
-            size_mult = p["entry_size_boost"]
-            memory["_mode"] = "z_boost_cheap"
+        if p['boost_when_cheap'] and z is not None and (z < -p['zscore_boost_threshold']):
+            size_mult = p['entry_size_boost']
+            memory['_mode'] = 'z_boost_cheap'
         else:
-            memory["_mode"] = "accumulate"
-        eff_entry_size  = max(1, int(round(p["entry_size"]      * size_mult)))
-        eff_passive_size = max(1, int(round(p["passive_bid_size"] * size_mult)))
-        if buy_cap > 0 and position < p["target_qty"]:
+            memory['_mode'] = 'accumulate'
+        eff_entry_size = max(1, int(round(p['entry_size'] * size_mult)))
+        eff_passive_size = max(1, int(round(p['passive_bid_size'] * size_mult)))
+        if buy_cap > 0 and position < p['target_qty']:
             ask = book.best_ask
-            if ask is not None and ask <= fair + p["edge_ticks"]:
-                ask_qty  = -order_depth.sell_orders.get(ask, 0)
-                headroom = p["target_qty"] - position
+            if ask is not None and ask <= fair + p['edge_ticks']:
+                ask_qty = -order_depth.sell_orders.get(ask, 0)
+                headroom = p['target_qty'] - position
                 take_qty = min(ask_qty, buy_cap, eff_entry_size, headroom)
                 if take_qty > 0:
                     orders.append(Order(self.product, ask, take_qty))
                     buy_cap -= take_qty
-        if buy_cap > 0 and position < p["target_qty"]:
+        if buy_cap > 0 and position < p['target_qty']:
             bid_px = book.best_bid + 1
             if bid_px < book.best_ask:
-                qty = min(eff_passive_size, buy_cap, p["target_qty"] - position)
+                qty = min(eff_passive_size, buy_cap, p['target_qty'] - position)
                 if qty > 0:
                     orders.append(Order(self.product, bid_px, qty))
-        return orders, 0
-    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        return (orders, 0)
+    def feature_prices(self, memory):
         out: Dict[str, float] = {}
-        if (g := memory.get("_gamma"))   is not None: out["gamma"]   = g
-        if (d := memory.get("_delta"))   is not None: out["delta"]   = d
-        if (f := memory.get("_fair_iv")) is not None: out["fair_iv"] = f
-        if (z := memory.get("_velvet_z")) is not None: out["velvet_z"] = z
-        if (m := memory.get("_mode")) is not None:
-            out["mode"] = {"accumulate": 1.0, "unwind": 0.0,
-                           "z_skipped_expensive": -1.0, "z_boost_cheap": 2.0}.get(m, 0.5)
+        if (g := memory.get('_gamma')) is not None:
+            out['gamma'] = g
+        if (d := memory.get('_delta')) is not None:
+            out['delta'] = d
+        if (f := memory.get('_fair_iv')) is not None:
+            out['fair_iv'] = f
+        if (z := memory.get('_velvet_z')) is not None:
+            out['velvet_z'] = z
+        if (m := memory.get('_mode')) is not None:
+            out['mode'] = {'accumulate': 1.0, 'unwind': 0.0, 'z_skipped_expensive': -1.0, 'z_boost_cheap': 2.0}.get(m, 0.5)
         return out
 class MMFirstV4ComboStrategy(BaseStrategy):
-    def _compute_quote_prices(
-        self,
-        book: BookSnapshot,
-        inventory_ratio: float,
-        mid_smooth: float,
-    ) -> Tuple[Optional[int], Optional[int], str]:
-        bid_price = (book.best_bid + 1) if book.best_bid is not None else None
-        ask_price = (book.best_ask - 1) if book.best_ask is not None else None
-        return bid_price, ask_price, "L1"
-    def _compute_zscore(self, mid: float, memory: Dict[str, Any]) -> Optional[float]:
-        window = int(self.params.get("zscore_window", 50))
-        buf: List[float] = memory.setdefault("_zscore_buf", [])
+    def _compute_quote_prices(self, book, inventory_ratio, mid_smooth):
+        bid_price = book.best_bid + 1 if book.best_bid is not None else None
+        ask_price = book.best_ask - 1 if book.best_ask is not None else None
+        return (bid_price, ask_price, 'L1')
+    def _compute_zscore(self, mid, memory):
+        window = int(self.params.get('zscore_window', 50))
+        buf: List[float] = memory.setdefault('_zscore_buf', [])
         buf.append(mid)
         if len(buf) > window:
             buf[:] = buf[-window:]
         if len(buf) < max(3, window // 4):
-            memory["zscore"] = None
+            memory['zscore'] = None
             return None
         n = len(buf)
         mean = sum(buf) / n
-        var = sum((x - mean) ** 2 for x in buf) / max(n - 1, 1)
+        var = sum(((x - mean) ** 2 for x in buf)) / max(n - 1, 1)
         std = var ** 0.5
-        if std < 1e-9:
-            memory["zscore"] = None
+        if std < 1e-09:
+            memory['zscore'] = None
             return None
         z = (mid - mean) / std
-        memory["zscore"] = z
-        memory["_zs_mean"] = mean
-        memory["_zs_std"] = std
+        memory['zscore'] = z
+        memory['_zs_mean'] = mean
+        memory['_zs_std'] = std
         return z
-    def _zscore_size_factors(self, memory: Dict[str, Any]) -> Tuple[float, float]:
-        z = memory.get("zscore")
+    def _zscore_size_factors(self, memory):
+        z = memory.get('zscore')
         if z is None:
-            return 1.0, 1.0
-        threshold = float(self.params.get("zscore_threshold", 1.0))
-        size_scale = float(self.params.get("zscore_size_scale", 0.5))
-        max_scale  = float(self.params.get("zscore_max_scale", 3.0))
+            return (1.0, 1.0)
+        threshold = float(self.params.get('zscore_threshold', 1.0))
+        size_scale = float(self.params.get('zscore_size_scale', 0.5))
+        max_scale = float(self.params.get('zscore_max_scale', 3.0))
         excess = max(0.0, abs(z) - threshold)
-        scale  = min(max_scale, 1.0 + size_scale * excess)
+        scale = min(max_scale, 1.0 + size_scale * excess)
         if z > threshold:
-            return 1.0 / scale, scale
+            return (1.0 / scale, scale)
         if z < -threshold:
-            return scale, 1.0 / scale
-        return 1.0, 1.0
-    def _compute_sizes(self, position: int, limit: int) -> Tuple[float, float]:
-        base = float(self.params.get("maker_size_base_pct", 0.2)) * limit
+            return (scale, 1.0 / scale)
+        return (1.0, 1.0)
+    def _compute_sizes(self, position, limit):
+        base = float(self.params.get('maker_size_base_pct', 0.2)) * limit
         bid_size = base * (1.0 - position / limit)
         ask_size = base * (1.0 + position / limit)
-        return bid_size, ask_size
-    def _dynamic_take_edge(self, memory: Dict[str, Any]) -> float:
-        lo = self.params.get("take_edge_lo")
-        hi = self.params.get("take_edge_hi")
+        return (bid_size, ask_size)
+    def _dynamic_take_edge(self, memory):
+        lo = self.params.get('take_edge_lo')
+        hi = self.params.get('take_edge_hi')
         if lo is None or hi is None:
-            return float(self.params.get("take_edge", 1.0))
-        sigma = memory.get("sigma_smoothed")
+            return float(self.params.get('take_edge', 1.0))
+        sigma = memory.get('sigma_smoothed')
         if sigma is None:
             return float(lo)
-        vol_lo = float(self.params.get("take_edge_vol_lo", 2.0))
-        vol_hi = float(self.params.get("take_edge_vol_hi", 5.0))
+        vol_lo = float(self.params.get('take_edge_vol_lo', 2.0))
+        vol_hi = float(self.params.get('take_edge_vol_hi', 5.0))
         if sigma <= vol_lo:
             return float(lo)
         if sigma >= vol_hi:
             return float(hi)
         t = (sigma - vol_lo) / (vol_hi - vol_lo)
         return float(lo) + t * (float(hi) - float(lo))
-    def _compute_anchor_signal(
-        self,
-        mid: float,
-        book: BookSnapshot,
-        mid_smooth: float,
-        memory: Dict[str, Any],
-    ) -> float:
-        anchor_price = self.params.get("anchor_price")
+    def _compute_anchor_signal(self, mid, book, mid_smooth, memory):
+        anchor_price = self.params.get('anchor_price')
         if anchor_price is None:
             return mid_smooth
         anchor_fixed = float(anchor_price)
-        anchor_alpha = float(self.params.get("anchor_alpha", 0.0))
+        anchor_alpha = float(self.params.get('anchor_alpha', 0.0))
         if anchor_alpha > 0.0:
-            ema = memory.get("_anchor_ema", anchor_fixed)
+            ema = memory.get('_anchor_ema', anchor_fixed)
             ema = anchor_alpha * mid + (1.0 - anchor_alpha) * ema
-            drift_bound = float(self.params.get("anchor_drift_bound", 0.0))
+            drift_bound = float(self.params.get('anchor_drift_bound', 0.0))
             if drift_bound > 0:
-                ema = max(anchor_fixed - drift_bound,
-                          min(anchor_fixed + drift_bound, ema))
-            memory["_anchor_ema"] = ema
+                ema = max(anchor_fixed - drift_bound, min(anchor_fixed + drift_bound, ema))
+            memory['_anchor_ema'] = ema
             anchor_value = ema
         else:
             anchor_value = anchor_fixed
-        ar_gain = float(self.params.get("ar_gain", 0.0))
+        ar_gain = float(self.params.get('ar_gain', 0.0))
         ar_shift = 0.0
         if ar_gain > 0.0:
-            source = str(self.params.get("ar_shift_source", "mid"))
-            if source == "microprice":
+            source = str(self.params.get('ar_shift_source', 'mid'))
+            if source == 'microprice':
                 current = self._microprice(book)
-            elif source == "mid_smooth":
+            elif source == 'mid_smooth':
                 current = mid_smooth
             else:
                 current = mid
-            prev = memory.get("_ar_prev_signal")
+            prev = memory.get('_ar_prev_signal')
             if prev is not None:
                 ar_shift = -ar_gain * (current - prev)
-            memory["_ar_prev_signal"] = current
+            memory['_ar_prev_signal'] = current
         return anchor_value + ar_shift
-    def _compute_asym_take_edges(
-        self,
-        base_edge: float,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[float, float]:
-        unwind = float(self.params.get("unwind_take_edge", 0.0))
+    def _compute_asym_take_edges(self, base_edge, position, memory):
+        unwind = float(self.params.get('unwind_take_edge', 0.0))
         if unwind <= 0:
-            return base_edge, base_edge
+            return (base_edge, base_edge)
         limit = self.position_limit()
         pressure = abs(position) / max(1.0, float(limit))
         if position > 0:
             sell_edge = max(0.0, base_edge - unwind * pressure)
-            buy_edge  = base_edge + unwind * pressure
+            buy_edge = base_edge + unwind * pressure
         elif position < 0:
-            buy_edge  = max(0.0, base_edge - unwind * pressure)
+            buy_edge = max(0.0, base_edge - unwind * pressure)
             sell_edge = base_edge + unwind * pressure
         else:
-            return base_edge, base_edge
-        return buy_edge, sell_edge
-    def _fire_takers(
-        self,
-        order_depth: OrderDepth,
-        fair_value: float,
-        bid_size: float,
-        ask_size: float,
-        buy_cap: int,
-        sell_cap: int,
-        buy_edge: float,
-        sell_edge: float,
-    ) -> Tuple[List[Order], int, int, Set[int], Set[int]]:
-        taker_buy_threshold  = self.params.get("taker_buy_threshold")
-        taker_sell_threshold = self.params.get("taker_sell_threshold")
+            return (base_edge, base_edge)
+        return (buy_edge, sell_edge)
+    def _fire_takers(self, order_depth, fair_value, bid_size, ask_size, buy_cap, sell_cap, buy_edge, sell_edge):
+        taker_buy_threshold = self.params.get('taker_buy_threshold')
+        taker_sell_threshold = self.params.get('taker_sell_threshold')
         orders: List[Order] = []
-        taker_buy_px:  Set[int] = set()
+        taker_buy_px: Set[int] = set()
         taker_sell_px: Set[int] = set()
         for ask_p in sorted(order_depth.sell_orders):
-            available  = -order_depth.sell_orders[ask_p]
+            available = -order_depth.sell_orders[ask_p]
             mid_signal = ask_p <= fair_value - buy_edge
             abs_signal = taker_buy_threshold is not None and ask_p <= taker_buy_threshold
             if not (mid_signal or abs_signal) or buy_cap <= 0:
@@ -876,7 +730,7 @@ class MMFirstV4ComboStrategy(BaseStrategy):
                 taker_buy_px.add(ask_p)
                 buy_cap -= qty
         for bid_p in sorted(order_depth.buy_orders, reverse=True):
-            volume     = order_depth.buy_orders[bid_p]
+            volume = order_depth.buy_orders[bid_p]
             mid_signal = bid_p >= fair_value + sell_edge
             abs_signal = taker_sell_threshold is not None and bid_p >= taker_sell_threshold
             if not (mid_signal or abs_signal) or sell_cap <= 0:
@@ -886,42 +740,28 @@ class MMFirstV4ComboStrategy(BaseStrategy):
                 orders.append(Order(self.product, bid_p, -qty))
                 taker_sell_px.add(bid_p)
                 sell_cap -= qty
-        return orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px
-    def _gap_exploit(
-        self,
-        order_depth: OrderDepth,
-        memory: Dict[str, Any],
-        limit: int,
-        bid_size: float,
-        ask_size: float,
-        bid_price: Optional[int],
-        ask_price: Optional[int],
-        buy_cap: int,
-        sell_cap: int,
-        taker_buy_px: Set[int],
-        taker_sell_px: Set[int],
-    ) -> Tuple[List[Order], int, int, Optional[int], Optional[int]]:
-        gap_min     = float(self.params.get("gap_trigger_min", 10))
-        shift       = float(self.params.get("OB_cleared_shift", 10))
-        gap_vol_pct = float(self.params.get("gap_trigger_max_vol_pct", 0.10))
+        return (orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px)
+    def _gap_exploit(self, order_depth, memory, limit, bid_size, ask_size, bid_price, ask_price, buy_cap, sell_cap, taker_buy_px, taker_sell_px):
+        gap_min = float(self.params.get('gap_trigger_min', 10))
+        shift = float(self.params.get('OB_cleared_shift', 10))
+        gap_vol_pct = float(self.params.get('gap_trigger_max_vol_pct', 0.1))
         gap_max_vol = int(gap_vol_pct * limit) if limit else 0
-        gap_confirm = int(self.params.get("gap_trigger_confirm_ticks", 1))
-        z           = memory.get("zscore")
-        gap_gate    = float(self.params.get("zscore_gap_gate",
-                            self.params.get("zscore_threshold", 1.0)))
+        gap_confirm = int(self.params.get('gap_trigger_confirm_ticks', 1))
+        z = memory.get('zscore')
+        gap_gate = float(self.params.get('zscore_gap_gate', self.params.get('zscore_threshold', 1.0)))
         bid_z_ok = z is None or z >= -gap_gate
         ask_z_ok = z is None or z <= gap_gate
         orders: List[Order] = []
-        memory["_gap_buy_px"]  = []
-        memory["_gap_sell_px"] = []
+        memory['_gap_buy_px'] = []
+        memory['_gap_sell_px'] = []
         all_bids = sorted(order_depth.buy_orders.keys(), reverse=True)
         all_asks = sorted(order_depth.sell_orders.keys())
         if all_bids:
-            memory["_last_best_bid"] = all_bids[0]
+            memory['_last_best_bid'] = all_bids[0]
         if all_asks:
-            memory["_last_best_ask"] = all_asks[0]
-        last_best_bid = memory.get("_last_best_bid")
-        last_best_ask = memory.get("_last_best_ask")
+            memory['_last_best_ask'] = all_asks[0]
+        last_best_bid = memory.get('_last_best_bid')
+        last_best_ask = memory.get('_last_best_ask')
         remaining_bids = [p for p in all_bids if p not in taker_sell_px]
         remaining_asks = [p for p in all_asks if p not in taker_buy_px]
         gap_swept_bids: Set[int] = set()
@@ -930,35 +770,35 @@ class MMFirstV4ComboStrategy(BaseStrategy):
             bid_gap_ok = False
             bid1 = bid2 = bid1_vol = None
             if len(remaining_bids) >= 2:
-                bid1, bid2 = remaining_bids[0], remaining_bids[1]
-                bid1_vol   = order_depth.buy_orders[bid1]
-                bid_gap_ok = (bid1 - bid2) >= gap_min and bid1_vol <= gap_max_vol
-            bid_streak = memory.get("_gap_bid_streak", 0)
+                bid1, bid2 = (remaining_bids[0], remaining_bids[1])
+                bid1_vol = order_depth.buy_orders[bid1]
+                bid_gap_ok = bid1 - bid2 >= gap_min and bid1_vol <= gap_max_vol
+            bid_streak = memory.get('_gap_bid_streak', 0)
             bid_streak = bid_streak + 1 if bid_gap_ok else 0
-            memory["_gap_bid_streak"] = bid_streak
-            if bid_streak >= gap_confirm and bid_gap_ok and sell_cap > 0 and bid_z_ok:
+            memory['_gap_bid_streak'] = bid_streak
+            if bid_streak >= gap_confirm and bid_gap_ok and (sell_cap > 0) and bid_z_ok:
                 qty = min(bid1_vol, sell_cap, int(ask_size))
                 if qty > 0:
                     orders.append(Order(self.product, bid1, -qty))
                     sell_cap -= qty
-                    memory["_gap_sell_px"].append(bid1)
+                    memory['_gap_sell_px'].append(bid1)
                     if qty >= bid1_vol:
                         gap_swept_bids.add(bid1)
             ask_gap_ok = False
             ask1 = ask2 = ask1_vol = None
             if len(remaining_asks) >= 2:
-                ask1, ask2 = remaining_asks[0], remaining_asks[1]
-                ask1_vol   = -order_depth.sell_orders[ask1]
-                ask_gap_ok = (ask2 - ask1) >= gap_min and ask1_vol <= gap_max_vol
-            ask_streak = memory.get("_gap_ask_streak", 0)
+                ask1, ask2 = (remaining_asks[0], remaining_asks[1])
+                ask1_vol = -order_depth.sell_orders[ask1]
+                ask_gap_ok = ask2 - ask1 >= gap_min and ask1_vol <= gap_max_vol
+            ask_streak = memory.get('_gap_ask_streak', 0)
             ask_streak = ask_streak + 1 if ask_gap_ok else 0
-            memory["_gap_ask_streak"] = ask_streak
-            if ask_streak >= gap_confirm and ask_gap_ok and buy_cap > 0 and ask_z_ok:
+            memory['_gap_ask_streak'] = ask_streak
+            if ask_streak >= gap_confirm and ask_gap_ok and (buy_cap > 0) and ask_z_ok:
                 qty = min(ask1_vol, buy_cap, int(bid_size))
                 if qty > 0:
                     orders.append(Order(self.product, ask1, qty))
                     buy_cap -= qty
-                    memory["_gap_buy_px"].append(ask1)
+                    memory['_gap_buy_px'].append(ask1)
                     if qty >= ask1_vol:
                         gap_swept_asks.add(ask1)
         final_remaining_bids = [p for p in remaining_bids if p not in gap_swept_bids]
@@ -971,24 +811,18 @@ class MMFirstV4ComboStrategy(BaseStrategy):
             bid_price = final_remaining_bids[0] + 1
         elif last_best_bid is not None:
             bid_price = last_best_bid - int(shift)
-        return orders, buy_cap, sell_cap, bid_price, ask_price
-    def _apply_toxic_flow(
-        self,
-        state: TradingState,
-        memory: Dict[str, Any],
-        buy_size: float,
-        sell_size: float,
-    ) -> Tuple[float, float]:
-        toxic_threshold = float(self.params.get("toxic_threshold", 0.0))
+        return (orders, buy_cap, sell_cap, bid_price, ask_price)
+    def _apply_toxic_flow(self, state, memory, buy_size, sell_size):
+        toxic_threshold = float(self.params.get('toxic_threshold', 0.0))
         if toxic_threshold <= 0:
-            return buy_size, sell_size
-        toxic_window    = int(self.params.get("toxic_window", 6))
-        toxic_size_frac = float(self.params.get("toxic_size_frac", 0.75))
-        flow_history = memory.setdefault("_flow_history", [])
-        prev_best_bid = memory.get("_prev_best_bid")
-        prev_best_ask = memory.get("_prev_best_ask")
+            return (buy_size, sell_size)
+        toxic_window = int(self.params.get('toxic_window', 6))
+        toxic_size_frac = float(self.params.get('toxic_size_frac', 0.75))
+        flow_history = memory.setdefault('_flow_history', [])
+        prev_best_bid = memory.get('_prev_best_bid')
+        prev_best_ask = memory.get('_prev_best_ask')
         trades = state.market_trades.get(self.product, [])
-        if toxic_window > 0 and prev_best_bid is not None and prev_best_ask is not None:
+        if toxic_window > 0 and prev_best_bid is not None and (prev_best_ask is not None):
             for trade in trades:
                 if trade.price >= prev_best_ask:
                     flow_history.append(trade.quantity)
@@ -999,220 +833,168 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         flow_score = 0.0
         if flow_history:
             signed = sum(flow_history)
-            total  = sum(abs(x) for x in flow_history)
+            total = sum((abs(x) for x in flow_history))
             if total > 0:
                 flow_score = signed / total
-        memory["_flow_score"] = flow_score
+        memory['_flow_score'] = flow_score
         if flow_score > toxic_threshold and sell_size > 0:
             sell_size = max(1.0, sell_size * toxic_size_frac)
         elif flow_score < -toxic_threshold and buy_size > 0:
             buy_size = max(1.0, buy_size * toxic_size_frac)
-        return buy_size, sell_size
-    def _apply_jump_filter(
-        self,
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-        buy_size: float,
-        sell_size: float,
-    ) -> Tuple[float, float]:
-        threshold = float(self.params.get("trend_jump_threshold", 0.0))
+        return (buy_size, sell_size)
+    def _apply_jump_filter(self, book, memory, buy_size, sell_size):
+        threshold = float(self.params.get('trend_jump_threshold', 0.0))
         if threshold <= 0:
-            return buy_size, sell_size
-        jump_size_frac = float(self.params.get("jump_size_frac", 0.5))
-        prev_best_bid  = memory.get("_prev_best_bid")
-        prev_best_ask  = memory.get("_prev_best_ask")
+            return (buy_size, sell_size)
+        jump_size_frac = float(self.params.get('jump_size_frac', 0.5))
+        prev_best_bid = memory.get('_prev_best_bid')
+        prev_best_ask = memory.get('_prev_best_ask')
         bid_jumped = prev_best_bid is not None and book.best_bid == prev_best_bid + 1
         ask_jumped = prev_best_ask is not None and book.best_ask == prev_best_ask - 1
         if bid_jumped and sell_size > 0:
             sell_size = max(1.0, sell_size * jump_size_frac)
         if ask_jumped and buy_size > 0:
             buy_size = max(1.0, buy_size * jump_size_frac)
-        return buy_size, sell_size
-    def _compute_base_mid(self, raw_mid: float, book: BookSnapshot) -> float:
-        vol_filter = int(self.params.get("mid_vol_filter", 0))
+        return (buy_size, sell_size)
+    def _compute_base_mid(self, raw_mid, book):
+        vol_filter = int(self.params.get('mid_vol_filter', 0))
         if vol_filter <= 0:
             return raw_mid
         wall_bid = wall_ask = None
-        for (p, v) in book.bid_levels:
+        for p, v in book.bid_levels:
             if v >= vol_filter:
                 wall_bid = p
                 break
-        for (p, v) in book.ask_levels:
+        for p, v in book.ask_levels:
             if v >= vol_filter:
                 wall_ask = p
                 break
         if wall_bid is None or wall_ask is None:
             return raw_mid
         return (wall_bid + wall_ask) / 2.0
-    def _taker_cooldown_active(
-        self,
-        state: TradingState,
-        memory: Dict[str, Any],
-    ) -> Tuple[bool, bool]:
-        cooldown = int(self.params.get("taker_cooldown_ticks", 0))
+    def _taker_cooldown_active(self, state, memory):
+        cooldown = int(self.params.get('taker_cooldown_ticks', 0))
         if cooldown <= 0:
-            return False, False
-        now          = int(state.timestamp)
-        ts_increment = int(self.params.get("ts_increment", 100))
-        last_buy     = memory.get("_last_taker_buy_ts")
-        last_sell    = memory.get("_last_taker_sell_ts")
-        buy_blocked  = last_buy  is not None and (now - last_buy)  < cooldown * ts_increment
-        sell_blocked = last_sell is not None and (now - last_sell) < cooldown * ts_increment
-        return buy_blocked, sell_blocked
-    def _update_taker_cooldown(
-        self,
-        state: TradingState,
-        memory: Dict[str, Any],
-        taker_buy_px: Set[int],
-        taker_sell_px: Set[int],
-    ) -> None:
+            return (False, False)
+        now = int(state.timestamp)
+        ts_increment = int(self.params.get('ts_increment', 100))
+        last_buy = memory.get('_last_taker_buy_ts')
+        last_sell = memory.get('_last_taker_sell_ts')
+        buy_blocked = last_buy is not None and now - last_buy < cooldown * ts_increment
+        sell_blocked = last_sell is not None and now - last_sell < cooldown * ts_increment
+        return (buy_blocked, sell_blocked)
+    def _update_taker_cooldown(self, state, memory, taker_buy_px, taker_sell_px):
         now = int(state.timestamp)
         if taker_buy_px:
-            memory["_last_taker_buy_ts"]  = now
+            memory['_last_taker_buy_ts'] = now
         if taker_sell_px:
-            memory["_last_taker_sell_ts"] = now
-    def _apply_inventory_bias(
-        self,
-        fair_value: float,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> float:
-        gamma = float(self.params.get("inventory_aversion_gamma", 0.0))
+            memory['_last_taker_sell_ts'] = now
+    def _apply_inventory_bias(self, fair_value, position, memory):
+        gamma = float(self.params.get('inventory_aversion_gamma', 0.0))
         if gamma <= 0 or position == 0:
             return fair_value
-        sigma = memory.get("sigma_smoothed", 1.0)
-        return fair_value - gamma * position * (sigma ** 2)
-    def _microprice_size_tilt(
-        self,
-        book: BookSnapshot,
-        raw_mid: float,
-        bid_size: float,
-        ask_size: float,
-    ) -> Tuple[float, float]:
-        gain = float(self.params.get("microprice_size_gain", 0.0))
+        sigma = memory.get('sigma_smoothed', 1.0)
+        return fair_value - gamma * position * sigma ** 2
+    def _microprice_size_tilt(self, book, raw_mid, bid_size, ask_size):
+        gain = float(self.params.get('microprice_size_gain', 0.0))
         if gain <= 0:
-            return bid_size, ask_size
-        threshold = float(self.params.get("microprice_size_threshold", 0.2))
+            return (bid_size, ask_size)
+        threshold = float(self.params.get('microprice_size_threshold', 0.2))
         micro = self._microprice(book)
         delta = micro - raw_mid
         if abs(delta) < threshold:
-            return bid_size, ask_size
+            return (bid_size, ask_size)
         scale = 1.0 + gain * (abs(delta) - threshold)
         if delta > 0:
-            return bid_size / scale, ask_size * scale
+            return (bid_size / scale, ask_size * scale)
         else:
-            return bid_size * scale, ask_size / scale
-    def _apply_spread_widening(
-        self,
-        bid_price: Optional[int],
-        ask_price: Optional[int],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> Tuple[Optional[int], Optional[int]]:
-        threshold = float(self.params.get("spread_widen_vol_threshold", 0.0))
+            return (bid_size * scale, ask_size / scale)
+    def _apply_spread_widening(self, bid_price, ask_price, book, memory):
+        threshold = float(self.params.get('spread_widen_vol_threshold', 0.0))
         if threshold <= 0 or bid_price is None or ask_price is None:
-            return bid_price, ask_price
+            return (bid_price, ask_price)
         if book.best_bid is None or book.best_ask is None:
-            return bid_price, ask_price
-        sigma = memory.get("sigma_smoothed", 0.0)
+            return (bid_price, ask_price)
+        sigma = memory.get('sigma_smoothed', 0.0)
         if sigma < threshold:
-            return bid_price, ask_price
-        extra   = int(self.params.get("spread_widen_extra_ticks", 1))
+            return (bid_price, ask_price)
+        extra = int(self.params.get('spread_widen_extra_ticks', 1))
         new_bid = max(1, bid_price - extra)
         new_ask = ask_price + extra
         if book.best_ask is not None:
             new_bid = min(new_bid, book.best_ask - 1)
         if book.best_bid is not None:
             new_ask = max(new_ask, book.best_bid + 1)
-        return new_bid, new_ask
-    def _effective_position(self, position: int) -> int:
-        target = int(self.params.get("inventory_target", 0))
+        return (new_bid, new_ask)
+    def _effective_position(self, position):
+        target = int(self.params.get('inventory_target', 0))
         return position - target
-    def _apply_fill_rate_toxicity(
-        self,
-        state: TradingState,
-        memory: Dict[str, Any],
-        bid_size: float,
-        ask_size: float,
-    ) -> Tuple[float, float]:
-        window = int(self.params.get("fill_toxicity_window", 0))
+    def _apply_fill_rate_toxicity(self, state, memory, bid_size, ask_size):
+        window = int(self.params.get('fill_toxicity_window', 0))
         if window <= 0:
-            return bid_size, ask_size
-        history = memory.setdefault("_fill_history", [])
+            return (bid_size, ask_size)
+        history = memory.setdefault('_fill_history', [])
         for trade in state.own_trades.get(self.product, []):
             qty = float(trade.quantity)
-            if trade.buyer == "SUBMISSION":
+            if trade.buyer == 'SUBMISSION':
                 history.append(qty)
-            elif trade.seller == "SUBMISSION":
+            elif trade.seller == 'SUBMISSION':
                 history.append(-qty)
         if len(history) > window:
             del history[:-window]
         if not history:
-            return bid_size, ask_size
-        signed  = sum(history)
-        total   = sum(abs(x) for x in history)
+            return (bid_size, ask_size)
+        signed = sum(history)
+        total = sum((abs(x) for x in history))
         if total <= 0:
-            return bid_size, ask_size
+            return (bid_size, ask_size)
         imbalance = signed / total
-        threshold = float(self.params.get("fill_toxicity_threshold", 0.7))
-        frac      = float(self.params.get("fill_toxicity_frac", 0.5))
+        threshold = float(self.params.get('fill_toxicity_threshold', 0.7))
+        frac = float(self.params.get('fill_toxicity_frac', 0.5))
         if imbalance > threshold and bid_size > 0:
             bid_size = max(1.0, bid_size * frac)
         elif imbalance < -threshold and ask_size > 0:
             ask_size = max(1.0, ask_size * frac)
-        return bid_size, ask_size
-    def _apply_spread_zscore_skew(
-        self,
-        bid_price: Optional[int],
-        ask_price: Optional[int],
-        book: BookSnapshot,
-        memory: Dict[str, Any],
-    ) -> Tuple[Optional[int], Optional[int]]:
-        window = int(self.params.get("spread_zscore_window", 0))
+        return (bid_size, ask_size)
+    def _apply_spread_zscore_skew(self, bid_price, ask_price, book, memory):
+        window = int(self.params.get('spread_zscore_window', 0))
         if window <= 0 or bid_price is None or ask_price is None:
-            return bid_price, ask_price
+            return (bid_price, ask_price)
         if book.best_bid is None or book.best_ask is None:
-            return bid_price, ask_price
+            return (bid_price, ask_price)
         spread = book.best_ask - book.best_bid
-        buf: List[float] = memory.setdefault("_spread_buf", [])
+        buf: List[float] = memory.setdefault('_spread_buf', [])
         buf.append(spread)
         if len(buf) > window:
             del buf[:-window]
         if len(buf) < max(10, window // 4):
-            return bid_price, ask_price
+            return (bid_price, ask_price)
         mean = sum(buf) / len(buf)
-        var  = sum((x - mean) ** 2 for x in buf) / max(len(buf) - 1, 1)
-        std  = var ** 0.5
-        if std < 1e-9:
-            return bid_price, ask_price
-        z         = (spread - mean) / std
-        threshold = float(self.params.get("spread_zscore_threshold", 1.5))
+        var = sum(((x - mean) ** 2 for x in buf)) / max(len(buf) - 1, 1)
+        std = var ** 0.5
+        if std < 1e-09:
+            return (bid_price, ask_price)
+        z = (spread - mean) / std
+        threshold = float(self.params.get('spread_zscore_threshold', 1.5))
         if z < threshold:
-            return bid_price, ask_price
-        shift   = int(self.params.get("spread_zscore_shift", 1))
+            return (bid_price, ask_price)
+        shift = int(self.params.get('spread_zscore_shift', 1))
         new_bid = min(book.best_ask - 1, bid_price + shift)
         new_ask = max(book.best_bid + 1, ask_price - shift)
         if new_bid >= new_ask:
             new_ask = new_bid + 1
-        return new_bid, new_ask
-    def _probe_tick0(
-        self,
-        book: BookSnapshot,
-        state: TradingState,
-        memory: Dict[str, Any],
-        buy_cap: int,
-        sell_cap: int,
-    ) -> Tuple[List[Order], int, int]:
-        distances = self.params.get("probe_t0_distances")
+        return (new_bid, new_ask)
+    def _probe_tick0(self, book, state, memory, buy_cap, sell_cap):
+        distances = self.params.get('probe_t0_distances')
         if not distances or book.best_bid is None or book.best_ask is None:
-            return [], buy_cap, sell_cap
-        max_ts = int(self.params.get("probe_t0_max_ts", 500))
-        now    = int(state.timestamp)
+            return ([], buy_cap, sell_cap)
+        max_ts = int(self.params.get('probe_t0_max_ts', 500))
+        now = int(state.timestamp)
         if now > max_ts:
-            return [], buy_cap, sell_cap
-        if memory.get("_probe_t0_fired", False):
-            return [], buy_cap, sell_cap
-        qty    = int(self.params.get("probe_t0_qty", 1))
+            return ([], buy_cap, sell_cap)
+        if memory.get('_probe_t0_fired', False):
+            return ([], buy_cap, sell_cap)
+        qty = int(self.params.get('probe_t0_qty', 1))
         orders: List[Order] = []
         for dist in distances:
             d = int(dist)
@@ -1227,22 +1009,15 @@ class MMFirstV4ComboStrategy(BaseStrategy):
                 orders.append(Order(self.product, book.best_ask + d, -a_qty))
                 sell_cap -= a_qty
         if orders:
-            memory["_probe_t0_fired"] = True
-        return orders, buy_cap, sell_cap
-    def _apply_momentum_follower(
-        self,
-        state: TradingState,
-        order_depth: OrderDepth,
-        memory: Dict[str, Any],
-        buy_cap: int,
-        sell_cap: int,
-    ) -> Tuple[List[Order], int, int]:
-        window = int(self.params.get("momentum_window", 0))
+            memory['_probe_t0_fired'] = True
+        return (orders, buy_cap, sell_cap)
+    def _apply_momentum_follower(self, state, order_depth, memory, buy_cap, sell_cap):
+        window = int(self.params.get('momentum_window', 0))
         if window <= 0:
-            return [], buy_cap, sell_cap
-        history   = memory.setdefault("_momentum_history", [])
-        prev_bid  = memory.get("_prev_best_bid")
-        prev_ask  = memory.get("_prev_best_ask")
+            return ([], buy_cap, sell_cap)
+        history = memory.setdefault('_momentum_history', [])
+        prev_bid = memory.get('_prev_best_bid')
+        prev_ask = memory.get('_prev_best_ask')
         for trade in state.market_trades.get(self.product, []):
             qty = float(trade.quantity)
             if prev_ask is not None and trade.price >= prev_ask:
@@ -1252,19 +1027,19 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         if len(history) > window:
             del history[:-window]
         if not history:
-            return [], buy_cap, sell_cap
+            return ([], buy_cap, sell_cap)
         signed = sum(history)
-        total  = sum(abs(x) for x in history)
+        total = sum((abs(x) for x in history))
         if total <= 0:
-            return [], buy_cap, sell_cap
-        flow      = signed / total
-        threshold = float(self.params.get("momentum_threshold", 0.8))
-        qty       = int(self.params.get("momentum_qty", 3))
+            return ([], buy_cap, sell_cap)
+        flow = signed / total
+        threshold = float(self.params.get('momentum_threshold', 0.8))
+        qty = int(self.params.get('momentum_qty', 3))
         orders: List[Order] = []
         if flow > threshold and buy_cap > 0:
             asks = sorted(order_depth.sell_orders.keys())
             if asks:
-                ask_p     = asks[0]
+                ask_p = asks[0]
                 available = -order_depth.sell_orders[ask_p]
                 q = min(qty, buy_cap, available)
                 if q > 0:
@@ -1273,32 +1048,24 @@ class MMFirstV4ComboStrategy(BaseStrategy):
         elif flow < -threshold and sell_cap > 0:
             bids = sorted(order_depth.buy_orders.keys(), reverse=True)
             if bids:
-                bid_p  = bids[0]
+                bid_p = bids[0]
                 volume = order_depth.buy_orders[bid_p]
                 q = min(qty, sell_cap, volume)
                 if q > 0:
                     orders.append(Order(self.product, bid_p, -q))
                     sell_cap -= q
-        return orders, buy_cap, sell_cap
-    def _probe_quotes(
-        self,
-        book: BookSnapshot,
-        state: TradingState,
-        memory: Dict[str, Any],
-        position: int,
-        buy_cap: int,
-        sell_cap: int,
-    ) -> Tuple[List[Order], int, int]:
-        probe_dist = int(self.params.get("probe_distance", 0))
+        return (orders, buy_cap, sell_cap)
+    def _probe_quotes(self, book, state, memory, position, buy_cap, sell_cap):
+        probe_dist = int(self.params.get('probe_distance', 0))
         if probe_dist <= 0 or book.best_bid is None or book.best_ask is None:
-            return [], buy_cap, sell_cap
-        probe_qty      = int(self.params.get("probe_qty", 1))
-        probe_interval = int(self.params.get("probe_interval_ticks", 100))
-        ts_increment   = int(self.params.get("ts_increment", 100))
-        now            = int(state.timestamp)
-        last_probe     = memory.get("_last_probe_ts", -(10 ** 9))
-        if (now - last_probe) < probe_interval * ts_increment:
-            return [], buy_cap, sell_cap
+            return ([], buy_cap, sell_cap)
+        probe_qty = int(self.params.get('probe_qty', 1))
+        probe_interval = int(self.params.get('probe_interval_ticks', 100))
+        ts_increment = int(self.params.get('ts_increment', 100))
+        now = int(state.timestamp)
+        last_probe = memory.get('_last_probe_ts', -10 ** 9)
+        if now - last_probe < probe_interval * ts_increment:
+            return ([], buy_cap, sell_cap)
         orders: List[Order] = []
         actual_bid_qty = min(probe_qty, buy_cap)
         actual_ask_qty = min(probe_qty, sell_cap)
@@ -1311,41 +1078,30 @@ class MMFirstV4ComboStrategy(BaseStrategy):
             orders.append(Order(self.product, probe_ask, -actual_ask_qty))
             sell_cap -= actual_ask_qty
         if orders:
-            memory["_last_probe_ts"] = now
-        return orders, buy_cap, sell_cap
-    def _asym_passive_skew(
-        self,
-        bid_price: Optional[int],
-        ask_price: Optional[int],
-        position: int,
-        book: BookSnapshot,
-    ) -> Tuple[Optional[int], Optional[int]]:
-        skew_max = int(self.params.get("passive_unwind_skew_ticks", 0))
+            memory['_last_probe_ts'] = now
+        return (orders, buy_cap, sell_cap)
+    def _asym_passive_skew(self, bid_price, ask_price, position, book):
+        skew_max = int(self.params.get('passive_unwind_skew_ticks', 0))
         if skew_max <= 0 or bid_price is None or ask_price is None:
-            return bid_price, ask_price
+            return (bid_price, ask_price)
         if book.best_bid is None or book.best_ask is None:
-            return bid_price, ask_price
-        trigger  = float(self.params.get("passive_unwind_trigger", 0.3))
-        limit    = self.position_limit()
+            return (bid_price, ask_price)
+        trigger = float(self.params.get('passive_unwind_trigger', 0.3))
+        limit = self.position_limit()
         pressure = abs(position) / max(1.0, float(limit))
         if pressure < trigger:
-            return bid_price, ask_price
-        scaled = (pressure - trigger) / max(1e-9, 1.0 - trigger)
-        skew   = int(round(skew_max * scaled))
+            return (bid_price, ask_price)
+        scaled = (pressure - trigger) / max(1e-09, 1.0 - trigger)
+        skew = int(round(skew_max * scaled))
         if skew <= 0:
-            return bid_price, ask_price
+            return (bid_price, ask_price)
         if position > 0:
             ask_price = max(book.best_bid + 1, ask_price - skew)
         elif position < 0:
             bid_price = min(book.best_ask - 1, bid_price + skew)
-        return bid_price, ask_price
-    def _apply_eod_flatten(
-        self,
-        state: TradingState,
-        order_depth: OrderDepth,
-        position: int,
-    ) -> Optional[List[Order]]:
-        eod_ts = int(self.params.get("eod_flatten_ts", 0))
+        return (bid_price, ask_price)
+    def _apply_eod_flatten(self, state, order_depth, position):
+        eod_ts = int(self.params.get('eod_flatten_ts', 0))
         if eod_ts <= 0 or state.timestamp < eod_ts or position == 0:
             return None
         orders: List[Order] = []
@@ -1371,21 +1127,11 @@ class MMFirstV4ComboStrategy(BaseStrategy):
                 if need == 0:
                     break
         return orders
-    def _passive_quotes(
-        self,
-        bid_price: Optional[int],
-        ask_price: Optional[int],
-        bid_size: float,
-        ask_size: float,
-        buy_cap: int,
-        sell_cap: int,
-        position: int,
-        limit: int,
-    ) -> Tuple[List[Order], int, int]:
-        quote_buy  = min(buy_cap,  int(bid_size))
+    def _passive_quotes(self, bid_price, ask_price, bid_size, ask_size, buy_cap, sell_cap, position, limit):
+        quote_buy = min(buy_cap, int(bid_size))
         quote_sell = min(sell_cap, int(ask_size))
-        inv_abs    = abs(position) / float(limit) if limit else 0.0
-        hard_stop  = 1.0 - float(self.params.get("pct_kept_for_takers", 0.2))
+        inv_abs = abs(position) / float(limit) if limit else 0.0
+        hard_stop = 1.0 - float(self.params.get('pct_kept_for_takers', 0.2))
         if inv_abs >= hard_stop:
             if position > 0:
                 quote_buy = 0
@@ -1396,165 +1142,111 @@ class MMFirstV4ComboStrategy(BaseStrategy):
             orders.append(Order(self.product, bid_price, quote_buy))
         if quote_sell > 0 and ask_price is not None:
             orders.append(Order(self.product, ask_price, -quote_sell))
-        return orders, buy_cap - quote_buy, sell_cap - quote_sell
-    def _log_taker_fills(
-        self,
-        state: TradingState,
-        memory: Dict[str, Any],
-        this_taker_buy_px: Set[int],
-        this_taker_sell_px: Set[int],
-    ) -> None:
-        prev_taker_buy_px  = set(memory.get("_taker_buy_px", []))
-        prev_taker_sell_px = set(memory.get("_taker_sell_px", []))
-        prev_gap_buy_px    = set(memory.get("_gap_buy_px_prev", []))
-        prev_gap_sell_px   = set(memory.get("_gap_sell_px_prev", []))
-        memory["_taker_buy_px"]      = list(this_taker_buy_px)
-        memory["_taker_sell_px"]     = list(this_taker_sell_px)
-        memory["_gap_buy_px_prev"]   = list(memory.get("_gap_buy_px", []))
-        memory["_gap_sell_px_prev"]  = list(memory.get("_gap_sell_px", []))
+        return (orders, buy_cap - quote_buy, sell_cap - quote_sell)
+    def _log_taker_fills(self, state, memory, this_taker_buy_px, this_taker_sell_px):
+        prev_taker_buy_px = set(memory.get('_taker_buy_px', []))
+        prev_taker_sell_px = set(memory.get('_taker_sell_px', []))
+        prev_gap_buy_px = set(memory.get('_gap_buy_px_prev', []))
+        prev_gap_sell_px = set(memory.get('_gap_sell_px_prev', []))
+        memory['_taker_buy_px'] = list(this_taker_buy_px)
+        memory['_taker_sell_px'] = list(this_taker_sell_px)
+        memory['_gap_buy_px_prev'] = list(memory.get('_gap_buy_px', []))
+        memory['_gap_sell_px_prev'] = list(memory.get('_gap_sell_px', []))
         for trade in state.own_trades.get(self.product, []):
-            if trade.buyer == "SUBMISSION":
-                side, is_taker = "BUY", trade.price in prev_taker_buy_px
+            if trade.buyer == 'SUBMISSION':
+                side, is_taker = ('BUY', trade.price in prev_taker_buy_px)
             else:
-                side, is_taker = "SELL", trade.price in prev_taker_sell_px
+                side, is_taker = ('SELL', trade.price in prev_taker_sell_px)
             if is_taker:
-                is_gap = (
-                    (side == "BUY"  and trade.price in prev_gap_buy_px)
-                    or (side == "SELL" and trade.price in prev_gap_sell_px)
-                )
-                self.log_taker_fill(
-                    state=state, memory=memory,
-                    side=side, price=trade.price, quantity=trade.quantity,
-                    gap_exploit=is_gap,
-                )
-    def compute_orders(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
+                is_gap = side == 'BUY' and trade.price in prev_gap_buy_px or (side == 'SELL' and trade.price in prev_gap_sell_px)
+                self.log_taker_fill(state=state, memory=memory, side=side, price=trade.price, quantity=trade.quantity, gap_exploit=is_gap)
+    def compute_orders(self, state, book, order_depth, position, memory):
         if order_depth.buy_orders and order_depth.sell_orders:
             eod_orders = self._apply_eod_flatten(state, order_depth, position)
             if eod_orders is not None:
-                return eod_orders, 0
+                return (eod_orders, 0)
         if book.best_bid is None and book.best_ask is None:
-            if memory.get("_last_mid") is None:
-                return [], 0
+            if memory.get('_last_mid') is None:
+                return ([], 0)
         raw_mid = book.mid_price
         if raw_mid is None and book.best_bid is not None:
             raw_mid = float(book.best_bid)
         if raw_mid is None and book.best_ask is not None:
             raw_mid = float(book.best_ask)
-        mid = raw_mid if raw_mid is not None else memory["_last_mid"]
+        mid = raw_mid if raw_mid is not None else memory['_last_mid']
         if raw_mid is not None:
-            memory["_last_mid"] = raw_mid
-        if self.params.get("use_microprice_as_fair", False):
-            micro    = self._microprice(book)
+            memory['_last_mid'] = raw_mid
+        if self.params.get('use_microprice_as_fair', False):
+            micro = self._microprice(book)
             base_mid = micro if micro else mid
         else:
             base_mid = self._compute_base_mid(mid, book)
         mid_smooth = self._smooth_mid(base_mid, memory)
         self._compute_zscore(base_mid, memory)
-        sigma      = self._update_volatility(base_mid, memory)
+        sigma = self._update_volatility(base_mid, memory)
         fair_value = self._compute_anchor_signal(base_mid, book, mid_smooth, memory)
         eff_position = self._effective_position(position)
-        fair_value   = self._apply_inventory_bias(fair_value, eff_position, memory)
-        limit         = self.position_limit()
+        fair_value = self._apply_inventory_bias(fair_value, eff_position, memory)
+        limit = self.position_limit()
         inventory_ratio = position / float(limit) if limit else 0.0
         bid_price, ask_price, _ = self._compute_quote_prices(book, inventory_ratio, fair_value)
-        buy_cap  = self.buy_capacity(position)
+        buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
         bid_size, ask_size = self._compute_sizes(position, limit)
         bid_factor, ask_factor = self._zscore_size_factors(memory)
         bid_size = max(0.0, bid_size * bid_factor)
         ask_size = max(0.0, ask_size * ask_factor)
         bid_size, ask_size = self._microprice_size_tilt(book, mid, bid_size, ask_size)
-        base_edge       = self._dynamic_take_edge(memory)
+        base_edge = self._dynamic_take_edge(memory)
         buy_edge, sell_edge = self._compute_asym_take_edges(base_edge, eff_position, memory)
         buy_blocked, sell_blocked = self._taker_cooldown_active(state, memory)
         if buy_blocked:
-            buy_edge = 1_000_000.0
+            buy_edge = 1000000.0
         if sell_blocked:
-            sell_edge = 1_000_000.0
-        taker_orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px = self._fire_takers(
-            order_depth, fair_value, bid_size, ask_size, buy_cap, sell_cap,
-            buy_edge=buy_edge, sell_edge=sell_edge,
-        )
+            sell_edge = 1000000.0
+        taker_orders, buy_cap, sell_cap, taker_buy_px, taker_sell_px = self._fire_takers(order_depth, fair_value, bid_size, ask_size, buy_cap, sell_cap, buy_edge=buy_edge, sell_edge=sell_edge)
         self._update_taker_cooldown(state, memory, taker_buy_px, taker_sell_px)
-        gap_orders, buy_cap, sell_cap, bid_price, ask_price = self._gap_exploit(
-            order_depth, memory, limit, bid_size, ask_size,
-            bid_price, ask_price, buy_cap, sell_cap,
-            taker_buy_px, taker_sell_px,
-        )
+        gap_orders, buy_cap, sell_cap, bid_price, ask_price = self._gap_exploit(order_depth, memory, limit, bid_size, ask_size, bid_price, ask_price, buy_cap, sell_cap, taker_buy_px, taker_sell_px)
         bid_price, ask_price = self._asym_passive_skew(bid_price, ask_price, eff_position, book)
         bid_price, ask_price = self._apply_spread_widening(bid_price, ask_price, book, memory)
         bid_price, ask_price = self._apply_spread_zscore_skew(bid_price, ask_price, book, memory)
-        bid_size, ask_size   = self._apply_toxic_flow(state, memory, bid_size, ask_size)
-        bid_size, ask_size   = self._apply_jump_filter(book, memory, bid_size, ask_size)
-        bid_size, ask_size   = self._apply_fill_rate_toxicity(state, memory, bid_size, ask_size)
-        passive_orders, buy_cap, sell_cap = self._passive_quotes(
-            bid_price, ask_price, bid_size, ask_size, buy_cap, sell_cap, position, limit
-        )
-        probe_orders, buy_cap, sell_cap = self._probe_quotes(
-            book, state, memory, position, buy_cap, sell_cap,
-        )
+        bid_size, ask_size = self._apply_toxic_flow(state, memory, bid_size, ask_size)
+        bid_size, ask_size = self._apply_jump_filter(book, memory, bid_size, ask_size)
+        bid_size, ask_size = self._apply_fill_rate_toxicity(state, memory, bid_size, ask_size)
+        passive_orders, buy_cap, sell_cap = self._passive_quotes(bid_price, ask_price, bid_size, ask_size, buy_cap, sell_cap, position, limit)
+        probe_orders, buy_cap, sell_cap = self._probe_quotes(book, state, memory, position, buy_cap, sell_cap)
         passive_orders.extend(probe_orders)
-        probe_t0_orders, buy_cap, sell_cap = self._probe_tick0(
-            book, state, memory, buy_cap, sell_cap,
-        )
+        probe_t0_orders, buy_cap, sell_cap = self._probe_tick0(book, state, memory, buy_cap, sell_cap)
         passive_orders.extend(probe_t0_orders)
-        momentum_orders, buy_cap, sell_cap = self._apply_momentum_follower(
-            state, order_depth, memory, buy_cap, sell_cap,
-        )
+        momentum_orders, buy_cap, sell_cap = self._apply_momentum_follower(state, order_depth, memory, buy_cap, sell_cap)
         taker_orders.extend(momentum_orders)
         if book.best_bid is not None:
-            memory["_prev_best_bid"] = book.best_bid
+            memory['_prev_best_bid'] = book.best_bid
         if book.best_ask is not None:
-            memory["_prev_best_ask"] = book.best_ask
+            memory['_prev_best_ask'] = book.best_ask
         self._log_taker_fills(state, memory, taker_buy_px, taker_sell_px)
-        z = memory.get("zscore")
-        self.log_quote_snapshot(
-            state=state, memory=memory,
-            bid_price=bid_price, ask_price=ask_price,
-            extras={
-                "position": position,
-                "fair":     round(fair_value, 2),
-                "buy_edge": round(buy_edge, 2),
-                "sell_edge":round(sell_edge, 2),
-                "bid_size": int(bid_size),
-                "ask_size": int(ask_size),
-                "zscore":   round(z, 4) if z is not None else None,
-                "sigma":    round(sigma, 4),
-                "flow_score": round(memory.get("_flow_score", 0.0), 3),
-            },
-        )
-        return taker_orders + gap_orders + passive_orders, 0
-    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        z = memory.get('zscore')
+        self.log_quote_snapshot(state=state, memory=memory, bid_price=bid_price, ask_price=ask_price, extras={'position': position, 'fair': round(fair_value, 2), 'buy_edge': round(buy_edge, 2), 'sell_edge': round(sell_edge, 2), 'bid_size': int(bid_size), 'ask_size': int(ask_size), 'zscore': round(z, 4) if z is not None else None, 'sigma': round(sigma, 4), 'flow_score': round(memory.get('_flow_score', 0.0), 3)})
+        return (taker_orders + gap_orders + passive_orders, 0)
+    def feature_prices(self, memory):
         out: Dict[str, float] = {}
-        if (m := memory.get("mid_smoothed"))  is not None: out["MidSmooth"]  = float(m)
-        if (a := memory.get("_anchor_ema"))   is not None: out["AnchorEMA"]  = float(a)
-        z = memory.get("zscore")
+        if (m := memory.get('mid_smoothed')) is not None:
+            out['MidSmooth'] = float(m)
+        if (a := memory.get('_anchor_ema')) is not None:
+            out['AnchorEMA'] = float(a)
+        z = memory.get('zscore')
         if z is not None:
-            out["Z"] = float(z)
+            out['Z'] = float(z)
         return out
 class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
-    def compute_orders(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
-        self.params["_cp_bias_handled_internally"] = True
+    def compute_orders(self, state, book, order_depth, position, memory):
+        self.params['_cp_bias_handled_internally'] = True
         cp_offset = 0
-        if bool(self.params.get("counterparty_bias_enabled", False)):
+        if bool(self.params.get('counterparty_bias_enabled', False)):
             cp_signal = self._counterparty_signal(state, memory)
-            cp_threshold = float(self.params.get("cp_signal_threshold", 5.0))
-            cp_max_offset = float(self.params.get("cp_max_anchor_offset", 3.0))
-            cp_scale = float(self.params.get("cp_anchor_scale_per_unit", 0.10))
+            cp_threshold = float(self.params.get('cp_signal_threshold', 5.0))
+            cp_max_offset = float(self.params.get('cp_max_anchor_offset', 3.0))
+            cp_scale = float(self.params.get('cp_anchor_scale_per_unit', 0.1))
             if abs(cp_signal) > cp_threshold:
                 cp_offset = int(round(max(-cp_max_offset, min(cp_max_offset, cp_signal * cp_scale))))
         orders, conv = self._compute_guarded(state, book, order_depth, position, memory)
@@ -1564,84 +1256,73 @@ class R3GuardedAnchorMMStrategy(MMFirstV4ComboStrategy):
             best_ask = book.best_ask
             for o in orders:
                 new_price = int(o.price) + cp_offset
-                if o.quantity > 0 and best_ask is not None and new_price >= best_ask:
+                if o.quantity > 0 and best_ask is not None and (new_price >= best_ask):
                     new_price = int(best_ask) - 1
-                elif o.quantity < 0 and best_bid is not None and new_price <= best_bid:
+                elif o.quantity < 0 and best_bid is not None and (new_price <= best_bid):
                     new_price = int(best_bid) + 1
                 shifted.append(Order(o.symbol, new_price, o.quantity))
-            return shifted, conv
-        return orders, conv
-    def _compute_guarded(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
-        mid    = book.mid_price
-        anchor = self.params.get("anchor_price")
+            return (shifted, conv)
+        return (orders, conv)
+    def _compute_guarded(self, state, book, order_depth, position, memory):
+        mid = book.mid_price
+        anchor = self.params.get('anchor_price')
         if mid is None or anchor is None:
             return super().compute_orders(state, book, order_depth, position, memory)
         use_anchor = self._use_anchor(float(mid), float(anchor), position, memory)
-        memory["_guard_use_anchor"] = int(use_anchor)
+        memory['_guard_use_anchor'] = int(use_anchor)
         if use_anchor:
             return super().compute_orders(state, book, order_depth, position, memory)
-        old_anchor   = self.params.get("anchor_price")
-        old_ar       = self.params.get("ar_gain")
-        old_take_lo  = self.params.get("take_edge_lo")
-        old_take_hi  = self.params.get("take_edge_hi")
+        old_anchor = self.params.get('anchor_price')
+        old_ar = self.params.get('ar_gain')
+        old_take_lo = self.params.get('take_edge_lo')
+        old_take_hi = self.params.get('take_edge_hi')
         try:
-            self.params["anchor_price"] = None
-            self.params["ar_gain"]      = 0.0
-            self.params["take_edge_lo"] = 1_000_000.0
-            self.params["take_edge_hi"] = 1_000_000.0
+            self.params['anchor_price'] = None
+            self.params['ar_gain'] = 0.0
+            self.params['take_edge_lo'] = 1000000.0
+            self.params['take_edge_hi'] = 1000000.0
             return super().compute_orders(state, book, order_depth, position, memory)
         finally:
-            self.params["anchor_price"] = old_anchor
-            self.params["ar_gain"]      = old_ar
-            self.params["take_edge_lo"] = old_take_lo
-            self.params["take_edge_hi"] = old_take_hi
-    def _use_anchor(
-        self,
-        mid: float,
-        anchor: float,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> bool:
-        prev_mid = memory.get("_guard_prev_mid")
-        memory["_guard_prev_mid"] = mid
+            self.params['anchor_price'] = old_anchor
+            self.params['ar_gain'] = old_ar
+            self.params['take_edge_lo'] = old_take_lo
+            self.params['take_edge_hi'] = old_take_hi
+    def _use_anchor(self, mid, anchor, position, memory):
+        prev_mid = memory.get('_guard_prev_mid')
+        memory['_guard_prev_mid'] = mid
         raw_trend = 0.0 if prev_mid is None else mid - float(prev_mid)
-        alpha = float(self.params.get("guard_trend_alpha", 0.3))
-        trend = float(memory.get("_guard_trend_ema", raw_trend))
+        alpha = float(self.params.get('guard_trend_alpha', 0.3))
+        trend = float(memory.get('_guard_trend_ema', raw_trend))
         trend = alpha * raw_trend + (1.0 - alpha) * trend
-        memory["_guard_trend_ema"] = trend
+        memory['_guard_trend_ema'] = trend
         dist = mid - anchor
-        memory["_guard_dist"]  = dist
-        memory["_guard_trend"] = trend
-        near_band       = float(self.params.get("guard_near_band", 0.0))
-        min_dist        = float(self.params.get("guard_min_dist", 0.0))
-        max_dist        = float(self.params.get("guard_max_dist", 80.0))
-        threshold       = float(self.params.get("guard_reversion_threshold", 0.0))
-        inventory_dist  = float(self.params.get("guard_inventory_dist", 40.0))
+        memory['_guard_dist'] = dist
+        memory['_guard_trend'] = trend
+        near_band = float(self.params.get('guard_near_band', 0.0))
+        min_dist = float(self.params.get('guard_min_dist', 0.0))
+        max_dist = float(self.params.get('guard_max_dist', 80.0))
+        threshold = float(self.params.get('guard_reversion_threshold', 0.0))
+        inventory_dist = float(self.params.get('guard_inventory_dist', 40.0))
         near_anchor = abs(dist) <= near_band
-        reverting   = min_dist <= abs(dist) <= max_dist and (dist * trend) <= -threshold
-        wrong_way   = (position > 0 and dist < -inventory_dist) or (
-                       position < 0 and dist > inventory_dist)
-        return (near_anchor or reverting) and not wrong_way
-    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        reverting = min_dist <= abs(dist) <= max_dist and dist * trend <= -threshold
+        wrong_way = position > 0 and dist < -inventory_dist or (position < 0 and dist > inventory_dist)
+        return (near_anchor or reverting) and (not wrong_way)
+    def feature_prices(self, memory):
         out = super().feature_prices(memory)
-        if (d := memory.get("_guard_dist"))       is not None: out["GuardDist"]  = float(d)
-        if (t := memory.get("_guard_trend"))      is not None: out["GuardTrend"] = float(t)
-        if (u := memory.get("_guard_use_anchor")) is not None: out["GuardOn"]    = float(u)
+        if (d := memory.get('_guard_dist')) is not None:
+            out['GuardDist'] = float(d)
+        if (t := memory.get('_guard_trend')) is not None:
+            out['GuardTrend'] = float(t)
+        if (u := memory.get('_guard_use_anchor')) is not None:
+            out['GuardOn'] = float(u)
         return out
 class VEVOptionMMV3Strategy(BaseStrategy):
-    def _compute_zscore(self, state: TradingState, memory: Dict[str, Any]) -> Optional[float]:
+    def _compute_zscore(self, state, memory):
         S = self._get_spot(state)
         if S is None:
             return None
-        window = int(self.params.get("zscore_window", 500))
-        buf: List[float] = memory.setdefault("_velvet_buf", [])
+        window = int(self.params.get('zscore_window', 500))
+        buf: List[float] = memory.setdefault('_velvet_buf', [])
         buf.append(S)
         if len(buf) > window:
             buf[:] = buf[-window:]
@@ -1649,53 +1330,49 @@ class VEVOptionMMV3Strategy(BaseStrategy):
             return None
         n = len(buf)
         mean = sum(buf) / n
-        var = sum((x - mean) ** 2 for x in buf) / max(n - 1, 1)
+        var = sum(((x - mean) ** 2 for x in buf)) / max(n - 1, 1)
         std = var ** 0.5
-        if std < 1e-9:
+        if std < 1e-09:
             return None
         return (S - mean) / std
-    def _signal_state(self, z: Optional[float]) -> str:
+    def _signal_state(self, z):
         if z is None:
-            return "neutral"
-        threshold = float(self.params.get("zscore_threshold", 1.0))
+            return 'neutral'
+        threshold = float(self.params.get('zscore_threshold', 1.0))
         if z < -threshold:
-            return "cheap"
+            return 'cheap'
         if z > threshold:
-            return "expensive"
-        return "neutral"
-    def _quote_bid(self, book: BookSnapshot, signal: str, mode: str) -> Optional[int]:
+            return 'expensive'
+        return 'neutral'
+    def _quote_bid(self, book, signal, mode):
         if book.best_bid is None:
             return None
-        if mode in ("bid_only", "both"):
-            if signal == "cheap" and bool(self.params.get("allow_taker", True)):
+        if mode in ('bid_only', 'both'):
+            if signal == 'cheap' and bool(self.params.get('allow_taker', True)):
                 return book.best_ask if book.best_ask is not None else book.best_bid + 1
-            if signal == "expensive":
-                return None  # skip bid when expensive
+            if signal == 'expensive':
+                return None
         bid = book.best_bid + 1
-        if bool(self.params.get("prevent_crossing", False)):
+        if bool(self.params.get('prevent_crossing', False)):
             if book.best_ask is not None and bid >= book.best_ask:
                 bid = book.best_ask - 1
         return bid
-    def _quote_ask(self, book: BookSnapshot, signal: str, mode: str) -> Optional[int]:
+    def _quote_ask(self, book, signal, mode):
         if book.best_ask is None:
             return None
-        neutral_offset = int(self.params.get("ask_offset_neutral", 10))
-        if mode in ("ask_adapt", "both"):
-            if signal == "expensive":
+        neutral_offset = int(self.params.get('ask_offset_neutral', 10))
+        if mode in ('ask_adapt', 'both'):
+            if signal == 'expensive':
                 return book.best_ask - 1
-            if signal == "cheap":
+            if signal == 'cheap':
                 return book.best_ask + neutral_offset + 5
         return book.best_ask - 1 + neutral_offset
-    def _resolve_tte(self, state: TradingState) -> float:
-        tte0 = resolve_initial_tte_days(
-            state.traderData,
-            float(self.params.get("tte_days_initial", 5.0)),
-            self.params.get("historical_tte_by_day"),
-        )
+    def _resolve_tte(self, state):
+        tte0 = resolve_initial_tte_days(state.traderData, float(self.params.get('tte_days_initial', 5.0)), self.params.get('historical_tte_by_day'))
         ts_per_day = timestamp_units_per_day_from_params(self.params)
         return max(0.01, time_to_expiry_days(int(state.timestamp), tte0, timestamp_units_per_day=ts_per_day))
-    def _get_spot(self, state: TradingState) -> Optional[float]:
-        underlying = str(self.params.get("underlying_symbol", "VELVETFRUIT_EXTRACT"))
+    def _get_spot(self, state):
+        underlying = str(self.params.get('underlying_symbol', 'VELVETFRUIT_EXTRACT'))
         od = state.order_depths.get(underlying)
         if od is None:
             return None
@@ -1704,599 +1381,64 @@ class VEVOptionMMV3Strategy(BaseStrategy):
         if bb is not None and ba is not None:
             return (bb + ba) / 2.0
         return float(bb or ba or 0) or None
-    def _post_orders(
-        self,
-        bid_px: Optional[int],
-        ask_px: Optional[int],
-        buy_cap: int,
-        sell_cap: int,
-    ) -> List[Order]:
-        size_bid = int(self.params.get("maker_size_bid", 20))
-        size_ask = int(self.params.get("maker_size_ask", 5))
+    def _post_orders(self, bid_px, ask_px, buy_cap, sell_cap):
+        size_bid = int(self.params.get('maker_size_bid', 20))
+        size_ask = int(self.params.get('maker_size_ask', 5))
         orders: List[Order] = []
-        if bid_px is not None and bid_px > 0 and buy_cap > 0:
+        if bid_px is not None and bid_px > 0 and (buy_cap > 0):
             orders.append(Order(self.product, bid_px, min(size_bid, buy_cap)))
-        if ask_px is not None and ask_px > 0 and sell_cap > 0 and size_ask > 0:
+        if ask_px is not None and ask_px > 0 and (sell_cap > 0) and (size_ask > 0):
             orders.append(Order(self.product, ask_px, -min(size_ask, sell_cap)))
         return orders
-    def compute_orders(
-        self,
-        state: TradingState,
-        book: BookSnapshot,
-        order_depth: OrderDepth,
-        position: int,
-        memory: Dict[str, Any],
-    ) -> Tuple[List[Order], int]:
+    def compute_orders(self, state, book, order_depth, position, memory):
         if book.best_bid is None or book.best_ask is None:
-            return [], 0
+            return ([], 0)
         mid = 0.5 * (book.best_bid + book.best_ask)
-        if mid < float(self.params.get("min_quote_price", 2.0)):
-            return [], 0
+        if mid < float(self.params.get('min_quote_price', 2.0)):
+            return ([], 0)
         z = self._compute_zscore(state, memory)
-        memory["_zscore"] = z
-        mode = str(self.params.get("zscore_exec_mode", "none"))
+        memory['_zscore'] = z
+        mode = str(self.params.get('zscore_exec_mode', 'none'))
         signal = self._signal_state(z)
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
         bid_px = self._quote_bid(book, signal, mode)
         ask_px = self._quote_ask(book, signal, mode)
-        if bid_px is not None and ask_px is not None and ask_px <= bid_px:
+        if bid_px is not None and ask_px is not None and (ask_px <= bid_px):
             ask_px = bid_px + 1
         orders = self._post_orders(bid_px, ask_px, buy_cap, sell_cap)
-        return orders, 0
-    def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:
-        z = memory.get("_zscore")
-        return {"z_velvet": round(z, 3)} if z is not None else {}
-PRODUCTS = {'VELVETFRUIT_EXTRACT': {'anchor_alpha': 0.02,
-                         'anchor_drift_bound': 2.0,
-                         'anchor_price': 5250.0,
-                         'ar_gain': 0.3,
-                         'ar_shift_source': 'mid_smooth',
-                         'counterparty_bias_enabled': True,
-                         'cp_anchor_scale_per_unit': 0.15,
-                         'cp_conditional_baseline_weight': 0.0,
-                         'cp_conditional_min_samples': 50,
-                         'cp_conditional_stats_window_ts': 50000,
-                         'cp_conditional_traders': ['Mark 22'],
-                         'cp_conditional_zthresh': 1.5,
-                         'cp_max_anchor_offset': 2.0,
-                         'cp_signal_threshold': 1.0,
-                         'cp_trader_weights': {'Mark 01': -0.2,
-                                               'Mark 14': -0.5,
-                                               'Mark 22': -0.4,
-                                               'Mark 49': -0.8},
-                         'cp_window_ts': 10000,
-                         'full_capacity_on_empty': True,
-                         'guard_inventory_dist': 40.0,
-                         'guard_max_dist': 80.0,
-                         'guard_min_dist': 0.0,
-                         'guard_near_band': 0.0,
-                         'guard_reversion_threshold': 7.5,
-                         'guard_trend_alpha': 0.45,
-                         'inventory_aversion_gamma': 0.001,
-                         'last_ts_value': 999900,
-                         'log_flush_ts': 1000,
-                         'maker_size': 30,
-                         'maker_size_base_pct': 0.4,
-                         'obi_size_boost_factor': 1.5,
-                         'obi_size_enabled': True,
-                         'obi_size_levels': 3,
-                         'obi_size_reduce_factor': 0.7,
-                         'obi_size_threshold': 0.005,
-                         'passive_unwind_skew_ticks': 1,
-                         'passive_unwind_trigger': 0.38,
-                         'pct_kept_for_takers': 0.005,
-                         'position_limit': 200,
-                         'strategy': 'r3_guarded_anchor_mm',
-                         'take_edge_hi': 1.2,
-                         'take_edge_lo': 0.6,
-                         'tighten_ticks': 1,
-                         'toxic_size_frac': 0.68,
-                         'toxic_threshold': 0.6,
-                         'toxic_window': 8,
-                         'ts_increment': 100,
-                         'unwind_take_edge': 3.0},
- 'VEV_4000': {'boost_when_cheap': False,
-              'counterparty_bias_enabled': False,
-              'cp_anchor_scale_per_unit': 0.15,
-              'cp_conditional_baseline_weight': 0.0,
-              'cp_conditional_min_samples': 50,
-              'cp_conditional_stats_window_ts': 50000,
-              'cp_conditional_traders': ['Mark 22'],
-              'cp_conditional_zthresh': 1.5,
-              'cp_max_anchor_offset': 2.0,
-              'cp_signal_threshold': 1.0,
-              'cp_trader_weights': {'Mark 01': -0.2,
-                                    'Mark 14': -0.5,
-                                    'Mark 22': -0.4,
-                                    'Mark 49': -0.8},
-              'cp_window_ts': 10000,
-              'edge_ticks': 0.0,
-              'enable_takers': False,
-              'entry_size': 30,
-              'entry_size_boost': 1.5,
-              'implied_vol_prior': 0.0125,
-              'inv_bias_per_unit': 0.02,
-              'inv_unwind_enabled': True,
-              'inv_unwind_max_per_tick': 10,
-              'inv_unwind_mode': 'passive',
-              'inv_unwind_passive_offset': -1,
-              'inv_unwind_passive_size': 30,
-              'inv_unwind_target_pct': 0.5,
-              'inv_unwind_threshold_pct': 0.7,
-              'iv_ewma_alpha': 0.3,
-              'last_ts_value': 999900,
-              'log_flush_ts': 1000,
-              'maker_edge': 2,
-              'maker_size': 20,
-              'min_quote_price': 2.0,
-              'obi_size_boost_factor': 1.5,
-              'obi_size_enabled': False,
-              'obi_size_levels': 3,
-              'obi_size_reduce_factor': 0.7,
-              'obi_size_threshold': 0.005,
-              'passive_bid_size': 24,
-              'penny_improve_around_mkt': True,
-              'position_limit': 300,
-              'prior_vol': 0.0125,
-              'sigma_cap': 0.1,
-              'sigma_floor': 0.005,
-              'skip_when_expensive': True,
-              'strategy': 'gamma_scalp_zgated',
-              'strike': 4000,
-              'take_edge': 3.0,
-              'take_size': 40,
-              'target_qty': 300,
-              'timestamp_units_per_day': 1000000,
-              'ts_increment': 100,
-              'tte_days_initial': 4.0,
-              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
-              'unwind_tte_threshold': 1.5,
-              'use_smile': True,
-              'vol_size_cut_enabled': True,
-              'vol_size_cut_factor': 0.5,
-              'vol_size_cut_threshold': 0.008,
-              'vol_size_cut_window': 50,
-              'zscore_boost_threshold': 1.0,
-              'zscore_skip_threshold': 0.5,
-              'zscore_window': 500},
- 'VEV_4500': {'boost_when_cheap': False,
-              'counterparty_bias_enabled': False,
-              'cp_anchor_scale_per_unit': 0.15,
-              'cp_conditional_baseline_weight': 0.0,
-              'cp_conditional_min_samples': 50,
-              'cp_conditional_stats_window_ts': 50000,
-              'cp_conditional_traders': ['Mark 22'],
-              'cp_conditional_zthresh': 1.5,
-              'cp_max_anchor_offset': 2.0,
-              'cp_signal_threshold': 1.0,
-              'cp_trader_weights': {'Mark 01': -0.2,
-                                    'Mark 14': -0.5,
-                                    'Mark 22': -0.4,
-                                    'Mark 49': -0.8},
-              'cp_window_ts': 10000,
-              'edge_ticks': 0.0,
-              'enable_takers': False,
-              'entry_size': 30,
-              'implied_vol_prior': 0.0125,
-              'inv_bias_per_unit': 0.02,
-              'inv_unwind_enabled': True,
-              'inv_unwind_max_per_tick': 10,
-              'inv_unwind_mode': 'passive',
-              'inv_unwind_passive_offset': -1,
-              'inv_unwind_passive_size': 30,
-              'inv_unwind_target_pct': 0.5,
-              'inv_unwind_threshold_pct': 0.7,
-              'iv_boost_threshold': 0.001,
-              'iv_delta_threshold': 0.0003,
-              'iv_ewma_alpha': 0.3,
-              'iv_ewma_fast_alpha': 0.1,
-              'iv_ewma_slow_alpha': 0.02,
-              'iv_passive_boost': 1.5,
-              'iv_residual_gate': True,
-              'iv_skip_threshold': 0.001,
-              'last_ts_value': 999900,
-              'log_flush_ts': 1000,
-              'maker_edge': 2,
-              'maker_size': 20,
-              'min_quote_price': 2.0,
-              'obi_size_boost_factor': 1.5,
-              'obi_size_enabled': False,
-              'obi_size_levels': 3,
-              'obi_size_reduce_factor': 0.7,
-              'obi_size_threshold': 0.005,
-              'passive_bid_size': 24,
-              'penny_improve_around_mkt': True,
-              'position_limit': 300,
-              'prior_vol': 0.0125,
-              'sigma_cap': 0.1,
-              'sigma_floor': 0.005,
-              'skip_when_expensive': True,
-              'strategy': 'gamma_scalp_zgated',
-              'strike': 4500,
-              'take_edge': 3.0,
-              'take_size': 40,
-              'target_qty': 300,
-              'timestamp_units_per_day': 1000000,
-              'ts_increment': 100,
-              'tte_days_initial': 4.0,
-              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
-              'unwind_tte_threshold': 1.5,
-              'use_smile': True,
-              'vol_size_cut_enabled': True,
-              'vol_size_cut_factor': 0.5,
-              'vol_size_cut_threshold': 0.008,
-              'vol_size_cut_window': 50,
-              'zscore_skip_threshold': 0.5,
-              'zscore_window': 500},
- 'VEV_5000': {'boost_when_cheap': False,
-              'counterparty_bias_enabled': False,
-              'cp_anchor_scale_per_unit': 0.15,
-              'cp_conditional_baseline_weight': 0.0,
-              'cp_conditional_min_samples': 50,
-              'cp_conditional_stats_window_ts': 50000,
-              'cp_conditional_traders': ['Mark 22'],
-              'cp_conditional_zthresh': 1.5,
-              'cp_max_anchor_offset': 2.0,
-              'cp_signal_threshold': 1.0,
-              'cp_trader_weights': {'Mark 01': -0.2,
-                                    'Mark 14': -0.5,
-                                    'Mark 22': -0.4,
-                                    'Mark 49': -0.8},
-              'cp_window_ts': 10000,
-              'edge_ticks': 0.0,
-              'enable_takers': False,
-              'entry_size': 30,
-              'implied_vol_prior': 0.0125,
-              'inv_bias_per_unit': 0.02,
-              'inv_unwind_enabled': True,
-              'inv_unwind_max_per_tick': 10,
-              'inv_unwind_mode': 'passive',
-              'inv_unwind_passive_offset': -1,
-              'inv_unwind_passive_size': 30,
-              'inv_unwind_target_pct': 0.5,
-              'inv_unwind_threshold_pct': 0.7,
-              'iv_boost_threshold': 0.001,
-              'iv_delta_threshold': 0.0003,
-              'iv_ewma_alpha': 0.3,
-              'iv_ewma_fast_alpha': 0.1,
-              'iv_ewma_slow_alpha': 0.02,
-              'iv_passive_boost': 1.5,
-              'iv_residual_gate': True,
-              'iv_skip_threshold': 0.001,
-              'last_ts_value': 999900,
-              'log_flush_ts': 1000,
-              'maker_edge': 2,
-              'maker_size': 20,
-              'min_quote_price': 2.0,
-              'obi_size_boost_factor': 1.5,
-              'obi_size_enabled': False,
-              'obi_size_levels': 3,
-              'obi_size_reduce_factor': 0.7,
-              'obi_size_threshold': 0.005,
-              'passive_bid_size': 24,
-              'penny_improve_around_mkt': True,
-              'position_limit': 300,
-              'prior_vol': 0.0125,
-              'sigma_cap': 0.1,
-              'sigma_floor': 0.005,
-              'skip_when_expensive': True,
-              'strategy': 'gamma_scalp_zgated',
-              'strike': 5000,
-              'take_edge': 3.0,
-              'take_size': 40,
-              'target_qty': 300,
-              'timestamp_units_per_day': 1000000,
-              'ts_increment': 100,
-              'tte_days_initial': 4.0,
-              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
-              'unwind_tte_threshold': 1.5,
-              'use_smile': True,
-              'vol_size_cut_enabled': True,
-              'vol_size_cut_factor': 0.5,
-              'vol_size_cut_threshold': 0.008,
-              'vol_size_cut_window': 50,
-              'zscore_skip_threshold': 0.5,
-              'zscore_window': 500},
- 'VEV_5100': {'boost_when_cheap': False,
-              'counterparty_bias_enabled': False,
-              'cp_anchor_scale_per_unit': 0.15,
-              'cp_conditional_baseline_weight': 0.0,
-              'cp_conditional_min_samples': 50,
-              'cp_conditional_stats_window_ts': 50000,
-              'cp_conditional_traders': ['Mark 22'],
-              'cp_conditional_zthresh': 1.5,
-              'cp_max_anchor_offset': 2.0,
-              'cp_signal_threshold': 1.0,
-              'cp_trader_weights': {'Mark 01': -0.2,
-                                    'Mark 14': -0.5,
-                                    'Mark 22': -0.4,
-                                    'Mark 49': -0.8},
-              'cp_window_ts': 10000,
-              'edge_ticks': 0.0,
-              'enable_takers': False,
-              'entry_size': 30,
-              'implied_vol_prior': 0.0125,
-              'inv_bias_per_unit': 0.02,
-              'inv_unwind_enabled': True,
-              'inv_unwind_max_per_tick': 10,
-              'inv_unwind_mode': 'passive',
-              'inv_unwind_passive_offset': -1,
-              'inv_unwind_passive_size': 30,
-              'inv_unwind_target_pct': 0.5,
-              'inv_unwind_threshold_pct': 0.7,
-              'iv_boost_threshold': 0.001,
-              'iv_delta_threshold': 0.0003,
-              'iv_ewma_alpha': 0.3,
-              'iv_ewma_fast_alpha': 0.1,
-              'iv_ewma_slow_alpha': 0.02,
-              'iv_passive_boost': 1.5,
-              'iv_residual_gate': True,
-              'iv_skip_threshold': 0.001,
-              'last_ts_value': 999900,
-              'log_flush_ts': 1000,
-              'maker_edge': 2,
-              'maker_size': 20,
-              'min_quote_price': 2.0,
-              'obi_size_boost_factor': 1.5,
-              'obi_size_enabled': False,
-              'obi_size_levels': 3,
-              'obi_size_reduce_factor': 0.7,
-              'obi_size_threshold': 0.005,
-              'passive_bid_size': 24,
-              'penny_improve_around_mkt': True,
-              'position_limit': 300,
-              'prior_vol': 0.0125,
-              'sigma_cap': 0.1,
-              'sigma_floor': 0.005,
-              'skip_when_expensive': True,
-              'strategy': 'gamma_scalp_zgated',
-              'strike': 5100,
-              'take_edge': 3.0,
-              'take_size': 40,
-              'target_qty': 300,
-              'timestamp_units_per_day': 1000000,
-              'ts_increment': 100,
-              'tte_days_initial': 4.0,
-              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
-              'unwind_tte_threshold': 1.5,
-              'use_smile': True,
-              'vol_size_cut_enabled': True,
-              'vol_size_cut_factor': 0.5,
-              'vol_size_cut_threshold': 0.008,
-              'vol_size_cut_window': 50,
-              'zscore_skip_threshold': 0.5,
-              'zscore_window': 500},
- 'VEV_5200': {'ask_offset_neutral': 10,
-              'ask_offset_sell': 1,
-              'counterparty_bias_enabled': False,
-              'cp_anchor_scale_per_unit': 0.15,
-              'cp_conditional_baseline_weight': 0.0,
-              'cp_conditional_min_samples': 50,
-              'cp_conditional_stats_window_ts': 50000,
-              'cp_conditional_traders': ['Mark 22'],
-              'cp_conditional_zthresh': 1.5,
-              'cp_max_anchor_offset': 2.0,
-              'cp_signal_threshold': 1.0,
-              'cp_trader_weights': {'Mark 01': -0.2,
-                                    'Mark 14': -0.5,
-                                    'Mark 22': -0.4,
-                                    'Mark 49': -0.8},
-              'cp_window_ts': 10000,
-              'cross_asset_enabled': True,
-              'cross_asset_max_offset': 2.0,
-              'cross_asset_scale': 0.1,
-              'cross_asset_source_symbol': 'VELVETFRUIT_EXTRACT',
-              'cross_asset_source_trader': 'Mark 14',
-              'cross_asset_threshold': 5.0,
-              'cross_asset_weight': -0.5,
-              'cross_asset_window_ts': 10000,
-              'delta_sigma': 0.022,
-              'enable_takers': False,
-              'inv_bias_per_unit': 0.02,
-              'inv_unwind_enabled': True,
-              'inv_unwind_max_per_tick': 10,
-              'inv_unwind_mode': 'passive',
-              'inv_unwind_passive_offset': -1,
-              'inv_unwind_passive_size': 30,
-              'inv_unwind_target_pct': 0.5,
-              'inv_unwind_threshold_pct': 0.7,
-              'iv_ewma_alpha': 0.3,
-              'last_ts_value': 999900,
-              'log_flush_ts': 1000,
-              'maker_edge': 2,
-              'maker_size': 20,
-              'maker_size_ask': 5,
-              'maker_size_bid': 20,
-              'min_quote_price': 2.0,
-              'obi_size_boost_factor': 1.5,
-              'obi_size_enabled': False,
-              'obi_size_levels': 3,
-              'obi_size_reduce_factor': 0.7,
-              'obi_size_threshold': 0.005,
-              'penny_improve_around_mkt': True,
-              'position_limit': 300,
-              'prevent_crossing': False,
-              'prior_vol': 0.0125,
-              'sigma_cap': 0.1,
-              'sigma_floor': 0.005,
-              'strategy': 'vev_option_mm_v3',
-              'strike': 5200.0,
-              'take_edge': 3.0,
-              'take_size': 40,
-              'timestamp_units_per_day': 1000000,
-              'ts_increment': 100,
-              'tte_days_initial': 4.0,
-              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
-              'use_smile': True,
-              'vol_size_cut_enabled': True,
-              'vol_size_cut_factor': 0.5,
-              'vol_size_cut_threshold': 0.008,
-              'vol_size_cut_window': 50,
-              'zscore_bid_max': 4.0,
-              'zscore_bid_scale': 2.0,
-              'zscore_exec_mode': 'none',
-              'zscore_threshold': 1.0,
-              'zscore_window': 500},
- 'VEV_5300': {'boost_when_cheap': False,
-              'counterparty_bias_enabled': False,
-              'cp_anchor_scale_per_unit': 0.15,
-              'cp_conditional_baseline_weight': 0.0,
-              'cp_conditional_min_samples': 50,
-              'cp_conditional_stats_window_ts': 50000,
-              'cp_conditional_traders': ['Mark 22'],
-              'cp_conditional_zthresh': 1.5,
-              'cp_max_anchor_offset': 2.0,
-              'cp_signal_threshold': 1.0,
-              'cp_trader_weights': {'Mark 01': -0.2,
-                                    'Mark 14': -0.5,
-                                    'Mark 22': -0.4,
-                                    'Mark 49': -0.8},
-              'cp_window_ts': 10000,
-              'edge_ticks': 0.0,
-              'enable_takers': False,
-              'entry_size': 30,
-              'implied_vol_prior': 0.0125,
-              'inv_bias_per_unit': 0.02,
-              'inv_unwind_enabled': True,
-              'inv_unwind_max_per_tick': 10,
-              'inv_unwind_mode': 'passive',
-              'inv_unwind_passive_offset': -1,
-              'inv_unwind_passive_size': 30,
-              'inv_unwind_target_pct': 0.5,
-              'inv_unwind_threshold_pct': 0.7,
-              'iv_boost_threshold': 0.001,
-              'iv_delta_threshold': 0.0003,
-              'iv_ewma_alpha': 0.3,
-              'iv_ewma_fast_alpha': 0.1,
-              'iv_ewma_slow_alpha': 0.02,
-              'iv_passive_boost': 1.5,
-              'iv_residual_gate': True,
-              'iv_skip_threshold': 0.001,
-              'last_ts_value': 999900,
-              'log_flush_ts': 1000,
-              'maker_edge': 2,
-              'maker_size': 20,
-              'min_quote_price': 2.0,
-              'obi_size_boost_factor': 1.5,
-              'obi_size_enabled': False,
-              'obi_size_levels': 3,
-              'obi_size_reduce_factor': 0.7,
-              'obi_size_threshold': 0.005,
-              'passive_bid_size': 24,
-              'penny_improve_around_mkt': True,
-              'position_limit': 300,
-              'prior_vol': 0.0125,
-              'sigma_cap': 0.1,
-              'sigma_floor': 0.005,
-              'skip_when_expensive': True,
-              'strategy': 'gamma_scalp_zgated',
-              'strike': 5300,
-              'take_edge': 3.0,
-              'take_size': 40,
-              'target_qty': 300,
-              'timestamp_units_per_day': 1000000,
-              'ts_increment': 100,
-              'tte_days_initial': 4.0,
-              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
-              'unwind_tte_threshold': 1.5,
-              'use_smile': True,
-              'vol_size_cut_enabled': True,
-              'vol_size_cut_factor': 0.5,
-              'vol_size_cut_threshold': 0.008,
-              'vol_size_cut_window': 50,
-              'zscore_skip_threshold': 0.8,
-              'zscore_window': 500},
- 'VEV_5400': {'ask_offset_neutral': 10,
-              'ask_offset_sell': 1,
-              'counterparty_bias_enabled': False,
-              'cp_anchor_scale_per_unit': 0.15,
-              'cp_conditional_baseline_weight': 0.0,
-              'cp_conditional_min_samples': 50,
-              'cp_conditional_stats_window_ts': 50000,
-              'cp_conditional_traders': ['Mark 22'],
-              'cp_conditional_zthresh': 1.5,
-              'cp_max_anchor_offset': 2.0,
-              'cp_signal_threshold': 1.0,
-              'cp_trader_weights': {'Mark 01': -0.2,
-                                    'Mark 14': -0.5,
-                                    'Mark 22': -0.4,
-                                    'Mark 49': -0.8},
-              'cp_window_ts': 10000,
-              'delta_sigma': 0.022,
-              'enable_takers': False,
-              'inv_bias_per_unit': 0.02,
-              'inv_unwind_enabled': True,
-              'inv_unwind_max_per_tick': 10,
-              'inv_unwind_mode': 'passive',
-              'inv_unwind_passive_offset': -1,
-              'inv_unwind_passive_size': 30,
-              'inv_unwind_target_pct': 0.5,
-              'inv_unwind_threshold_pct': 0.7,
-              'iv_ewma_alpha': 0.3,
-              'last_ts_value': 999900,
-              'log_flush_ts': 1000,
-              'maker_edge': 2,
-              'maker_size': 20,
-              'maker_size_ask': 5,
-              'maker_size_bid': 20,
-              'min_quote_price': 2.0,
-              'obi_size_boost_factor': 1.5,
-              'obi_size_enabled': False,
-              'obi_size_levels': 3,
-              'obi_size_reduce_factor': 0.7,
-              'obi_size_threshold': 0.005,
-              'penny_improve_around_mkt': True,
-              'position_limit': 300,
-              'prevent_crossing': True,
-              'prior_vol': 0.0125,
-              'sigma_cap': 0.1,
-              'sigma_floor': 0.005,
-              'strategy': 'vev_option_mm_v3',
-              'strike': 5400.0,
-              'take_edge': 3.0,
-              'take_size': 40,
-              'timestamp_units_per_day': 1000000,
-              'ts_increment': 100,
-              'tte_days_initial': 4.0,
-              'underlying_symbol': 'VELVETFRUIT_EXTRACT',
-              'use_smile': True,
-              'vol_size_cut_enabled': True,
-              'vol_size_cut_factor': 0.5,
-              'vol_size_cut_threshold': 0.008,
-              'vol_size_cut_window': 50,
-              'zscore_bid_max': 4.0,
-              'zscore_bid_scale': 2.0,
-              'zscore_exec_mode': 'none',
-              'zscore_threshold': 1.0,
-              'zscore_window': 500}}
-STRATEGY_CLASSES = {"gamma_scalp_zgated": GammaScalpZGatedStrategy, "r3_guarded_anchor_mm": R3GuardedAnchorMMStrategy, "vev_option_mm_v3": VEVOptionMMV3Strategy}
+        return (orders, 0)
+    def feature_prices(self, memory):
+        z = memory.get('_zscore')
+        return {'z_velvet': round(z, 3)} if z is not None else {}
+PRODUCTS = {'VELVETFRUIT_EXTRACT': {'anchor_alpha': 0.02, 'anchor_drift_bound': 2.0, 'anchor_price': 5250.0, 'ar_gain': 0.3, 'ar_shift_source': 'mid_smooth', 'counterparty_bias_enabled': True, 'cp_anchor_scale_per_unit': 0.15, 'cp_conditional_baseline_weight': 0.0, 'cp_conditional_min_samples': 50, 'cp_conditional_stats_window_ts': 50000, 'cp_conditional_traders': ['Mark 22'], 'cp_conditional_zthresh': 1.5, 'cp_max_anchor_offset': 2.0, 'cp_signal_threshold': 1.0, 'cp_trader_weights': {'Mark 01': -0.2, 'Mark 14': -0.5, 'Mark 22': -0.4, 'Mark 49': -0.8}, 'cp_window_ts': 10000, 'full_capacity_on_empty': True, 'guard_inventory_dist': 40.0, 'guard_max_dist': 80.0, 'guard_min_dist': 0.0, 'guard_near_band': 0.0, 'guard_reversion_threshold': 7.5, 'guard_trend_alpha': 0.45, 'inventory_aversion_gamma': 0.001, 'last_ts_value': 999900, 'log_flush_ts': 1000, 'maker_size': 30, 'maker_size_base_pct': 0.4, 'obi_size_boost_factor': 1.5, 'obi_size_enabled': True, 'obi_size_levels': 3, 'obi_size_reduce_factor': 0.7, 'obi_size_threshold': 0.005, 'passive_unwind_skew_ticks': 1, 'passive_unwind_trigger': 0.38, 'pct_kept_for_takers': 0.005, 'position_limit': 200, 'strategy': 'r3_guarded_anchor_mm', 'take_edge_hi': 1.2, 'take_edge_lo': 0.6, 'tighten_ticks': 1, 'toxic_size_frac': 0.68, 'toxic_threshold': 0.6, 'toxic_window': 8, 'ts_increment': 100, 'unwind_take_edge': 3.0}, 'VEV_4000': {'boost_when_cheap': False, 'counterparty_bias_enabled': False, 'cp_anchor_scale_per_unit': 0.15, 'cp_conditional_baseline_weight': 0.0, 'cp_conditional_min_samples': 50, 'cp_conditional_stats_window_ts': 50000, 'cp_conditional_traders': ['Mark 22'], 'cp_conditional_zthresh': 1.5, 'cp_max_anchor_offset': 2.0, 'cp_signal_threshold': 1.0, 'cp_trader_weights': {'Mark 01': -0.2, 'Mark 14': -0.5, 'Mark 22': -0.4, 'Mark 49': -0.8}, 'cp_window_ts': 10000, 'edge_ticks': 0.0, 'enable_takers': False, 'entry_size': 30, 'entry_size_boost': 1.5, 'implied_vol_prior': 0.0125, 'inv_bias_per_unit': 0.02, 'inv_unwind_enabled': True, 'inv_unwind_max_per_tick': 10, 'inv_unwind_mode': 'passive', 'inv_unwind_passive_offset': -1, 'inv_unwind_passive_size': 30, 'inv_unwind_target_pct': 0.5, 'inv_unwind_threshold_pct': 0.7, 'iv_ewma_alpha': 0.3, 'last_ts_value': 999900, 'log_flush_ts': 1000, 'maker_edge': 2, 'maker_size': 20, 'min_quote_price': 2.0, 'obi_size_boost_factor': 1.5, 'obi_size_enabled': False, 'obi_size_levels': 3, 'obi_size_reduce_factor': 0.7, 'obi_size_threshold': 0.005, 'passive_bid_size': 24, 'penny_improve_around_mkt': True, 'position_limit': 300, 'prior_vol': 0.0125, 'sigma_cap': 0.1, 'sigma_floor': 0.005, 'skip_when_expensive': True, 'strategy': 'gamma_scalp_zgated', 'strike': 4000, 'take_edge': 3.0, 'take_size': 40, 'target_qty': 300, 'timestamp_units_per_day': 1000000, 'ts_increment': 100, 'tte_days_initial': 4.0, 'underlying_symbol': 'VELVETFRUIT_EXTRACT', 'unwind_tte_threshold': 1.5, 'use_smile': True, 'vol_size_cut_enabled': True, 'vol_size_cut_factor': 0.5, 'vol_size_cut_threshold': 0.008, 'vol_size_cut_window': 50, 'zscore_boost_threshold': 1.0, 'zscore_skip_threshold': 0.5, 'zscore_window': 500}, 'VEV_4500': {'boost_when_cheap': False, 'counterparty_bias_enabled': False, 'cp_anchor_scale_per_unit': 0.15, 'cp_conditional_baseline_weight': 0.0, 'cp_conditional_min_samples': 50, 'cp_conditional_stats_window_ts': 50000, 'cp_conditional_traders': ['Mark 22'], 'cp_conditional_zthresh': 1.5, 'cp_max_anchor_offset': 2.0, 'cp_signal_threshold': 1.0, 'cp_trader_weights': {'Mark 01': -0.2, 'Mark 14': -0.5, 'Mark 22': -0.4, 'Mark 49': -0.8}, 'cp_window_ts': 10000, 'edge_ticks': 0.0, 'enable_takers': False, 'entry_size': 30, 'implied_vol_prior': 0.0125, 'inv_bias_per_unit': 0.02, 'inv_unwind_enabled': True, 'inv_unwind_max_per_tick': 10, 'inv_unwind_mode': 'passive', 'inv_unwind_passive_offset': -1, 'inv_unwind_passive_size': 30, 'inv_unwind_target_pct': 0.5, 'inv_unwind_threshold_pct': 0.7, 'iv_boost_threshold': 0.001, 'iv_delta_threshold': 0.0003, 'iv_ewma_alpha': 0.3, 'iv_ewma_fast_alpha': 0.1, 'iv_ewma_slow_alpha': 0.02, 'iv_passive_boost': 1.5, 'iv_residual_gate': True, 'iv_skip_threshold': 0.001, 'last_ts_value': 999900, 'log_flush_ts': 1000, 'maker_edge': 2, 'maker_size': 20, 'min_quote_price': 2.0, 'obi_size_boost_factor': 1.5, 'obi_size_enabled': False, 'obi_size_levels': 3, 'obi_size_reduce_factor': 0.7, 'obi_size_threshold': 0.005, 'passive_bid_size': 24, 'penny_improve_around_mkt': True, 'position_limit': 300, 'prior_vol': 0.0125, 'sigma_cap': 0.1, 'sigma_floor': 0.005, 'skip_when_expensive': True, 'strategy': 'gamma_scalp_zgated', 'strike': 4500, 'take_edge': 3.0, 'take_size': 40, 'target_qty': 300, 'timestamp_units_per_day': 1000000, 'ts_increment': 100, 'tte_days_initial': 4.0, 'underlying_symbol': 'VELVETFRUIT_EXTRACT', 'unwind_tte_threshold': 1.5, 'use_smile': True, 'vol_size_cut_enabled': True, 'vol_size_cut_factor': 0.5, 'vol_size_cut_threshold': 0.008, 'vol_size_cut_window': 50, 'zscore_skip_threshold': 0.5, 'zscore_window': 500}, 'VEV_5000': {'boost_when_cheap': False, 'counterparty_bias_enabled': False, 'cp_anchor_scale_per_unit': 0.15, 'cp_conditional_baseline_weight': 0.0, 'cp_conditional_min_samples': 50, 'cp_conditional_stats_window_ts': 50000, 'cp_conditional_traders': ['Mark 22'], 'cp_conditional_zthresh': 1.5, 'cp_max_anchor_offset': 2.0, 'cp_signal_threshold': 1.0, 'cp_trader_weights': {'Mark 01': -0.2, 'Mark 14': -0.5, 'Mark 22': -0.4, 'Mark 49': -0.8}, 'cp_window_ts': 10000, 'edge_ticks': 0.0, 'enable_takers': False, 'entry_size': 30, 'implied_vol_prior': 0.0125, 'inv_bias_per_unit': 0.02, 'inv_unwind_enabled': True, 'inv_unwind_max_per_tick': 10, 'inv_unwind_mode': 'passive', 'inv_unwind_passive_offset': -1, 'inv_unwind_passive_size': 30, 'inv_unwind_target_pct': 0.5, 'inv_unwind_threshold_pct': 0.7, 'iv_boost_threshold': 0.001, 'iv_delta_threshold': 0.0003, 'iv_ewma_alpha': 0.3, 'iv_ewma_fast_alpha': 0.1, 'iv_ewma_slow_alpha': 0.02, 'iv_passive_boost': 1.5, 'iv_residual_gate': True, 'iv_skip_threshold': 0.001, 'last_ts_value': 999900, 'log_flush_ts': 1000, 'maker_edge': 2, 'maker_size': 20, 'min_quote_price': 2.0, 'obi_size_boost_factor': 1.5, 'obi_size_enabled': False, 'obi_size_levels': 3, 'obi_size_reduce_factor': 0.7, 'obi_size_threshold': 0.005, 'passive_bid_size': 24, 'penny_improve_around_mkt': True, 'position_limit': 300, 'prior_vol': 0.0125, 'sigma_cap': 0.1, 'sigma_floor': 0.005, 'skip_when_expensive': True, 'strategy': 'gamma_scalp_zgated', 'strike': 5000, 'take_edge': 3.0, 'take_size': 40, 'target_qty': 300, 'timestamp_units_per_day': 1000000, 'ts_increment': 100, 'tte_days_initial': 4.0, 'underlying_symbol': 'VELVETFRUIT_EXTRACT', 'unwind_tte_threshold': 1.5, 'use_smile': True, 'vol_size_cut_enabled': True, 'vol_size_cut_factor': 0.5, 'vol_size_cut_threshold': 0.008, 'vol_size_cut_window': 50, 'zscore_skip_threshold': 0.5, 'zscore_window': 500}, 'VEV_5100': {'boost_when_cheap': False, 'counterparty_bias_enabled': False, 'cp_anchor_scale_per_unit': 0.15, 'cp_conditional_baseline_weight': 0.0, 'cp_conditional_min_samples': 50, 'cp_conditional_stats_window_ts': 50000, 'cp_conditional_traders': ['Mark 22'], 'cp_conditional_zthresh': 1.5, 'cp_max_anchor_offset': 2.0, 'cp_signal_threshold': 1.0, 'cp_trader_weights': {'Mark 01': -0.2, 'Mark 14': -0.5, 'Mark 22': -0.4, 'Mark 49': -0.8}, 'cp_window_ts': 10000, 'edge_ticks': 0.0, 'enable_takers': False, 'entry_size': 30, 'implied_vol_prior': 0.0125, 'inv_bias_per_unit': 0.02, 'inv_unwind_enabled': True, 'inv_unwind_max_per_tick': 10, 'inv_unwind_mode': 'passive', 'inv_unwind_passive_offset': -1, 'inv_unwind_passive_size': 30, 'inv_unwind_target_pct': 0.5, 'inv_unwind_threshold_pct': 0.7, 'iv_boost_threshold': 0.001, 'iv_delta_threshold': 0.0003, 'iv_ewma_alpha': 0.3, 'iv_ewma_fast_alpha': 0.1, 'iv_ewma_slow_alpha': 0.02, 'iv_passive_boost': 1.5, 'iv_residual_gate': True, 'iv_skip_threshold': 0.001, 'last_ts_value': 999900, 'log_flush_ts': 1000, 'maker_edge': 2, 'maker_size': 20, 'min_quote_price': 2.0, 'obi_size_boost_factor': 1.5, 'obi_size_enabled': False, 'obi_size_levels': 3, 'obi_size_reduce_factor': 0.7, 'obi_size_threshold': 0.005, 'passive_bid_size': 24, 'penny_improve_around_mkt': True, 'position_limit': 300, 'prior_vol': 0.0125, 'sigma_cap': 0.1, 'sigma_floor': 0.005, 'skip_when_expensive': True, 'strategy': 'gamma_scalp_zgated', 'strike': 5100, 'take_edge': 3.0, 'take_size': 40, 'target_qty': 300, 'timestamp_units_per_day': 1000000, 'ts_increment': 100, 'tte_days_initial': 4.0, 'underlying_symbol': 'VELVETFRUIT_EXTRACT', 'unwind_tte_threshold': 1.5, 'use_smile': True, 'vol_size_cut_enabled': True, 'vol_size_cut_factor': 0.5, 'vol_size_cut_threshold': 0.008, 'vol_size_cut_window': 50, 'zscore_skip_threshold': 0.5, 'zscore_window': 500}, 'VEV_5200': {'ask_offset_neutral': 10, 'ask_offset_sell': 1, 'counterparty_bias_enabled': False, 'cp_anchor_scale_per_unit': 0.15, 'cp_conditional_baseline_weight': 0.0, 'cp_conditional_min_samples': 50, 'cp_conditional_stats_window_ts': 50000, 'cp_conditional_traders': ['Mark 22'], 'cp_conditional_zthresh': 1.5, 'cp_max_anchor_offset': 2.0, 'cp_signal_threshold': 1.0, 'cp_trader_weights': {'Mark 01': -0.2, 'Mark 14': -0.5, 'Mark 22': -0.4, 'Mark 49': -0.8}, 'cp_window_ts': 10000, 'cross_asset_enabled': True, 'cross_asset_max_offset': 2.0, 'cross_asset_scale': 0.1, 'cross_asset_source_symbol': 'VELVETFRUIT_EXTRACT', 'cross_asset_source_trader': 'Mark 14', 'cross_asset_threshold': 5.0, 'cross_asset_weight': -0.5, 'cross_asset_window_ts': 10000, 'delta_sigma': 0.022, 'enable_takers': False, 'inv_bias_per_unit': 0.02, 'inv_unwind_enabled': True, 'inv_unwind_max_per_tick': 10, 'inv_unwind_mode': 'passive', 'inv_unwind_passive_offset': -1, 'inv_unwind_passive_size': 30, 'inv_unwind_target_pct': 0.5, 'inv_unwind_threshold_pct': 0.7, 'iv_ewma_alpha': 0.3, 'last_ts_value': 999900, 'log_flush_ts': 1000, 'maker_edge': 2, 'maker_size': 20, 'maker_size_ask': 5, 'maker_size_bid': 20, 'min_quote_price': 2.0, 'obi_size_boost_factor': 1.5, 'obi_size_enabled': False, 'obi_size_levels': 3, 'obi_size_reduce_factor': 0.7, 'obi_size_threshold': 0.005, 'penny_improve_around_mkt': True, 'position_limit': 300, 'prevent_crossing': False, 'prior_vol': 0.0125, 'sigma_cap': 0.1, 'sigma_floor': 0.005, 'strategy': 'vev_option_mm_v3', 'strike': 5200.0, 'take_edge': 3.0, 'take_size': 40, 'timestamp_units_per_day': 1000000, 'ts_increment': 100, 'tte_days_initial': 4.0, 'underlying_symbol': 'VELVETFRUIT_EXTRACT', 'use_smile': True, 'vol_size_cut_enabled': True, 'vol_size_cut_factor': 0.5, 'vol_size_cut_threshold': 0.008, 'vol_size_cut_window': 50, 'zscore_bid_max': 4.0, 'zscore_bid_scale': 2.0, 'zscore_exec_mode': 'none', 'zscore_threshold': 1.0, 'zscore_window': 500}, 'VEV_5300': {'boost_when_cheap': False, 'counterparty_bias_enabled': False, 'cp_anchor_scale_per_unit': 0.15, 'cp_conditional_baseline_weight': 0.0, 'cp_conditional_min_samples': 50, 'cp_conditional_stats_window_ts': 50000, 'cp_conditional_traders': ['Mark 22'], 'cp_conditional_zthresh': 1.5, 'cp_max_anchor_offset': 2.0, 'cp_signal_threshold': 1.0, 'cp_trader_weights': {'Mark 01': -0.2, 'Mark 14': -0.5, 'Mark 22': -0.4, 'Mark 49': -0.8}, 'cp_window_ts': 10000, 'edge_ticks': 0.0, 'enable_takers': False, 'entry_size': 30, 'implied_vol_prior': 0.0125, 'inv_bias_per_unit': 0.02, 'inv_unwind_enabled': True, 'inv_unwind_max_per_tick': 10, 'inv_unwind_mode': 'passive', 'inv_unwind_passive_offset': -1, 'inv_unwind_passive_size': 30, 'inv_unwind_target_pct': 0.5, 'inv_unwind_threshold_pct': 0.7, 'iv_boost_threshold': 0.001, 'iv_delta_threshold': 0.0003, 'iv_ewma_alpha': 0.3, 'iv_ewma_fast_alpha': 0.1, 'iv_ewma_slow_alpha': 0.02, 'iv_passive_boost': 1.5, 'iv_residual_gate': True, 'iv_skip_threshold': 0.001, 'last_ts_value': 999900, 'log_flush_ts': 1000, 'maker_edge': 2, 'maker_size': 20, 'min_quote_price': 2.0, 'obi_size_boost_factor': 1.5, 'obi_size_enabled': False, 'obi_size_levels': 3, 'obi_size_reduce_factor': 0.7, 'obi_size_threshold': 0.005, 'passive_bid_size': 24, 'penny_improve_around_mkt': True, 'position_limit': 300, 'prior_vol': 0.0125, 'sigma_cap': 0.1, 'sigma_floor': 0.005, 'skip_when_expensive': True, 'strategy': 'gamma_scalp_zgated', 'strike': 5300, 'take_edge': 3.0, 'take_size': 40, 'target_qty': 300, 'timestamp_units_per_day': 1000000, 'ts_increment': 100, 'tte_days_initial': 4.0, 'underlying_symbol': 'VELVETFRUIT_EXTRACT', 'unwind_tte_threshold': 1.5, 'use_smile': True, 'vol_size_cut_enabled': True, 'vol_size_cut_factor': 0.5, 'vol_size_cut_threshold': 0.008, 'vol_size_cut_window': 50, 'zscore_skip_threshold': 0.8, 'zscore_window': 500}, 'VEV_5400': {'ask_offset_neutral': 10, 'ask_offset_sell': 1, 'counterparty_bias_enabled': False, 'cp_anchor_scale_per_unit': 0.15, 'cp_conditional_baseline_weight': 0.0, 'cp_conditional_min_samples': 50, 'cp_conditional_stats_window_ts': 50000, 'cp_conditional_traders': ['Mark 22'], 'cp_conditional_zthresh': 1.5, 'cp_max_anchor_offset': 2.0, 'cp_signal_threshold': 1.0, 'cp_trader_weights': {'Mark 01': -0.2, 'Mark 14': -0.5, 'Mark 22': -0.4, 'Mark 49': -0.8}, 'cp_window_ts': 10000, 'delta_sigma': 0.022, 'enable_takers': False, 'inv_bias_per_unit': 0.02, 'inv_unwind_enabled': True, 'inv_unwind_max_per_tick': 10, 'inv_unwind_mode': 'passive', 'inv_unwind_passive_offset': -1, 'inv_unwind_passive_size': 30, 'inv_unwind_target_pct': 0.5, 'inv_unwind_threshold_pct': 0.7, 'iv_ewma_alpha': 0.3, 'last_ts_value': 999900, 'log_flush_ts': 1000, 'maker_edge': 2, 'maker_size': 20, 'maker_size_ask': 5, 'maker_size_bid': 20, 'min_quote_price': 2.0, 'obi_size_boost_factor': 1.5, 'obi_size_enabled': False, 'obi_size_levels': 3, 'obi_size_reduce_factor': 0.7, 'obi_size_threshold': 0.005, 'penny_improve_around_mkt': True, 'position_limit': 300, 'prevent_crossing': True, 'prior_vol': 0.0125, 'sigma_cap': 0.1, 'sigma_floor': 0.005, 'strategy': 'vev_option_mm_v3', 'strike': 5400.0, 'take_edge': 3.0, 'take_size': 40, 'timestamp_units_per_day': 1000000, 'ts_increment': 100, 'tte_days_initial': 4.0, 'underlying_symbol': 'VELVETFRUIT_EXTRACT', 'use_smile': True, 'vol_size_cut_enabled': True, 'vol_size_cut_factor': 0.5, 'vol_size_cut_threshold': 0.008, 'vol_size_cut_window': 50, 'zscore_bid_max': 4.0, 'zscore_bid_scale': 2.0, 'zscore_exec_mode': 'none', 'zscore_threshold': 1.0, 'zscore_window': 500}}
+STRATEGY_CLASSES = {'gamma_scalp_zgated': GammaScalpZGatedStrategy, 'r3_guarded_anchor_mm': R3GuardedAnchorMMStrategy, 'vev_option_mm_v3': VEVOptionMMV3Strategy}
 class Trader:
     def __init__(self):
         self.strategies = {}
         for symbol, cfg in PRODUCTS.items():
-            strat_name = cfg["strategy"]
-            params = {k: v for k, v in cfg.items() if k != "strategy"}
+            strat_name = cfg['strategy']
+            params = {k: v for k, v in cfg.items() if k != 'strategy'}
             cls = STRATEGY_CLASSES[strat_name]
             self.strategies[symbol] = cls(product=symbol, params=params)
-    def bid(self) -> int:
+    def bid(self):
         return 15
-    def run(self, state: TradingState):
+    def run(self, state):
         saved = load_state(state.traderData)
-        product_memories = saved.setdefault("products", {})
-        shared = {"timestamp": state.timestamp}
+        product_memories = saved.setdefault('products', {})
+        shared = {'timestamp': state.timestamp}
         result = {}
         total_conversions = 0
         for product, strategy in self.strategies.items():
             if product not in state.order_depths:
                 continue
             memory = product_memories.setdefault(product, {})
-            memory["_shared"] = shared
+            memory['_shared'] = shared
             orders, conversions = strategy.on_tick(state, memory)
             result[product] = orders
             total_conversions += conversions
         for memory in product_memories.values():
             if isinstance(memory, dict):
-                memory.pop("_shared", None)
-        saved["last_timestamp"] = state.timestamp
-        return result, total_conversions, dump_state(saved)
+                memory.pop('_shared', None)
+        saved['last_timestamp'] = state.timestamp
+        return (result, total_conversions, dump_state(saved))
