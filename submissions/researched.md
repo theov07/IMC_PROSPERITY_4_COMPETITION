@@ -1,4 +1,4 @@
-ITERATION 1:
+# ITERATION 1:
 
 Research from first analyst:
 
@@ -250,7 +250,7 @@ The ~25 remaining products (other Galaxy Sounds, other Oxygen Shakes, other Snac
 
 Research from 2nd analyst (continued from iteration 1):
 
-## Iteration 2 — v6: TrendFollowV2 where it beats v5 naive_mm
+# Iteration 2 — v6: TrendFollowV2 where it beats v5 naive_mm
 
 ### Context
 v5 (1st analyst) = **591,214 PnL** using naive_tight_mm for ~42 products, pebbles_arb_v1 for PEBBLES_XL/XS, ar1_mean_rev_v1 for ROBOT_DISHES, and None for SLEEP_POD_LAMB_WOOL.
@@ -346,4 +346,84 @@ Drawdown: 40,920 / 14.5% (significantly better than v5's 44,884 / 26.7%)
 - Config: `MEMBER_OVERRIDES["tibo_r5_v6"]` in `prosperity/config.py`
 - Backtest wrapper: `submissions/tibo_r5_v6.py`
 - IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v6_round5_submission.py`
+
+
+# Iteration 3 (v7):
+
+## Research from 1st analyst
+
+## Context
+Starting from tibo_r5_v6 (733,918 PnL). Three tasks: (A) tune naive_tight_mm maker_size per group, (B) test PEBBLES_L/M conservation taker-only, (C) cointegration analysis within groups.
+
+---
+
+## Task A — maker_size tuning
+
+**Method**: classified all naive_tight_mm products in v6 by 3-day PnL sign consistency.
+
+**All 3 days positive** (safe to increase — won't amplify losses):  
+PANEL_1X4, OXYGEN_SHAKE_CHOCOLATE, OXYGEN_SHAKE_EVENING_BREATH, TRANSLATOR_VOID_BLUE, PANEL_2X4, UV_VISOR_ORANGE, OXYGEN_SHAKE_MORNING_BREATH, MICROCHIP_OVAL, UV_VISOR_RED, GALAXY_SOUNDS_DARK_MATTER, PANEL_2X2  
+Plus SNACKPACK × 5 (all explicitly positive).
+
+**Key finding — saturation at maker_size=5**: the realistic backtest fill model limits fills to market trade sizes. Testing maker_size=3,5,7 showed that 5 and 7 give IDENTICAL results (market provides ≤5 units/tick at our price). Going from 3→5 captures more fills; going from 5→7 adds nothing.
+
+| Config | Total PnL | Delta vs v6 |
+|--------|-----------|-------------|
+| v6 baseline (size=3 all) | 733,918 | — |
+| SNACKPACK only → size=5 | 738,904 | +4,986 |
+| All 16 all-positive → size=5 | 741,720 | +7,802 |
+| size=7 (same 16 products) | 741,720 | identical to size=5 |
+
+**Verdict**: set maker_size=5 for all 16 consistently-positive products. Applied in best_v7.
+
+---
+
+## Task B — PEBBLES_L/M conservation taker-only
+
+**Hypothesis**: the pebbles_arb_v1 strategy fires 447 buy + 406 sell conservation takers per product. For downtrending L/M, removing the passive MM (passive_size=0) might isolate the genuine conservation edge without accumulating losing long positions.
+
+**Result** (pebbles_lm_taker_test config):
+- PEBBLES_L taker-only: **-23,862** vs naive_tight_mm **-11,500** → **WORSE by 12k**
+- PEBBLES_M taker-only: similar degradation
+- Total portfolio: 712,009 vs 733,918 → **-21,909 worse**
+
+**Why it failed**: the conservation taker fires BUY orders when a product temporarily underperforms others. For downtrending L/M, those "underperformance dips" are genuine trend accelerations — buying into them loses money because L/M continue falling. Without any passive component to offset, the taker-only strategy generates pure directional losses.
+
+**Verdict**: keep naive_tight_mm for PEBBLES_L/M. No improvement possible via conservation arb on the downtrending pebbles without a directional filter.
+
+---
+
+## Task C — Within-group cointegration analysis (report only, not implemented)
+
+Method: Engle-Granger cointegration test on all pairs within each group + each product vs group average, 3-day data.
+
+**SNACKPACK** — most cointegrated group, multiple significant pairs:
+- SNACKPACK_RASPBERRY ↔ SNACKPACK_VANILLA: **p=0.0068** (very strong)
+- SNACKPACK_RASPBERRY ↔ SNACKPACK_STRAWBERRY: p=0.0242
+- SNACKPACK_PISTACHIO ↔ SNACKPACK_STRAWBERRY: p=0.0313
+- SNACKPACK_CHOCOLATE ↔ SNACKPACK_STRAWBERRY: p=0.0356
+- SNACKPACK_CHOCOLATE ↔ SNACKPACK_PISTACHIO: p=0.0453
+- SNACKPACK_RASPBERRY vs GROUP_AVG: p=0.0251
+
+**MICROCHIP**: RECTANGLE ↔ SQUARE: p=0.0196 (significant pair)
+
+**Moderate (p<0.10)**: GALAXY_SOUNDS_SOLAR_FLAMES ↔ SOLAR_WINDS, MICROCHIP_OVAL ↔ TRIANGLE, UV_VISOR_AMBER ↔ MAGENTA, ROBOT_LAUNDRY ↔ VACUUMING, SLEEP_POD_LAMB_WOOL ↔ NYLON, OXYGEN_SHAKE_CHOCOLATE ↔ GARLIC
+
+**No cointegration**: PEBBLES, PANEL, TRANSLATOR groups.
+
+**Key caveat**: we already tested SNACKPACK spread trading (snackpack_pairs_v1 using CHOC+VANI sum conservation) and it underperformed naive_tight_mm by 44×. The Engle-Granger test confirms cointegration exists but cointegration alone doesn't guarantee profitability. The spread half-lives are 800–3000 ticks (8–30 minutes), which combined with the 16-tick bid-ask spread makes profitable round trips marginal. Would require very tight spread management, monitoring spread z-score and entering only at 1.5σ+ deviations.
+
+**Most promising for future exploration**: SNACKPACK_RASPBERRY ↔ SNACKPACK_VANILLA (p=0.0068) — the tightest cointegration. RASPBERRY has return corr=-0.924 with STRAWBERRY (same-tick) which might compound the cointegration signal.
+
+---
+
+## Final config: best_v7 = 741,720 PnL, 14.5% drawdown
+
+Changes from v6:
+- SNACKPACK × 5: maker_size 3 → **5** (+4,986)
+- PANEL_1X4, OXYGEN_SHAKE_CHOCOLATE/EVENING_BREATH/MORNING_BREATH, TRANSLATOR_VOID_BLUE, PANEL_2X4, UV_VISOR_ORANGE/RED, MICROCHIP_OVAL, GALAXY_SOUNDS_DARK_MATTER, PANEL_2X2: maker_size 3 → **5** (+2,816)
+- All other strategies unchanged from v6
+
+Config: `MEMBER_OVERRIDES["best_v7"]` in `prosperity/config.py`  
+Wrapper: `submissions/best_v7.py`
 
