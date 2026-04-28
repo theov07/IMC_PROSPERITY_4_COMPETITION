@@ -92,6 +92,14 @@ def _json_list(values: list) -> str:
     return "[" + ",".join(parts) + "]"
 
 
+def _feature_value(row: Dict[str, Any], *keys: str) -> Optional[float]:
+    for key in keys:
+        value = _to_float(row.get(key))
+        if value is not None:
+            return value
+    return None
+
+
 # ── Data loading ───────────────────────────────────────────────────────────────
 
 def _load_backtest_json(path: Path) -> Dict[str, Any]:
@@ -257,22 +265,26 @@ def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -
     (fv_ts, fv_vals, dev_ts, dev_vals, m14_ts, m14_vals,
      anc_ts, anc_vals, mom_ts, mom_vals,
      guard_ts, guard_vals, tsell_ts, tsell_vals, tbuy_ts, tbuy_vals,
-     fsz_ts, f_bid_sz, f_ask_sz) = ([] for _ in range(19))
+     fsz_ts, f_bid_sz, f_ask_sz, fbase_ts, fbase_vals,
+     conf_ts, conf_vals, drift_ts, drift_vals) = ([] for _ in range(25))
 
     for ft in features:
         if ft.get("symbol") != product:
             continue
         ts = ft["timestamp"]
-        fv   = _to_float(ft.get("FairValue"))
-        dv   = _to_float(ft.get("DevSmooth"))
-        m14  = _to_float(ft.get("M14Signal"))
-        anc  = _to_float(ft.get("Anchor"))
-        mom  = _to_float(ft.get("ar_mom"))
-        grd  = _to_float(ft.get("guard"))
-        ts_  = _to_float(ft.get("taker_sell"))
-        tb_  = _to_float(ft.get("taker_buy"))
-        bsz  = _to_float(ft.get("bid_size"))
-        asz  = _to_float(ft.get("ask_size"))
+        fv   = _feature_value(ft, "FairValue", "fair_value")
+        dv   = _feature_value(ft, "DevSmooth", "deviation")
+        m14  = _feature_value(ft, "M14Signal", "m14_signal")
+        anc  = _feature_value(ft, "Anchor", "anchor")
+        mom  = _feature_value(ft, "ar_mom", "ArMomentum")
+        grd  = _feature_value(ft, "guard", "Guard")
+        ts_  = _feature_value(ft, "taker_sell", "TakerSell")
+        tb_  = _feature_value(ft, "taker_buy", "TakerBuy")
+        bsz  = _feature_value(ft, "bid_size", "BidSize")
+        asz  = _feature_value(ft, "ask_size", "AskSize")
+        fbase = _feature_value(ft, "FairBase", "fair_base")
+        conf = _feature_value(ft, "AnchorConfidence", "anchor_confidence")
+        drift = _feature_value(ft, "AnchorDriftEwma", "anchor_drift_ewma", "AnchorDrift")
         if fv  is not None: fv_ts.append(ts);     fv_vals.append(fv)
         if dv  is not None: dev_ts.append(ts);    dev_vals.append(dv)
         if m14 is not None: m14_ts.append(ts);    m14_vals.append(m14)
@@ -283,6 +295,9 @@ def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -
         if tb_ is not None: tbuy_ts.append(ts);   tbuy_vals.append(tb_)
         if bsz is not None and asz is not None:
             fsz_ts.append(ts); f_bid_sz.append(bsz); f_ask_sz.append(asz)
+        if fbase is not None: fbase_ts.append(ts); fbase_vals.append(fbase)
+        if conf is not None: conf_ts.append(ts); conf_vals.append(conf)
+        if drift is not None: drift_ts.append(ts); drift_vals.append(drift)
 
     # sizes: prefer quote-trace from features; fall back to quotes buffer
     if not fsz_ts:
@@ -303,6 +318,9 @@ def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -
         "tsell_ts":   tsell_ts, "tsell":       tsell_vals,
         "tbuy_ts":    tbuy_ts,  "tbuy":        tbuy_vals,
         "size_ts":    fsz_ts,   "bid_size":    f_bid_sz,  "ask_size": f_ask_sz,
+        "fbase_ts":   fbase_ts, "fbase":       fbase_vals,
+        "conf_ts":    conf_ts,  "conf":        conf_vals,
+        "drift_ts":   drift_ts, "drift":       drift_vals,
     }
 
 
@@ -533,8 +551,12 @@ def _load_from_imclog(path: Path) -> Dict[str, Any]:
     features = _parse_lambdalog_entries(raw.get("logs", []), default_product=primary_product)
 
     strategy_name = raw.get("submissionId", path.stem)[:32]
-    n_feat = len([f for f in features if "FairValue" in f or "DevSmooth" in f])
-    n_m14  = len([f for f in features if "M14Signal"  in f])
+    n_feat = len([
+        f for f in features
+        if _feature_value(f, "FairValue", "fair_value") is not None
+        or _feature_value(f, "DevSmooth", "deviation") is not None
+    ])
+    n_m14  = len([f for f in features if _feature_value(f, "M14Signal", "m14_signal") is not None])
     print(f"  Products: {sorted(market_prices.keys())}")
     print(f"  Own fills: {len(our_fills)}, market trades: {len(market_trades)}")
     print(f"  Features: {n_feat} A-blocks (FairValue/DevSmooth), {n_m14} C-blocks (M14Signal)")
@@ -626,6 +648,13 @@ def _price_chart_js_v5(
         traces.append(f"""{{x:{anc_ts},y:{anc_v},name:'Anchor',mode:'lines',
           line:{{color:'#fab387',width:1.2,dash:'dash'}},opacity:0.8,
           hovertemplate:'Anchor: %{{y:.2f}}<extra></extra>'}}""")
+
+    if v5.get("fbase_ts"):
+        fbase_ts = _json_list(v5["fbase_ts"])
+        fbase_v  = _json_list(v5["fbase"])
+        traces.append(f"""{{x:{fbase_ts},y:{fbase_v},name:'FairBase (adaptive)',mode:'lines',
+          line:{{color:'#94e2d5',width:1.1,dash:'dot'}},opacity:0.9,
+          hovertemplate:'FairBase: %{{y:.2f}}<extra></extra>'}}""")
 
     # Our submitted passive quotes (subsample every 5th for file size)
     q_prod = [q for q in quotes if q.get("symbol") == product]
@@ -863,6 +892,48 @@ def _m14_chart_js(product: str, v5: Dict) -> str:
           line:{{color:'#f38ba8',width:1,dash:'dot'}}}},
       ],
       margin:{{t:30,b:36,l:65,r:20}},
+    }}),{{responsive:true}});
+  }}"""
+
+
+def _adaptive_regime_chart_js(product: str, v5: Dict) -> str:
+    safe = _jsid(product)
+    has_conf = bool(v5.get("conf_ts"))
+    has_drift = bool(v5.get("drift_ts"))
+    if not has_conf and not has_drift:
+        return f"""
+  function plot_regime_{safe}() {{
+    document.getElementById('regime_{safe}').innerHTML =
+      '<p style="color:#6c7086;padding:1em">No adaptive fair diagnostics for this strategy.</p>';
+  }}"""
+
+    traces: List[str] = []
+    if has_conf:
+        traces.append(f"""{{
+      x:{_json_list(v5["conf_ts"])},y:{_json_list(v5["conf"])},
+      name:'Anchor confidence',mode:'lines',
+      line:{{color:'#94e2d5',width:1.8}},yaxis:'y',
+      hovertemplate:'confidence: %{{y:.3f}}<extra></extra>'
+    }}""")
+    if has_drift:
+        traces.append(f"""{{
+      x:{_json_list(v5["drift_ts"])},y:{_json_list(v5["drift"])},
+      name:'Anchor drift EWMA',mode:'lines',
+      line:{{color:'#f9e2af',width:1.2,dash:'dot'}},yaxis:'y2',
+      hovertemplate:'drift: %{{y:.2f}}<extra></extra>'
+    }}""")
+
+    traces_js = ",\n    ".join(traces)
+    layout_extra = """
+      yaxis2: {title:'drift (ticks)',overlaying:'y',side:'right',
+               gridcolor:'#313244',showgrid:false,tickfont:{color:'#6c7086'}},"""
+    return f"""
+  function plot_regime_{safe}() {{
+    Plotly.newPlot('regime_{safe}',[{traces_js}],
+    Object.assign({{}},{_layout_js(layout_extra)},{{
+      title:'{product} — Adaptive Fair Regime',
+      yaxis:{{title:'anchor confidence',range:[0,1.05],gridcolor:'#313244',zeroline:false}},
+      margin:{{t:30,b:36,l:65,r:70}},
     }}),{{responsive:true}});
   }}"""
 
@@ -1221,8 +1292,12 @@ def generate_html(
     if product_filter:
         products = [p for p in products if p == product_filter]
 
-    # Detect v5 mode: DevSmooth in feature_ticks
-    is_v5 = any("DevSmooth" in ft for ft in features)
+    # Detect v5/v6/v9 mode using both historical and newer aliases.
+    is_v5 = any(
+        _feature_value(ft, "DevSmooth", "deviation") is not None
+        or _feature_value(ft, "FairValue", "fair_value") is not None
+        for ft in features
+    )
     print(f"  Mode: {'v5 (passive MM + AR taker)' if is_v5 else 'generic'}")
 
     all_traders = sorted({f["buyer"] for f in market_trades}
@@ -1287,6 +1362,7 @@ def generate_html(
     <span class="legend-item">■ = other trader</span>
     <span class="legend-item">yellow = AR FairValue</span>
     <span class="legend-item">orange dashed = Anchor (v6)</span>
+    <span class="legend-item">teal dotted = FairBase / adaptive fair base (v9)</span>
     <span class="legend-item">green band = BUY entry zone (FV - {taker_edge})</span>
     <span class="legend-item">red band = SELL entry zone (FV + {taker_edge})</span>
   </div>
@@ -1294,6 +1370,7 @@ def generate_html(
   <div class="chart-container"><div id="dev_{safe}"   class="chart-med"></div></div>
   <div class="chart-container"><div id="mom_{safe}"   class="chart-med"></div></div>
   <div class="chart-container"><div id="pos_{safe}"   class="chart-med"></div></div>
+  <div class="chart-container"><div id="regime_{safe}" class="chart-med"></div></div>
   <div class="chart-container"><div id="m14_{safe}"   class="chart-short"></div></div>
 </div>"""
 
@@ -1302,6 +1379,7 @@ def generate_html(
             js_fns += _deviation_chart_js(prod, v5, taker_edge)
             js_fns += _ar_momentum_chart_js(prod, v5)
             js_fns += _position_sizing_chart_js(prod, our_fills, v5, day_boundaries)
+            js_fns += _adaptive_regime_chart_js(prod, v5)
             js_fns += _m14_chart_js(prod, v5)
 
         else:

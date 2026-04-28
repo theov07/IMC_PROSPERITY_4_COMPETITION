@@ -122,6 +122,7 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydrogel_guarded_reversion_mm": (
         "prosperity.strategies.round_3.hydrogel_guarded_reversion_mm",
         "HydrogelGuardedReversionMMStrategy",
+    ),
     "r4_hydro_mark14_mm": ("prosperity.strategies.round_4.hydro_mark14_mm", "R4HydroMark14MMStrategy"),
     "r4_hydro_guarded_mark_skew": (
         "prosperity.strategies.round_4.hydro_guarded_mark_skew",
@@ -130,6 +131,26 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "r4_hydro_mv_v6_invaware": (
         "prosperity.strategies.round_4.hydro_mv_v6_invaware",
         "R4HydroMVV6InvAwareStrategy",
+    ),
+    "r4_hydro_mv_v9_adaptive_fair": (
+        "prosperity.strategies.round_4.hydro_mv_v9_adaptive_fair",
+        "R4HydroMVV9AdaptiveFairStrategy",
+    ),
+    "r4_hydro_mv_v10_live_defensive": (
+        "prosperity.strategies.round_4.hydro_mv_v10_live_defensive",
+        "R4HydroMVV10LiveDefensiveStrategy",
+    ),
+    "r4_hydro_mv_v11_early_kill_fairsoft": (
+        "prosperity.strategies.round_4.hydro_mv_v11_early_kill_fairsoft",
+        "R4HydroMVV11EarlyKillFairSoftStrategy",
+    ),
+    "r4_hydro_mv_v12_vol_tail_kill": (
+        "prosperity.strategies.round_4.hydro_mv_v12_vol_tail_kill",
+        "R4HydroMVV12VolTailKillStrategy",
+    ),
+    "r4_hydro_mv_v11_mark_oracle": (
+        "prosperity.strategies.round_4.hydro_mv_v11_mark_oracle",
+        "R4HydroMVV11MarkOracleStrategy",
     ),
     "hydro_velvet_spread_skew_mm": (
         "prosperity.strategies.round_3.hydro_velvet_spread_skew_mm",

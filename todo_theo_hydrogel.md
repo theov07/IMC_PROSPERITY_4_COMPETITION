@@ -381,3 +381,248 @@
     - keep the strong `v7` directional/MM hybrid core
     - make inventory accumulation softer and more two-sided
     - not eliminate inventory, just stop it from being quite as sticky
+
+## Fair Tracking Pivot
+
+- New live diagnosis from the user:
+  - the current fair was too flat around `10000`
+  - on intraday uptrends, price could stay above fair for a long time
+  - the strategy therefore kept selling into strength, got stuck near max short,
+    and only bought back much later when price finally crossed the old fair
+  - this is profitable on long backtest horizons, but looks too directional and
+    too slow in shorter live windows
+
+- First family tested: make fair follow price much faster
+  - dynamic-anchor variants with large tracking alpha
+  - direct `mid_smooth` fair variants
+  - Result:
+    - inventory dropped sharply
+    - near-limit time almost vanished
+    - but PnL collapsed into the `20k-27k` zone
+  - Reading:
+    - if fair fully hugs price, the strategy loses the mean-reversion edge that
+      was paying most of the historical alpha
+
+- Second family tested: adaptive blend between fixed anchor and market-following fair
+  - fair becomes:
+    - close to `10000` when smoothed drift is small
+    - progressively closer to `mid_smooth` when drift persists
+  - this family was the only one that preserved the profitable core while still
+    addressing the live failure mode
+
+- Refinement path:
+  - aggressive adaptive settings lowered inventory a lot, but sacrificed too much PnL
+  - conservative adaptive settings were much better
+  - key improvement came from:
+    - slow drift detector: `adaptive_drift_alpha=0.004`
+    - keep a non-zero anchor floor: `adaptive_conf_min=0.45`
+    - slightly faster fair tracker than `v8`: `mid_smooth_half_life=18`
+    - softer inventory contraction on top: `inventory_same_side_power=1.5`
+
+- Final retained candidate:
+  - member: `r4_hydro_mv_v9_adaptive_fair`
+  - strategy file:
+    - `prosperity/strategies/round_4/hydro_mv_v9_adaptive_fair.py`
+  - wrapper:
+    - `submissions/round_4/r4_hydro_mv_v9_adaptive_fair.py`
+
+- Best validated research point before export:
+  - `PnL`: `160,046.0`
+  - `DD`: `19,975.0`
+  - days: `[54,017.0, 40,093.0, 65,936.0]`
+  - robustness shift versus `v8`:
+    - avg inventory ratio from about `0.8883` to about `0.8710`
+    - near-limit tick ratio from about `0.8612` to about `0.8438`
+    - aggressive share from about `0.8332` to about `0.8309`
+
+- Quant reading:
+  - pure fair-following was too reactive and erased the edge
+  - the right move was not to abandon the anchor, but to make confidence in the
+    anchor state-dependent
+  - v9 is therefore still a directional/MM hybrid, but it is less brittle in
+    persistent trends and less sticky near inventory extremes
+
+## Live Defensive v10
+
+- New trigger:
+  - live upload `521594.log` showed a very specific failure mode:
+    - strategy built `-200` inventory early
+    - then stayed deeply short through an upward HYDRO leg
+    - the loss came mostly from aggressive same-side sells, not just passive ask fills
+
+- Concrete live diagnosis:
+  - short almost the whole session
+  - near max short most of the session
+  - worst trough happened with `mid` far above the average short entry
+  - interpretation:
+    - v9 still lets same-side takers press too hard when already loaded
+    - fair adaptation helps, but alone it is not enough for this live regime
+
+- Two levers implemented in the base engine:
+  - `inventory_fair_*`
+    - when inventory is loaded against the current move, pull fair partway toward
+      `mid_smooth` and cancel part of contrarian AR momentum
+  - `inventory_*_taker_kill_*`
+    - disable same-side takers only at near-limit inventory and only when
+      deviation and momentum still confirm the adverse trend
+
+- Sweep results around the live-defensive family:
+  - fair defense only:
+    - `activation=0.60`, `pull=0.12`, `mom_cancel=2.0`
+    - `PnL=158,346`, `DD=19,961`
+  - same fair defense + very late airbag:
+    - `kill_ratio=0.98`, `dev=10`, `mom=0.5`
+    - `PnL=158,380`, `DD=19,937`
+  - refined better point:
+    - `kill_ratio=0.96`, `dev=8`, `mom=0.3`
+    - `PnL=158,615`, `DD=19,711`
+    - avg inventory ratio about `0.849`
+
+- Final retained v10:
+  - member: `r4_hydro_mv_v10_live_defensive`
+  - strategy:
+    - `prosperity/strategies/round_4/hydro_mv_v10_live_defensive.py`
+  - logic:
+    - keep the profitable v9 adaptive fair core
+    - activate extra fair pull only when inventory is meaningfully loaded
+    - use the taker kill-switch as an airbag, not a normal trading rule
+
+- Reading:
+  - this v10 does not beat v9 on raw 3-day PnL
+  - but it is the best tested point in the live-defensive subfamily:
+    - lower drawdown
+    - lower average inventory
+    - lower taker pressure into the adverse side
+  - so if the live problem is really the short-carry drift seen in `521594.log`,
+    this is a more credible deployment candidate than v9
+
+## Live Replay v11
+
+- New live diagnosis on `523052.log`:
+  - v10 changed too late to be visible in practice
+  - replaying the strategy tick-by-tick on the log showed:
+    - same first order-level behavior as v9 until roughly `ts=23300`
+    - by then inventory was already about `-180`
+    - this explains why the user saw almost no practical difference between v9
+      and v10 in the live simulation
+
+- Important correction to the previous reading:
+  - on `523052.log`, the main bad HYDRO sells are still aggressive sells into the
+    bid, mostly against `Mark 14`
+  - they are not mainly passive ask fills
+  - example replay around the failure zone:
+    - v10 still sends same-side sell takers at `ts=22300`, `23300`, `23700`
+    - only after `ts=24100` does the taker airbag become reliably active
+
+- Live replay metrics used for ranking:
+  - `sell_taker_short120`: total same-side sell taker size while position `<= -120`
+  - `sell_taker_short150`: same, while position `<= -150`
+  - `sell_taker_short180`: same, while position `<= -180`
+  - also tracked the largest `mid - fair` gap while deeply short
+
+- Key tested points:
+  - baseline v10:
+    - `PnL=158,615`, `DD=19,711`
+    - replay: `70 / 57 / 37`
+  - harder early kill only:
+    - `kill_ratio=0.90`, `dev=8`, `mom=0.10`
+    - `PnL=152,204`, `DD=18,434`
+    - replay: `34 / 21 / 1`
+  - same idea but slightly more fair-following under loaded inventory:
+    - `adaptive_conf_min=0.50`
+    - `adaptive_drift_alpha=0.005`
+    - `inventory_fair_activation_ratio=0.50`
+    - `inventory_fair_pull_fraction=0.18`
+    - `inventory_fair_ar_mom_cancel=3.0`
+    - plus the same earlier kill at `0.90 / 8 / 0.10`
+    - `PnL=150,894`, `DD=18,186`
+    - replay: `33 / 20 / 1`
+    - worst deep-short `mid - fair` gap improved from about `36.71` to `34.01`
+
+- Final retained v11:
+  - member: `r4_hydro_mv_v11_early_kill_fairsoft`
+  - wrapper:
+    - `submissions/round_4/r4_hydro_mv_v11_early_kill_fairsoft.py`
+  - logic:
+    - keep the v10 core
+    - move the same-side taker airbag earlier from `0.96` to `0.90`
+    - keep the same deviation threshold `8`, but lower the momentum threshold
+      from `0.30` to `0.10`
+    - let fair soften slightly earlier and slightly more when inventory is already
+      loaded against the move
+
+- Reading:
+  - this is not the raw best 3-day backtest point
+  - it is the first version that materially changes the live failure mode early
+    enough without collapsing the backtest into a low-PnL ultra-defensive MM
+
+## v12 Vol-Tail Research
+
+- Goal:
+  - test whether realized volatility can improve the v11 live-defensive family
+    without turning it into a blunt risk-off strategy
+  - focus on what should happen only when HYDRO enters the upper tail of its
+    own `sigma` distribution
+
+- Sigma calibration on the v11 family:
+  - day 1 mean `2.133`, p95 `2.428`, p99 `2.625`
+  - day 2 mean `2.155`, p95 `2.476`, p99 `2.661`
+  - day 3 mean `2.175`, p95 `2.490`, p99 `2.692`
+  - reading:
+    - meaningful high-vol thresholds live around `2.30-2.50`
+    - the true tail starts around `2.44`
+
+- First ablation wave:
+  - `size_only`:
+    - always worse in PnL
+    - sometimes tiny DD help
+    - interpretation: generic risk-down is too blunt
+  - `taker_only`:
+    - worse, especially on day 2
+    - interpretation: "vol high => takers harder" throws away too much valid flow
+  - `quote_only`:
+    - worse again
+    - interpretation: repricing passive quotes directly on vol is not robust here
+  - `fair_only`:
+    - the only family that stayed near-flat and occasionally slightly positive
+    - best early points were soft tail activations around `2.40-2.60`
+
+- Important live replay reading on `523052.log`:
+  - the high-vol fair layer *does* activate on the log
+  - but fair motion alone barely changes the actual order flow
+  - reading:
+    - volatility is useful as a regime detector
+    - but it needs to interact with an execution guard that already exists
+
+- Winning refinement:
+  - keep the v11 core untouched outside the tail
+  - in the high-vol tail only:
+    - add extra inventory-protection fair pull
+    - slightly advance the same-side taker kill thresholds
+  - avoid hard same-side taker blocks:
+    - they consistently hurt PnL more than they help
+
+- Final best point:
+  - member: `r4_hydro_mv_v12_vol_tail_kill`
+  - wrapper: `submissions/round_4/r4_hydro_mv_v12_vol_tail_kill.py`
+  - params:
+    - `high_vol_sigma_start=2.44`
+    - `high_vol_sigma_end=2.64`
+    - `high_vol_inventory_fair_pull_add=0.08`
+    - `high_vol_inventory_fair_mom_add=1.25`
+    - `high_vol_short_taker_kill_ratio=0.85`
+    - `high_vol_long_taker_kill_ratio=0.85`
+    - `high_vol_taker_kill_dev_threshold=6.0`
+    - `high_vol_taker_kill_mom_threshold=0.05`
+  - result:
+    - `PnL=151,098.0`
+    - `DD=18,186.0`
+    - days: `[50,362.0, 38,006.0, 62,730.0]`
+
+- Interpretation:
+  - the gain is modest but real
+  - the right use of vol is not "switch strategy"
+  - the right use is:
+    - detect only the upper tail
+    - soften fair slightly more for loaded inventory
+    - accelerate the existing airbag slightly

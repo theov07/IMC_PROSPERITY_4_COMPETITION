@@ -237,6 +237,11 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
     "r4_gamma_scalp_zgated_slim": ("prosperity/strategies/round_4/gamma_scalp_zgated_slim.py", "R4GammaScalpZGatedSlimStrategy"),
     "r4_hydro_mv_v6_invaware": ("prosperity/strategies/round_4/hydro_mv_v6_invaware.py", "R4HydroMVV6InvAwareStrategy"),
+    "r4_hydro_mv_v9_adaptive_fair": ("prosperity/strategies/round_4/hydro_mv_v9_adaptive_fair.py", "R4HydroMVV9AdaptiveFairStrategy"),
+    "r4_hydro_mv_v10_live_defensive": ("prosperity/strategies/round_4/hydro_mv_v10_live_defensive.py", "R4HydroMVV10LiveDefensiveStrategy"),
+    "r4_hydro_mv_v11_early_kill_fairsoft": ("prosperity/strategies/round_4/hydro_mv_v11_early_kill_fairsoft.py", "R4HydroMVV11EarlyKillFairSoftStrategy"),
+    "r4_hydro_mv_v12_vol_tail_kill": ("prosperity/strategies/round_4/hydro_mv_v12_vol_tail_kill.py", "R4HydroMVV12VolTailKillStrategy"),
+    "r4_hydro_mv_v11_mark_oracle": ("prosperity/strategies/round_4/hydro_mv_v11_mark_oracle.py", "R4HydroMVV11MarkOracleStrategy"),
     "r4_hydro_reversion_mm_slim": ("prosperity/strategies/round_4/hydro_reversion_mm_slim.py", "R4HydroReversionMMSlimStrategy"),
 }
 
@@ -318,6 +323,32 @@ STRATEGY_FILE_DEPS: dict[str, list[str]] = {
     "iv_momentum_mm": _R3_OPTIONS_DEPS,
     "r3_guarded_anchor_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
     "r4_hydro_mv_v6_invaware": ["prosperity/strategies/round_4/hydro_mv_v5_best.py"],
+    "r4_hydro_mv_v9_adaptive_fair": [
+        "prosperity/strategies/round_4/hydro_mv_v5_best.py",
+        "prosperity/strategies/round_4/hydro_mv_v6_invaware.py",
+    ],
+    "r4_hydro_mv_v10_live_defensive": [
+        "prosperity/strategies/round_4/hydro_mv_v5_best.py",
+        "prosperity/strategies/round_4/hydro_mv_v6_invaware.py",
+        "prosperity/strategies/round_4/hydro_mv_v9_adaptive_fair.py",
+    ],
+    "r4_hydro_mv_v11_early_kill_fairsoft": [
+        "prosperity/strategies/round_4/hydro_mv_v5_best.py",
+        "prosperity/strategies/round_4/hydro_mv_v6_invaware.py",
+        "prosperity/strategies/round_4/hydro_mv_v9_adaptive_fair.py",
+        "prosperity/strategies/round_4/hydro_mv_v10_live_defensive.py",
+    ],
+    "r4_hydro_mv_v12_vol_tail_kill": [
+        "prosperity/strategies/round_4/hydro_mv_v5_best.py",
+        "prosperity/strategies/round_4/hydro_mv_v6_invaware.py",
+        "prosperity/strategies/round_4/hydro_mv_v9_adaptive_fair.py",
+        "prosperity/strategies/round_4/hydro_mv_v10_live_defensive.py",
+        "prosperity/strategies/round_4/hydro_mv_v11_early_kill_fairsoft.py",
+    ],
+    "r4_hydro_mv_v11_mark_oracle": [
+        "prosperity/strategies/round_4/hydro_mv_v5_best.py",
+        "prosperity/strategies/round_4/hydro_mv_v6_invaware.py",
+    ],
     "velvet_r2_exhaustion_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
     "hydro_anchor_zgate_mm": ["prosperity/strategies/round_2/leo/mm_first_v4_combo.py"],
     "theo_r3_vol_arb_v1": _R3_OPTIONS_DEPS_SLIM,
