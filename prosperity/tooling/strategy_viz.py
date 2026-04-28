@@ -517,10 +517,15 @@ def _parse_lambdalog_entries(runtime_logs: list, default_product: str = "") -> L
 
 
 def _load_from_imclog(path: Path) -> Dict[str, Any]:
-    """Load ALL visualizer data from a single IMC log file.
+    """Load ALL visualizer data from a single IMC log file (.log or .json).
+
+    Accepts both the .log format (has tradeHistory + activitiesLog + lambdaLog)
+    and the .json format (has activitiesLog + graphLog but NO tradeHistory).
+    When a .json file is loaded, automatically looks for a companion .log file
+    in the same directory to recover the trade history.
 
     Returns the same data shape as the backtest pipeline so generate_html()
-    works identically for both modes. No backtest data is mixed in.
+    works identically for both modes.
     """
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -532,13 +537,31 @@ def _load_from_imclog(path: Path) -> Dict[str, Any]:
     market_prices, equity = _parse_activities(activities_text)
 
     trade_raw = raw.get("tradeHistory") or raw.get("tradeLog") or []
+    runtime_logs = raw.get("logs", [])
+
+    # .json files have no tradeHistory — try companion .log file for trade data
+    if not trade_raw and path.suffix == ".json":
+        companion = path.with_suffix(".log")
+        if companion.exists():
+            print(f"  Auto-loading trade history from companion {companion.name} ...")
+            try:
+                companion_raw = json.loads(companion.read_text(encoding="utf-8"))
+                trade_raw = companion_raw.get("tradeHistory") or companion_raw.get("tradeLog") or []
+                # Also use lambdaLog from the .log if the .json lacks it
+                if not runtime_logs:
+                    runtime_logs = companion_raw.get("logs", [])
+            except Exception as e:
+                print(f"  Warning: could not read companion .log file: {e}")
+        else:
+            print(f"  ⚠  No tradeHistory in .json and no companion {companion.name} found — market trades will be empty")
+
     our_fills, market_trades = _parse_trade_history(trade_raw)
 
     # Infer primary product from our fills so old logs (without "product" in blk
     # dicts) still get their feature entries attributed to the right symbol.
     _syms = [f["symbol"] for f in our_fills if f.get("symbol")]
     primary_product = max(set(_syms), key=_syms.count) if _syms else ""
-    features = _parse_lambdalog_entries(raw.get("logs", []), default_product=primary_product)
+    features = _parse_lambdalog_entries(runtime_logs, default_product=primary_product)
 
     strategy_name = raw.get("submissionId", path.stem)[:32]
     n_feat = len([f for f in features if "FairValue" in f or "DevSmooth" in f])
@@ -1408,7 +1431,10 @@ def main() -> None:
             "Mode A — backtest analysis:\n"
             "  python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v5_best.json\n\n"
             "Mode B — live IMC log analysis:\n"
-            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.log\n\n"
+            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.log\n"
+            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.json\n\n"
+            "Both .log and .json IMC files are accepted. When a .json is passed, the tool\n"
+            "automatically loads trade history from the sibling .log file (same name, .log ext).\n"
             "The two modes are mutually exclusive. --log uses ONLY live data; no backtest\n"
             "features are mixed in."
         ),
@@ -1416,7 +1442,10 @@ def main() -> None:
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--backtest-json", help="Path to backtest result JSON")
-    group.add_argument("--log",           help="Path to IMC submission log (.log file)")
+    group.add_argument("--log",           help="Path to IMC submission log (.log or .json file). "
+                                               "When passing a .json file that lacks tradeHistory, "
+                                               "the tool auto-loads the companion .log file from "
+                                               "the same directory.")
     parser.add_argument("--product",       default=None)
     parser.add_argument("--out",           default=None)
     parser.add_argument("--data-dir",      default=None)
