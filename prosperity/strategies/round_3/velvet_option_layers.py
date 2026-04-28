@@ -188,6 +188,31 @@ class _VelvetOptionMixin:
         rank = ordered.index(strike) + 1
         return rank <= active_count, active_count, rank
 
+    def _counterparty_signal(self, state: TradingState, memory: Dict[str, Any]) -> float:
+        if not bool(self.params.get("mark_signal_enabled", False)):
+            memory["_mark_signal"] = 0.0
+            return 0.0
+
+        buy_weights = self.params.get("mark_buy_weights", {})
+        sell_weights = self.params.get("mark_sell_weights", {})
+        alpha = float(self.params.get("mark_signal_alpha", 0.45))
+        decay = float(self.params.get("mark_signal_decay", 0.75))
+        qty_norm = max(1.0, float(self.params.get("mark_qty_norm", 4.0)))
+        clip = max(0.0, float(self.params.get("mark_signal_clip", 4.0)))
+
+        raw = 0.0
+        for trade in state.market_trades.get(self.product, []):
+            raw += float(buy_weights.get(getattr(trade, "buyer", None), 0.0)) * float(trade.quantity)
+            raw += float(sell_weights.get(getattr(trade, "seller", None), 0.0)) * float(trade.quantity)
+        raw /= qty_norm
+
+        prev = float(memory.get("_mark_signal", 0.0))
+        signal = (prev * decay) if abs(raw) < 1e-9 else (alpha * raw + (1.0 - alpha) * prev)
+        if clip > 0.0:
+            signal = max(-clip, min(clip, signal))
+        memory["_mark_signal"] = signal
+        return signal
+
 
 class GammaScalpZGatedStrategy(_VelvetOptionMixin, BaseStrategy):
     """Directional long-call accumulator from the v24 velvet option stack."""
@@ -213,6 +238,8 @@ class GammaScalpZGatedStrategy(_VelvetOptionMixin, BaseStrategy):
         fair = call_price(S, p["K"], p["T"], p["implied_vol_prior"])
         gamma = call_gamma(S, p["K"], p["T"], p["implied_vol_prior"])
         delta = call_delta(S, p["K"], p["T"], p["implied_vol_prior"])
+        mark_signal = self._counterparty_signal(state, memory)
+        fair += self._mark_fair_shift(mark_signal)
 
         memory["_velvet_z"] = z
         memory["_gamma"] = gamma
@@ -227,8 +254,9 @@ class GammaScalpZGatedStrategy(_VelvetOptionMixin, BaseStrategy):
         orders: List[Order] = []
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
+        target_qty = p["target_qty"] + self._mark_target_bonus(mark_signal)
 
-        if p["T"] < p["unwind_tte_threshold"] or position >= p["target_qty"]:
+        if p["T"] < p["unwind_tte_threshold"] or position >= target_qty:
             if sell_cap > 0 and position > 0:
                 ask_px = book.best_ask - 1
                 if ask_px <= book.best_bid:
@@ -256,11 +284,22 @@ class GammaScalpZGatedStrategy(_VelvetOptionMixin, BaseStrategy):
             memory["_mode"] = "z_profit_take"
             return orders, 0
 
-        if p["skip_when_expensive"] and z is not None and z > p["zscore_skip_threshold"]:
+        effective_zskip = p["zscore_skip_threshold"] + self._mark_skip_relax(mark_signal)
+        if p["skip_when_expensive"] and z is not None and z > effective_zskip:
             memory["_mode"] = "z_skipped_expensive"
             return orders, 0
 
-        size_mult = 1.0
+        if self._mark_should_unwind(mark_signal) and position > 0 and sell_cap > 0:
+            ask_px = book.best_ask - 1
+            if ask_px <= book.best_bid:
+                ask_px = book.best_bid + 1
+            qty = min(p["passive_bid_size"], sell_cap, position)
+            if qty > 0:
+                orders.append(Order(self.product, ask_px, -qty))
+            memory["_mode"] = "mark_unwind"
+            return orders, 0
+
+        size_mult = self._mark_entry_multiplier(mark_signal)
         memory["_mode"] = "accumulate"
         if p["boost_when_cheap"] and z is not None and z < -p["zscore_boost_threshold"]:
             size_mult = p["entry_size_boost"]
@@ -269,25 +308,58 @@ class GammaScalpZGatedStrategy(_VelvetOptionMixin, BaseStrategy):
         eff_entry_size = max(1, int(round(p["entry_size"] * size_mult)))
         eff_passive_size = max(1, int(round(p["passive_bid_size"] * size_mult)))
 
-        if buy_cap > 0 and position < p["target_qty"]:
+        if buy_cap > 0 and position < target_qty:
             ask = book.best_ask
             if ask is not None and ask <= fair + p["edge_ticks"]:
                 ask_qty = -order_depth.sell_orders.get(ask, 0)
-                headroom = p["target_qty"] - position
+                headroom = target_qty - position
                 take_qty = min(ask_qty, buy_cap, eff_entry_size, headroom)
                 if take_qty > 0:
                     orders.append(Order(self.product, ask, take_qty))
                     buy_cap -= take_qty
                     position += take_qty
 
-        if buy_cap > 0 and position < p["target_qty"]:
+        if buy_cap > 0 and position < target_qty:
             bid_px = book.best_bid + 1
             if bid_px < book.best_ask:
-                qty = min(eff_passive_size, buy_cap, p["target_qty"] - position)
+                qty = min(eff_passive_size, buy_cap, target_qty - position)
                 if qty > 0:
                     orders.append(Order(self.product, bid_px, qty))
 
         return orders, 0
+
+    def _mark_fair_shift(self, mark_signal: float) -> float:
+        per_unit = float(self.params.get("mark_fair_shift_per_unit", 0.0))
+        max_shift = float(self.params.get("mark_max_fair_shift", 0.0))
+        if per_unit == 0.0 or max_shift <= 0.0:
+            return 0.0
+        shift = mark_signal * per_unit
+        return max(-max_shift, min(max_shift, shift))
+
+    def _mark_entry_multiplier(self, mark_signal: float) -> float:
+        boost = float(self.params.get("mark_entry_size_boost", 0.0))
+        clip = max(1e-9, float(self.params.get("mark_signal_clip", 4.0)))
+        if boost <= 0.0 or mark_signal <= 0.0:
+            return 1.0
+        return 1.0 + boost * min(1.0, mark_signal / clip)
+
+    def _mark_target_bonus(self, mark_signal: float) -> int:
+        bonus = int(self.params.get("mark_target_bonus", 0))
+        clip = max(1e-9, float(self.params.get("mark_signal_clip", 4.0)))
+        if bonus <= 0 or mark_signal <= 0.0:
+            return 0
+        return int(round(bonus * min(1.0, mark_signal / clip)))
+
+    def _mark_skip_relax(self, mark_signal: float) -> float:
+        relax = float(self.params.get("mark_skip_relax", 0.0))
+        clip = max(1e-9, float(self.params.get("mark_signal_clip", 4.0)))
+        if relax <= 0.0 or mark_signal <= 0.0:
+            return 0.0
+        return relax * min(1.0, mark_signal / clip)
+
+    def _mark_should_unwind(self, mark_signal: float) -> bool:
+        threshold = float(self.params.get("mark_unwind_threshold", 0.0))
+        return threshold > 0.0 and mark_signal <= -threshold
 
     def _update_zscore(self, S: float, memory: Dict[str, Any], params: Dict[str, Any]) -> Optional[float]:
         window = params["zscore_window"]
@@ -339,6 +411,8 @@ class GammaScalpZGatedStrategy(_VelvetOptionMixin, BaseStrategy):
             out["fair_iv"] = float(fair)
         if (z := memory.get("_velvet_z")) is not None:
             out["velvet_z"] = float(z)
+        if (mark_signal := memory.get("_mark_signal")) is not None:
+            out["mark_signal"] = float(mark_signal)
         if (mode := memory.get("_mode")) is not None:
             out["mode"] = {
                 "accumulate": 1.0,
@@ -346,6 +420,7 @@ class GammaScalpZGatedStrategy(_VelvetOptionMixin, BaseStrategy):
                 "z_skipped_expensive": -1.0,
                 "z_boost_cheap": 2.0,
                 "z_profit_take": 0.5,
+                "mark_unwind": -0.5,
             }.get(str(mode), 0.5)
         return out
 
