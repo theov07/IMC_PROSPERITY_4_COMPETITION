@@ -15787,6 +15787,29 @@ MEMBER_OVERRIDES["r4_v24_xa_5200_only"] = _v24_cross_asset(
 )
 
 
+# v26 — v24 + heavier Mark 01 fade (LIVE shows Mark 01 -18.28/trade anti-informed)
+def _v26_with_M01(m01_weight):
+    base = MEMBER_OVERRIDES["r4_v24_xa_5200_only"][4]
+    out = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            out[sym] = None; continue
+        params = dict(cfg.params)
+        if "cp_trader_weights" in params and isinstance(params["cp_trader_weights"], dict):
+            new_weights = dict(params["cp_trader_weights"])
+            if "Mark 01" in new_weights:
+                new_weights["Mark 01"] = m01_weight
+            params["cp_trader_weights"] = new_weights
+        params.pop("position_limit", None)
+        out[sym] = _override(cfg, **params)
+    return {4: out}
+
+
+MEMBER_OVERRIDES["r4_v26_M01_w05"] = _v26_with_M01(-0.5)
+MEMBER_OVERRIDES["r4_v26_M01_w08"] = _v26_with_M01(-0.8)
+MEMBER_OVERRIDES["r4_v26_M01_w03"] = _v26_with_M01(-0.3)
+
+
 # v25 — v24 5200_only + switch VEV_5200/5400 to gamma_scalp_zgated (drop VEVOptionMMV3 = -27KB)
 def _v25_unified_options():
     base = MEMBER_OVERRIDES["r4_v24_xa_5200_only"][4]
