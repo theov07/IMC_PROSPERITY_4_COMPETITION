@@ -10418,7 +10418,7 @@ MEMBER_OVERRIDES["hydro_mv_v9"] = {
         params=dict(
             anchor_price=10000,
             anchor_alpha=0.005,
-            anchor_pos_threshold=0.20,
+            anchor_pos_threshold=0.30,   # grid winner: anchor updates when |pos| < 60u (+14k vs 0.20)
             ar_gain=8.0,
             ar_smooth_half_life=5,
             mid_smooth_half_life=20,
@@ -10427,7 +10427,7 @@ MEMBER_OVERRIDES["hydro_mv_v9"] = {
             ar_taker_size_pct=0.30,
             sell_cap_pct=1.0,           # no hard cap — M14 gate is primary protection
             buy_cap_pct=1.0,            # symmetric (rarely needed)
-            maker_size_base_pct=0.15,   # MM base = 15% × 200 = 30u per side
+            maker_size_base_pct=0.12,   # grid winner: 12% × 200 = 24u per side
             inv_skew_ticks=4,
             m14_trader="Mark 14",
             m38_trader="Mark 38",

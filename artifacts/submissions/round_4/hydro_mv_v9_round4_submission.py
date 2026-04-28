@@ -699,7 +699,7 @@ class HydroMVV9(BaseStrategy):
 # ── Config ────────────────────────────────────────────────────────────────────
 
 PRODUCTS = {'HYDROGEL_PACK': {'anchor_alpha': 0.005,
-                   'anchor_pos_threshold': 0.2,
+                   'anchor_pos_threshold': 0.3,
                    'anchor_price': 10000,
                    'ar_gain': 8.0,
                    'ar_smooth_half_life': 5,
@@ -715,7 +715,7 @@ PRODUCTS = {'HYDROGEL_PACK': {'anchor_alpha': 0.005,
                    'm14_trader': 'Mark 14',
                    'm38_trader': 'Mark 38',
                    'm38_weight': 0.0,
-                   'maker_size_base_pct': 0.15,
+                   'maker_size_base_pct': 0.12,
                    'mid_smooth_half_life': 20,
                    'position_limit': 200,
                    'quote_trace_enabled': True,
