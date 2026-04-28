@@ -1,5 +1,67 @@
 # Agent Handoff — Leo2 branch
 
+## 2026-04-27 - Claude: R4 baseline locked (full 3-day Pareto frontier)
+
+User pivot: "on s'en fou de day 3 10% c'est le backtest entier qui compte" — focus on
+full 3-day backtest for final submission (not D3 first 10% which is only the live preview).
+
+### R3 vs R4 data identity (verified)
+- **R3 D1 = R4 D1** (bit-for-bit, mid prices match)
+- **R3 D2 = R4 D2** (bit-for-bit)
+- **R4 D3 = NEW** (only new data added for R4)
+- Live IMC R4 = R4 D3 first 10% (1000 ticks, deterministic, oracle confirms +115,909 ceiling)
+
+### R4 variants tested on full 3-day backtest (realistic fill, HYDROGEL OFF)
+
+| Variant | PnL 3d | DD | Ratio | CV% |
+|---|---:|---:|---:|---:|
+| `r4_v52_minimal` | 140,488 | 61,195 | 2.30 | 52.8% |
+| `r4_v57_best_ratio` ★ | **151,596** | **61,560** | **2.46** | 47.8% |
+| `r4_v58_balanced` | 153,132 | 64,004 | 2.39 | 49.3% |
+| `r4_velvet_options_only` (baseline) | **157,712** | 72,582 | 2.17 | 52.9% |
+
+### R3 ideas re-tested on R4 — additive table
+
+| R3 idea | R4 PnL gain (3d) | Verdict |
+|---|---:|---|
+| **Toxic flow + passive unwind on VELVET** | **+11,108** | KEEP — biggest win |
+| **Tibo 2-sided MM on VEV_5200** | +4,295 | KEEP — measurable |
+| **Enable VEV_5300 (gamma+IV gate)** | +1,535 | KEEP — small but positive |
+| Tibo 2-sided MM on VEV_5400 | +286 | marginal |
+| Per-strike z=1.0 on VEV_5400 (v55) | -2,900 | KILLED — bleeds D3 |
+
+### Per-product 3-day PnL (baseline)
+
+| Product | PnL |
+|---|---:|
+| VELVETFRUIT_EXTRACT | 83,048 (54.4% of 152k) |
+| VEV_4000 | 22,272 |
+| VEV_4500 | 14,592 |
+| VEV_5100 | 17,963 |
+| VEV_5200 | 9,831 (Tibo MM) |
+| VEV_5000 | 8,186 |
+| VEV_5300 | 1,535 |
+| VEV_5400 | 286 |
+
+### HYDROGEL killed
+R3 best `v7b_guarded_loose` bleeds **-104k on R4 D3** (3-day total -23k). Anchor MM at 10000
+over-trades on D3, gets adversely picked. **Re-tune required**, until then stays disabled.
+
+### Files locked in `_BASELINE/`
+- `R4_v57_best_ratio__pnl152k_dd62k_ratio246.py` ★ default upload
+- `R4_v58_balanced__pnl153k_dd64k_ratio239.py`
+- `R4_BASELINE__r4_velvet_options_only__pnl158k_dd73k_ratio217.py` aggressive
+- `R4_v52_minimal__pnl140k_dd61k_ratio230.py`
+- `R4_ORACLE_OVERFIT__hardcoded_d3_trades__pnl116k_LIVE_ONLY.py` (research, not for upload)
+
+### Tools added for R4
+- `prosperity/strategies/round_4/oracle_replay_d3.py` — hardcoded oracle trades for D3
+- `scripts/oracle_max_pnl_r4.py` — sweep lookahead/threshold for max-PnL D3 ceiling
+- Helper functions in `config.py`: `_r4_gamma_params`, `_r4_tibo_vev_mm` (TTE override safe)
+- `.gitignore` wildcard patterns for all future rounds (auto-ignore JSON > 50MB)
+
+---
+
 ## 2026-04-25 22:55 - Claude: video-recap ideas tested, v24 confirmed leader
 
 User shared last year's competition video recap. Tested every claim:

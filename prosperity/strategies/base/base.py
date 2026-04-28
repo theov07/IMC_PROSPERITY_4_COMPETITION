@@ -45,13 +45,150 @@ class BaseStrategy(ABC):
         position = state.position.get(self.product, 0)
         book = snapshot_from_order_depth(self.product, order_depth)
 
-        return self.compute_orders(
+        orders, conversions = self.compute_orders(
             state=state,
             book=book,
             order_depth=order_depth,
             position=position,
             memory=memory,
         )
+
+        orders = self._apply_obi_size_tilt(state, position, orders, book, memory)
+        orders = self._apply_vol_size_cut(state, position, orders, book, memory)
+        orders = self._apply_cp_bias(state, position, orders, book, memory)
+        orders = self._apply_xa(state, position, orders, book, memory)
+        orders = self._apply_inventory_unwind(state, position, orders, book, memory)
+        return orders, conversions
+
+    def _apply_xa(self, state, position, orders, book, memory):
+        """Cross-asset shift from source trader flow on source symbol."""
+        p = self.params
+        if not bool(p.get("cross_asset_enabled", False)) or not orders:
+            return orders
+        ss = p.get("cross_asset_source_symbol", "")
+        st = p.get("cross_asset_source_trader", "")
+        if not ss or not st:
+            return orders
+        ts = int(getattr(state, "timestamp", 0))
+        buf = memory.setdefault("_xa_buf", [])
+        for t in ((state.market_trades or {}).get(ss) or []):
+            q = float(getattr(t, "quantity", 0))
+            if q <= 0:
+                continue
+            if getattr(t, "buyer", "") == st:
+                buf.append([ts, q])
+            elif getattr(t, "seller", "") == st:
+                buf.append([ts, -q])
+        cut = ts - int(p.get("cross_asset_window_ts", 10000))
+        while buf and buf[0][0] < cut:
+            buf.pop(0)
+        sig = float(p.get("cross_asset_weight", 0.0)) * sum(q for _, q in buf)
+        if abs(sig) <= float(p.get("cross_asset_threshold", 5.0)):
+            return orders
+        mx = float(p.get("cross_asset_max_offset", 2.0))
+        off = int(round(max(-mx, min(mx, sig * float(p.get("cross_asset_scale", 0.05))))))
+        if off == 0:
+            return orders
+        bb, ba = book.best_bid, book.best_ask
+        out = []
+        for o in orders:
+            np_ = int(o.price) + off
+            if o.quantity > 0 and ba is not None and np_ >= ba:
+                np_ = int(ba) - 1
+            elif o.quantity < 0 and bb is not None and np_ <= bb:
+                np_ = int(bb) + 1
+            out.append(Order(o.symbol, np_, o.quantity))
+        return out
+
+    def _apply_vol_size_cut(self, state, position, orders, book, memory):
+        """Defensive: cut sizes by `factor` when realized vol > threshold."""
+        p = self.params
+        if not bool(p.get("vol_size_cut_enabled", False)) or not orders or book.mid_price is None:
+            return orders
+        buf = memory.setdefault("_vol_buf", [])
+        buf.append(float(book.mid_price))
+        max_n = int(p.get("vol_size_cut_window", 50))
+        if len(buf) > max_n:
+            del buf[: len(buf) - max_n]
+        if len(buf) < 10:
+            return orders
+        rets = [(buf[i] - buf[i-1]) / max(buf[i-1], 1e-9) for i in range(1, len(buf))]
+        mean = sum(rets) / len(rets)
+        std = (sum((r - mean) ** 2 for r in rets) / len(rets)) ** 0.5
+        if std <= float(p.get("vol_size_cut_threshold", 0.005)):
+            return orders
+        cut = float(p.get("vol_size_cut_factor", 0.5))
+        return [Order(o.symbol, o.price, int(o.quantity * cut))
+                for o in orders if int(o.quantity * cut) != 0]
+
+    def _apply_inventory_unwind(self, state, position, orders, book, memory):
+        """Inventory-based unwind. Triggers when |pos|>threshold*limit, reduces toward target."""
+        p = self.params
+        if not bool(p.get("inv_unwind_enabled", False)):
+            return orders
+        limit = self.position_limit()
+        if limit <= 0:
+            return orders
+        if abs(position) < float(p.get("inv_unwind_threshold_pct", 0.8)) * limit:
+            return orders
+        excess = abs(position) - int(float(p.get("inv_unwind_target_pct", 0.5)) * limit)
+        if excess <= 0:
+            return orders
+        mode = str(p.get("inv_unwind_mode", "taker")).lower()
+        new_orders = list(orders)
+        if mode in ("taker", "both"):
+            delta = min(excess, int(p.get("inv_unwind_max_per_tick", 10)))
+            if position > 0 and book.best_bid is not None:
+                qty = -min(delta, int(book.best_bid_volume or 0))
+                if qty < 0:
+                    new_orders.append(Order(self.product, int(book.best_bid), qty))
+            elif position < 0 and book.best_ask is not None:
+                qty = min(delta, int(book.best_ask_volume or 0))
+                if qty > 0:
+                    new_orders.append(Order(self.product, int(book.best_ask), qty))
+        if mode in ("passive", "both"):
+            psize = min(int(p.get("inv_unwind_passive_size", 20)), excess)
+            offset = int(p.get("inv_unwind_passive_offset", 0))
+            if position > 0 and book.best_ask is not None:
+                price = int(book.best_ask) + offset
+                if book.best_bid is not None and price <= int(book.best_bid):
+                    price = int(book.best_bid) + 1
+                new_orders.append(Order(self.product, price, -psize))
+            elif position < 0 and book.best_bid is not None:
+                price = int(book.best_bid) - offset
+                if book.best_ask is not None and price >= int(book.best_ask):
+                    price = int(book.best_ask) - 1
+                new_orders.append(Order(self.product, price, psize))
+        return new_orders
+
+    def _apply_cp_bias(self, state, position, orders, book, memory):
+        """Per-product cp_bias overlay (with optional regime gate via vol buffer)."""
+        p = self.params
+        if not bool(p.get("counterparty_bias_enabled", False)):
+            return orders
+        if bool(p.get("_cp_bias_handled_internally", False)):
+            return orders
+        if not orders:
+            return orders
+        cp_signal = self._counterparty_signal(state, memory)
+        cp_threshold = float(p.get("cp_signal_threshold", 5.0))
+        if abs(cp_signal) <= cp_threshold:
+            return orders
+        cp_max = float(p.get("cp_max_anchor_offset", 3.0))
+        cp_scale = float(p.get("cp_anchor_scale_per_unit", 0.10))
+        cp_offset = int(round(max(-cp_max, min(cp_max, cp_signal * cp_scale))))
+        if cp_offset == 0:
+            return orders
+        shifted = []
+        bb, ba = book.best_bid, book.best_ask
+        for o in orders:
+            np_ = int(o.price) + cp_offset
+            if o.quantity > 0 and ba is not None and np_ >= ba:
+                np_ = int(ba) - 1
+            elif o.quantity < 0 and bb is not None and np_ <= bb:
+                np_ = int(bb) + 1
+            shifted.append(Order(o.symbol, np_, o.quantity))
+        return shifted
 
     @abstractmethod
     def compute_orders(
@@ -65,35 +202,16 @@ class BaseStrategy(ABC):
         """Produce orders and conversion request for this product."""
         ...
 
-    # ------------------------------------------------------------------
-    # Shared price utilities (call from any strategy)
-    # ------------------------------------------------------------------
     def _microprice(self, book: "BookSnapshot") -> float:
-        """Volume-weighted microprice using all available book levels.
-
-        bid_vwap = Σ(price × vol) / Σvol  across all bid levels
-        ask_vwap = same for asks
-        microprice = (bid_vwap × ask_total + ask_vwap × bid_total) / (bid_total + ask_total)
-
-        One side empty OR both sides empty → returns the previous microprice
-        stored in self._memory["_microprice_last"] (or 0.0 on the very first tick).
-
-        Stores result in self._memory["_microprice_last"].
-        Requires self._memory to be set (done automatically by on_tick).
-        """
+        """Volume-weighted microprice across all book levels."""
         bid_total = sum(v for _, v in book.bid_levels)
         ask_total = sum(v for _, v in book.ask_levels)
-
         prev = self._memory.get("_microprice_last", 0.0)
-
         if bid_total == 0 or ask_total == 0:
-            # One or both sides empty: can't compute a meaningful cross-side price
             return float(prev)
-
         bid_vwap = sum(p * v for p, v in book.bid_levels) / bid_total
         ask_vwap = sum(p * v for p, v in book.ask_levels) / ask_total
         result = (bid_vwap * ask_total + ask_vwap * bid_total) / (bid_total + ask_total)
-
         self._memory["_microprice_last"] = result
         return result
 
@@ -318,3 +436,154 @@ class BaseStrategy(ABC):
 
     def sell_capacity(self, position: int) -> int:
         return max(0, self.position_limit() + position)
+
+    # ------------------------------------------------------------------
+    # Trend gate (skip mean-rev BUY in downtrend, mean-rev SELL in uptrend)
+    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Order Book Imbalance (OBI) SIZE tilt — adjust own quote SIZES (not prices).
+    # Avoids spread cost from price tilt. Captures alpha through inventory shift.
+    # ------------------------------------------------------------------
+    def _apply_obi_size_tilt(self, state, position, orders, book, memory):
+        """L3 OBI size tilt: boost favored side, reduce opposite side."""
+        p = self.params
+        if not bool(p.get("obi_size_enabled", False)):
+            return orders
+        levels = int(p.get("obi_size_levels", 3))
+        bid_total = sum(v for _, v in (book.bid_levels or [])[:levels])
+        ask_total = sum(v for _, v in (book.ask_levels or [])[:levels])
+        total = bid_total + ask_total
+        if total == 0:
+            return orders
+        obi = (bid_total - ask_total) / total
+        if abs(obi) < float(p.get("obi_size_threshold", 0.005)):
+            return orders
+        boost = float(p.get("obi_size_boost_factor", 1.5))
+        reduce = float(p.get("obi_size_reduce_factor", 0.7))
+        bullish = obi > 0
+        adjusted = []
+        for o in orders:
+            if o.quantity > 0:
+                factor = boost if bullish else reduce
+            elif o.quantity < 0:
+                factor = reduce if bullish else boost
+            else:
+                adjusted.append(o); continue
+            new_qty = int(o.quantity * factor)
+            if new_qty > 0:
+                new_qty = min(new_qty, max(0, self.position_limit() - position))
+            elif new_qty < 0:
+                new_qty = max(new_qty, -max(0, self.position_limit() + position))
+            if new_qty != 0:
+                adjusted.append(Order(o.symbol, o.price, new_qty))
+        return adjusted
+
+    def _counterparty_signal(
+        self,
+        state: TradingState,
+        memory: Dict[str, Any],
+    ) -> float:
+        """Counterparty-flow weighted signal with optional volume-conditional gating.
+
+        Maintains a rolling buffer of (timestamp, trader_id, signed_qty) for the last
+        `cp_window_ts` timestamp units. Signed qty = +qty when trader is buyer, -qty
+        when trader is seller. Aggregates per trader, applies a per-trader weight,
+        returns weighted sum.
+
+        Conditional gating (opt-in): for traders listed in `cp_conditional_traders`,
+        only apply their full weight when their current rolling-window |net_volume|
+        exceeds historical mean by `cp_conditional_zthresh` standard deviations.
+        Otherwise apply `cp_conditional_baseline_weight` (default 0).
+
+        Params:
+          cp_window_ts                    : rolling window in timestamp units (default 10000)
+          cp_trader_weights               : dict trader_id -> weight
+          cp_conditional_traders          : list of traders to gate (default [])
+          cp_conditional_zthresh          : z-score threshold (default 2.0)
+          cp_conditional_stats_window_ts  : history window for stats (default 50000 = 500 ticks)
+          cp_conditional_min_samples      : min samples before gating activates (default 50)
+          cp_conditional_baseline_weight  : weight applied when below threshold (default 0.0)
+
+        Returns: weighted signed signal (units = contracts).
+        """
+        window_ts = int(self.params.get("cp_window_ts", 10000))
+        weights = self.params.get("cp_trader_weights", {
+            "Mark 55": +1.0, "Mark 67": +1.0,
+            "Mark 01": -1.0, "Mark 14": -1.0,
+        })
+        cond_traders = set(self.params.get("cp_conditional_traders", []) or [])
+        cond_zthresh = float(self.params.get("cp_conditional_zthresh", 2.0))
+        cond_stats_ts = int(self.params.get("cp_conditional_stats_window_ts", 50000))
+        cond_min_samples = int(self.params.get("cp_conditional_min_samples", 50))
+        cond_baseline = float(self.params.get("cp_conditional_baseline_weight", 0.0))
+
+        ts_now = int(getattr(state, "timestamp", 0))
+
+        # Append this tick's trades to rolling buffer
+        buf = memory.setdefault("_cp_buf", [])  # list of [ts, trader, signed_qty]
+        try:
+            mt = state.market_trades
+            trades = (mt or {}).get(self.product, []) or []
+        except Exception:
+            trades = []
+        for t in trades:
+            buyer = getattr(t, "buyer", None) or ""
+            seller = getattr(t, "seller", None) or ""
+            qty = float(getattr(t, "quantity", 0))
+            if qty <= 0:
+                continue
+            if buyer:
+                buf.append([ts_now, buyer, qty])
+            if seller:
+                buf.append([ts_now, seller, -qty])
+
+        # Drop old entries
+        cutoff = ts_now - window_ts
+        if buf and buf[0][0] < cutoff:
+            i = 0
+            while i < len(buf) and buf[i][0] < cutoff:
+                i += 1
+            del buf[:i]
+
+        # Aggregate per trader
+        per_trader = {}
+        for _, trader, signed in buf:
+            per_trader[trader] = per_trader.get(trader, 0.0) + signed
+
+        # Conditional gating: maintain stats history for designated traders
+        gates = {}  # trader -> effective weight multiplier (1.0 = full, baseline/w otherwise)
+        if cond_traders:
+            stats_buf = memory.setdefault("_cp_stats_buf", {})
+            cond_cut = ts_now - cond_stats_ts
+            for trader in cond_traders:
+                cur_abs = abs(per_trader.get(trader, 0.0))
+                hist = stats_buf.setdefault(trader, [])
+                hist.append([ts_now, cur_abs])
+                while hist and hist[0][0] < cond_cut:
+                    hist.pop(0)
+                if len(hist) < cond_min_samples:
+                    gates[trader] = 1.0  # not enough data → behave as v5 (always-on)
+                    continue
+                vols = [s[1] for s in hist]
+                n = len(vols)
+                mean = sum(vols) / n
+                var = sum((v - mean) ** 2 for v in vols) / n
+                std = math.sqrt(var) if var > 0 else 0.0
+                z = (cur_abs - mean) / std if std > 0 else (cond_zthresh + 1 if cur_abs > 0 else 0.0)
+                gates[trader] = 1.0 if z >= cond_zthresh else 0.0
+
+        # Apply weights (with conditional gating where applicable)
+        signal = 0.0
+        for trader, net in per_trader.items():
+            w = weights.get(trader, 0.0)
+            if trader in cond_traders:
+                # Linearly blend full-weight and baseline based on gate
+                g = gates.get(trader, 1.0)
+                w = g * w + (1.0 - g) * cond_baseline
+            signal += w * net
+
+        memory["_cp_signal"] = signal
+        memory["_cp_per_trader"] = per_trader
+        if cond_traders:
+            memory["_cp_gates"] = gates
+        return signal
