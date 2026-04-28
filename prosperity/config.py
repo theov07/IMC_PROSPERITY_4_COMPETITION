@@ -275,6 +275,8 @@ ROUNDS: Dict[int, Dict[str, ProductConfig]] = {
     5: ROUND_5,
 }
 
+_R5_PRODUCTS = list(ROUND_5.keys())
+
 
 # ── Per-member overrides (for experimentation) ──────────────────────
 
@@ -16643,6 +16645,84 @@ MEMBER_OVERRIDES["tibo_r5_v5"] = {
 }
 
 
+# ── Round 5 — Tibo's trend-following strategies ──────────────────────────────
+
+def _r5_trend_v2(sym: str, ema_hl: int = 100, threshold: float = 80.0, exit_thr: float = 30.0, warmup: int = 0) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym,
+        strategy="trend_follow_v2",
+        position_limit=10,
+        params=dict(
+            ema_half_life=ema_hl,
+            threshold=threshold,
+            exit_threshold=exit_thr,
+            warmup_ticks=warmup,
+            position_limit=10,
+            ts_increment=100,
+            last_ts_value=999900,
+            log_flush_ts=1000,
+        ),
+    )
+
+
+
+# ── Round 5 — tibo_r5_v6: v5 + trend_v2 where it beats naive_mm ──────────────
+# 3-day realistic backtest: 733,918 PnL (+142,704 over tibo_r5_v5's 591,214)
+# trend_v2 wins: MICROCHIP_SQUARE (+46k), PANEL_1X2 (+31k), ROBOT_MOPPING (+25k),
+#   PEBBLES_XS (+14k), UV_VISOR_AMBER (+7k), SLEEP_POD_NYLON (+5k),
+#   SLEEP_POD_POLYESTER (+5k), SLEEP_POD_COTTON (+3k), ROBOT_IRONING (+3k),
+#   OXYGEN_SHAKE_GARLIC (+3k)
+# v5 strategy kept where it wins: PEBBLES_XL (arb), PANEL_1X4, SLEEP_POD_SUEDE,
+#   TRANSLATOR_VOID_BLUE, MICROCHIP_TRIANGLE, PANEL_2X4, MICROCHIP_OVAL, GALAXY_SOUNDS_BLACK_HOLES
+MEMBER_OVERRIDES["tibo_r5_v6"] = {
+    5: {
+        # ── PEBBLES: arb on XL only; trend_v2 on XS (beats arb by +13,701); naive MM on L/M/S ──
+        **{
+            sym: ProductConfig(
+                symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                params=dict(
+                    partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                    sum_target=50000.0, edge_ticks=7.0, passive_half_spread=6.0,
+                    taker_size=10, passive_size=5, ewma_alpha=0.05,
+                    position_limit=10, last_ts_value=999900,
+                ),
+            )
+            for sym in ["PEBBLES_XL"]
+        },
+        "PEBBLES_XS": _r5_trend_v2("PEBBLES_XS", ema_hl=150, threshold=250, exit_thr=80),
+        "PEBBLES_L": ProductConfig(symbol="PEBBLES_L", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_M": ProductConfig(symbol="PEBBLES_M", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_S": ProductConfig(symbol="PEBBLES_S", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        # ── ROBOT_DISHES: AR1 mean-reversion (best single product, +140k) ────
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(entry_threshold=20.0, taker_size=10, passive_size=0,
+                        exit_ticks=0, position_limit=10, last_ts_value=999900),
+        ),
+        # ── SNACKPACK: naive MM (all 5) ──────────────────────────────────────
+        **{
+            sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=dict(
+                maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ))
+            for sym in ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO",
+                        "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY"]
+        },
+        # ── Skip SLEEP_POD_LAMB_WOOL (intra-day spike, consistently loses) ───
+        "SLEEP_POD_LAMB_WOOL": None,
+        # ── trend_v2 winners (beat naive_mm in v5) ──────────────────────────
+        "UV_VISOR_AMBER": _r5_trend_v2("UV_VISOR_AMBER", ema_hl=100, threshold=80, exit_thr=30),
+        "ROBOT_MOPPING": _r5_trend_v2("ROBOT_MOPPING", ema_hl=150, threshold=100, exit_thr=40),
+        "SLEEP_POD_COTTON": _r5_trend_v2("SLEEP_POD_COTTON", ema_hl=100, threshold=80, exit_thr=30),
+        "SLEEP_POD_NYLON": _r5_trend_v2("SLEEP_POD_NYLON", ema_hl=100, threshold=80, exit_thr=30),
+        "SLEEP_POD_POLYESTER": _r5_trend_v2("SLEEP_POD_POLYESTER", ema_hl=150, threshold=600, exit_thr=150),
+        "PANEL_1X2": _r5_trend_v2("PANEL_1X2", ema_hl=100, threshold=80, exit_thr=30),
+        "ROBOT_IRONING": _r5_trend_v2("ROBOT_IRONING", ema_hl=150, threshold=100, exit_thr=40),
+        "OXYGEN_SHAKE_GARLIC": _r5_trend_v2("OXYGEN_SHAKE_GARLIC", ema_hl=150, threshold=700, exit_thr=150),
+        "MICROCHIP_SQUARE": _r5_trend_v2("MICROCHIP_SQUARE", ema_hl=100, threshold=250, exit_thr=80),
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
@@ -16653,4 +16733,3 @@ def get_round_config(round_num: int, member: str = "champion") -> Dict[str, Prod
         else:
             base[symbol] = cfg
     return base
-

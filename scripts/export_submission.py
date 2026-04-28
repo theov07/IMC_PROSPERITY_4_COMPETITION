@@ -246,6 +246,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "velvet_strat_v3":     ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetStratV3"),
     "velvet_strat_v3_mm":  ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VelvetMMV3"),
     "velvet_strat_v3_opt": ("prosperity/strategies/round_3/tibo/velvet_strat_v3.py", "VEVOptionMMV3"),
+    # ── Round 5 ──
+    "trend_follow_v2":  ("prosperity/strategies/round_5/tibo/trend_follow_v2.py", "TrendFollowV2"),
+    "pebbles_arb_v1":   ("prosperity/strategies/round_5/tibo/pebbles_arb_v1.py", "PebblesArbV1"),
+    "ar1_mean_rev_v1":  ("prosperity/strategies/round_5/tibo/ar1_mean_rev_v1.py", "AR1MeanRevV1"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -1177,6 +1181,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "oracle_replay_r4d3": ("prosperity/strategies/round_4/oracle_replay_d3.py", "OracleReplayR4D3Strategy"),
     "forced_long_buyer": ("prosperity/strategies/round_4/forced_long_buyer.py", "ForcedLongBuyerStrategy"),
     "live_alpha_probe": ("prosperity/strategies/round_4/live_alpha_probe.py", "LiveAlphaProbeStrategy"),
+    # ── Round 5 ──
+    "trend_follow_v2":  ("prosperity/strategies/round_5/tibo/trend_follow_v2.py", "TrendFollowV2"),
+    "pebbles_arb_v1":   ("prosperity/strategies/round_5/tibo/pebbles_arb_v1.py", "PebblesArbV1"),
+    "ar1_mean_rev_v1":  ("prosperity/strategies/round_5/tibo/ar1_mean_rev_v1.py", "AR1MeanRevV1"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
@@ -2109,6 +2117,10 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "oracle_replay_r4d3": ("prosperity/strategies/round_4/oracle_replay_d3.py", "OracleReplayR4D3Strategy"),
     "forced_long_buyer": ("prosperity/strategies/round_4/forced_long_buyer.py", "ForcedLongBuyerStrategy"),
     "live_alpha_probe": ("prosperity/strategies/round_4/live_alpha_probe.py", "LiveAlphaProbeStrategy"),
+    # ── Round 5 ──
+    "trend_follow_v2":  ("prosperity/strategies/round_5/tibo/trend_follow_v2.py", "TrendFollowV2"),
+    "pebbles_arb_v1":   ("prosperity/strategies/round_5/tibo/pebbles_arb_v1.py", "PebblesArbV1"),
+    "ar1_mean_rev_v1":  ("prosperity/strategies/round_5/tibo/ar1_mean_rev_v1.py", "AR1MeanRevV1"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
