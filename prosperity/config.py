@@ -235,7 +235,43 @@ ROUND_4: Dict[str, ProductConfig] = {
         for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
     },
 }
-ROUND_5: Dict[str, ProductConfig] = {}
+_R5_PRODUCTS = [
+    "GALAXY_SOUNDS_DARK_MATTER", "GALAXY_SOUNDS_BLACK_HOLES",
+    "GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_SOLAR_WINDS",
+    "GALAXY_SOUNDS_SOLAR_FLAMES",
+    "SLEEP_POD_SUEDE", "SLEEP_POD_LAMB_WOOL", "SLEEP_POD_POLYESTER",
+    "SLEEP_POD_NYLON", "SLEEP_POD_COTTON",
+    "MICROCHIP_CIRCLE", "MICROCHIP_OVAL", "MICROCHIP_SQUARE",
+    "MICROCHIP_RECTANGLE", "MICROCHIP_TRIANGLE",
+    "PEBBLES_XS", "PEBBLES_S", "PEBBLES_M", "PEBBLES_L", "PEBBLES_XL",
+    "ROBOT_VACUUMING", "ROBOT_MOPPING", "ROBOT_DISHES",
+    "ROBOT_LAUNDRY", "ROBOT_IRONING",
+    "UV_VISOR_YELLOW", "UV_VISOR_AMBER", "UV_VISOR_ORANGE",
+    "UV_VISOR_RED", "UV_VISOR_MAGENTA",
+    "TRANSLATOR_SPACE_GRAY", "TRANSLATOR_ASTRO_BLACK",
+    "TRANSLATOR_ECLIPSE_CHARCOAL", "TRANSLATOR_GRAPHITE_MIST",
+    "TRANSLATOR_VOID_BLUE",
+    "PANEL_1X2", "PANEL_2X2", "PANEL_1X4", "PANEL_2X4", "PANEL_4X4",
+    "OXYGEN_SHAKE_MORNING_BREATH", "OXYGEN_SHAKE_EVENING_BREATH",
+    "OXYGEN_SHAKE_MINT", "OXYGEN_SHAKE_CHOCOLATE", "OXYGEN_SHAKE_GARLIC",
+    "SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO",
+    "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY",
+]
+ROUND_5: Dict[str, ProductConfig] = {
+    sym: ProductConfig(
+        symbol=sym,
+        strategy="naive_tight_mm",
+        position_limit=10,
+        params=dict(
+            maker_size=5,
+            tighten_ticks=1,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    )
+    for sym in _R5_PRODUCTS
+}
 
 
 ROUNDS: Dict[int, Dict[str, ProductConfig]] = {
@@ -16341,6 +16377,37 @@ MEMBER_OVERRIDES["r3_combined_best"] = {
         **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
     },
 }
+
+
+# ── Round 5 baselines ──────────────────────────────────────────────
+MEMBER_OVERRIDES["r5_baseline_mm"] = {5: {sym: ROUND_5[sym] for sym in _R5_PRODUCTS}}
+
+# r5_v2: disable the 10 losing products from baseline (40 winners only)
+_R5_LOSERS = [
+    "OXYGEN_SHAKE_MINT", "TRANSLATOR_GRAPHITE_MIST", "PEBBLES_XS",
+    "ROBOT_VACUUMING", "PANEL_4X4", "TRANSLATOR_SPACE_GRAY",
+    "GALAXY_SOUNDS_SOLAR_FLAMES", "UV_VISOR_MAGENTA",
+    "ROBOT_MOPPING", "PANEL_1X2", "PEBBLES_M", "SLEEP_POD_LAMB_WOOL",
+]
+MEMBER_OVERRIDES["r5_v2_winners_only"] = {
+    5: {sym: (None if sym in _R5_LOSERS else ROUND_5[sym]) for sym in _R5_PRODUCTS}
+}
+
+# r5_v3: winners + maker_size=10 (full position limit)
+def _r5_winners_with_size(maker_size: int, tighten: int = 1):
+    return {
+        5: {
+            sym: (None if sym in _R5_LOSERS else _override(
+                ROUND_5[sym], maker_size=maker_size, tighten_ticks=tighten,
+            ))
+            for sym in _R5_PRODUCTS
+        }
+    }
+
+
+MEMBER_OVERRIDES["r5_v3_size10"] = _r5_winners_with_size(10, 1)
+MEMBER_OVERRIDES["r5_v3_size10_t2"] = _r5_winners_with_size(10, 2)
+MEMBER_OVERRIDES["r5_v3_size7_t1"] = _r5_winners_with_size(7, 1)
 
 
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
