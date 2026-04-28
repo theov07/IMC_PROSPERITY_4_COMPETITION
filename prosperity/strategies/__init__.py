@@ -214,6 +214,8 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydro_mv_v5":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v5", "HydroMVV5"),
     # mv_v6: dynamic anchor variants (slow_ewma / rolling_median / regime_switch / inv_protected)
     "hydro_mv_v6":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v6", "HydroMVV6"),
+    # mv_v7: two-component MM (anchor AR taker + fast passive MM both sides)
+    "hydro_mv_v7":                 ("prosperity.strategies.round_4.tibo.hydro_mv_v7", "HydroMVV7"),
     # v201: Mark 14 informed-trader gate (3 variants)
     "hydro_mm_v201_ruled":         ("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201Ruled"),
     "hydro_mm_v201_influenced":    ("prosperity.strategies.round_4.tibo.hydro_strat_v201_influenced", "HydroMMV201Influenced"),

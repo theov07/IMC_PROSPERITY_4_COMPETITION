@@ -253,11 +253,12 @@ def _merge_equity(bt_days: List[Dict], round_num: int, days: List[str], data_dir
 # ── Feature extraction ────────────────────────────────────────────────────────
 
 def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -> Dict[str, Any]:
-    """Extract v5/v6-specific time series from feature_ticks and quotes."""
+    """Extract v5/v6/v7-specific time series from feature_ticks and quotes."""
     (fv_ts, fv_vals, dev_ts, dev_vals, m14_ts, m14_vals,
      anc_ts, anc_vals, mom_ts, mom_vals,
      guard_ts, guard_vals, tsell_ts, tsell_vals, tbuy_ts, tbuy_vals,
-     fsz_ts, f_bid_sz, f_ask_sz) = ([] for _ in range(19))
+     fsz_ts, f_bid_sz, f_ask_sz,
+     fmid_ts, fmid_vals, alim_ts, alim_vals) = ([] for _ in range(23))
 
     for ft in features:
         if ft.get("symbol") != product:
@@ -271,18 +272,23 @@ def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -
         grd  = _to_float(ft.get("guard"))
         ts_  = _to_float(ft.get("taker_sell"))
         tb_  = _to_float(ft.get("taker_buy"))
-        bsz  = _to_float(ft.get("bid_size"))
-        asz  = _to_float(ft.get("ask_size"))
-        if fv  is not None: fv_ts.append(ts);     fv_vals.append(fv)
-        if dv  is not None: dev_ts.append(ts);    dev_vals.append(dv)
-        if m14 is not None: m14_ts.append(ts);    m14_vals.append(m14)
-        if anc is not None: anc_ts.append(ts);    anc_vals.append(anc)
-        if mom is not None: mom_ts.append(ts);    mom_vals.append(mom)
-        if grd is not None: guard_ts.append(ts);  guard_vals.append(grd)
-        if ts_ is not None: tsell_ts.append(ts);  tsell_vals.append(ts_)
-        if tb_ is not None: tbuy_ts.append(ts);   tbuy_vals.append(tb_)
-        if bsz is not None and asz is not None:
+        # v6 uses bid_size/ask_size; v7 uses mm_bid_qty/mm_ask_qty
+        bsz  = _to_float(ft.get("bid_size") if ft.get("bid_size") is not None else ft.get("mm_bid_qty"))
+        asz  = _to_float(ft.get("ask_size") if ft.get("ask_size") is not None else ft.get("mm_ask_qty"))
+        fmid = _to_float(ft.get("fast_mid"))          # v7: reactive EWMA fair value for MM
+        alim = _to_float(ft.get("anchor_limit"))      # v7: AR taker position boundary
+        if fv   is not None: fv_ts.append(ts);     fv_vals.append(fv)
+        if dv   is not None: dev_ts.append(ts);    dev_vals.append(dv)
+        if m14  is not None: m14_ts.append(ts);    m14_vals.append(m14)
+        if anc  is not None: anc_ts.append(ts);    anc_vals.append(anc)
+        if mom  is not None: mom_ts.append(ts);    mom_vals.append(mom)
+        if grd  is not None: guard_ts.append(ts);  guard_vals.append(grd)
+        if ts_  is not None: tsell_ts.append(ts);  tsell_vals.append(ts_)
+        if tb_  is not None: tbuy_ts.append(ts);   tbuy_vals.append(tb_)
+        if bsz  is not None and asz is not None:
             fsz_ts.append(ts); f_bid_sz.append(bsz); f_ask_sz.append(asz)
+        if fmid is not None: fmid_ts.append(ts);   fmid_vals.append(fmid)
+        if alim is not None: alim_ts.append(ts);   alim_vals.append(alim)
 
     # sizes: prefer quote-trace from features; fall back to quotes buffer
     if not fsz_ts:
@@ -303,6 +309,8 @@ def _extract_v5_series(features: List[Dict], quotes: List[Dict], product: str) -
         "tsell_ts":   tsell_ts, "tsell":       tsell_vals,
         "tbuy_ts":    tbuy_ts,  "tbuy":        tbuy_vals,
         "size_ts":    fsz_ts,   "bid_size":    f_bid_sz,  "ask_size": f_ask_sz,
+        "fmid_ts":    fmid_ts,  "fmid":        fmid_vals,
+        "alim_ts":    alim_ts,  "alim":        alim_vals,
     }
 
 
@@ -509,10 +517,15 @@ def _parse_lambdalog_entries(runtime_logs: list, default_product: str = "") -> L
 
 
 def _load_from_imclog(path: Path) -> Dict[str, Any]:
-    """Load ALL visualizer data from a single IMC log file.
+    """Load ALL visualizer data from a single IMC log file (.log or .json).
+
+    Accepts both the .log format (has tradeHistory + activitiesLog + lambdaLog)
+    and the .json format (has activitiesLog + graphLog but NO tradeHistory).
+    When a .json file is loaded, automatically looks for a companion .log file
+    in the same directory to recover the trade history.
 
     Returns the same data shape as the backtest pipeline so generate_html()
-    works identically for both modes. No backtest data is mixed in.
+    works identically for both modes.
     """
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -524,13 +537,31 @@ def _load_from_imclog(path: Path) -> Dict[str, Any]:
     market_prices, equity = _parse_activities(activities_text)
 
     trade_raw = raw.get("tradeHistory") or raw.get("tradeLog") or []
+    runtime_logs = raw.get("logs", [])
+
+    # .json files have no tradeHistory — try companion .log file for trade data
+    if not trade_raw and path.suffix == ".json":
+        companion = path.with_suffix(".log")
+        if companion.exists():
+            print(f"  Auto-loading trade history from companion {companion.name} ...")
+            try:
+                companion_raw = json.loads(companion.read_text(encoding="utf-8"))
+                trade_raw = companion_raw.get("tradeHistory") or companion_raw.get("tradeLog") or []
+                # Also use lambdaLog from the .log if the .json lacks it
+                if not runtime_logs:
+                    runtime_logs = companion_raw.get("logs", [])
+            except Exception as e:
+                print(f"  Warning: could not read companion .log file: {e}")
+        else:
+            print(f"  ⚠  No tradeHistory in .json and no companion {companion.name} found — market trades will be empty")
+
     our_fills, market_trades = _parse_trade_history(trade_raw)
 
     # Infer primary product from our fills so old logs (without "product" in blk
     # dicts) still get their feature entries attributed to the right symbol.
     _syms = [f["symbol"] for f in our_fills if f.get("symbol")]
     primary_product = max(set(_syms), key=_syms.count) if _syms else ""
-    features = _parse_lambdalog_entries(raw.get("logs", []), default_product=primary_product)
+    features = _parse_lambdalog_entries(runtime_logs, default_product=primary_product)
 
     strategy_name = raw.get("submissionId", path.stem)[:32]
     n_feat = len([f for f in features if "FairValue" in f or "DevSmooth" in f])
@@ -623,9 +654,17 @@ def _price_chart_js_v5(
     if v5.get("anc_ts"):
         anc_ts = _json_list(v5["anc_ts"])
         anc_v  = _json_list(v5["anc"])
-        traces.append(f"""{{x:{anc_ts},y:{anc_v},name:'Anchor',mode:'lines',
+        traces.append(f"""{{x:{anc_ts},y:{anc_v},name:'Anchor (slow)',mode:'lines',
           line:{{color:'#fab387',width:1.2,dash:'dash'}},opacity:0.8,
           hovertemplate:'Anchor: %{{y:.2f}}<extra></extra>'}}""")
+
+    # FastMid — v7 reactive EWMA used as MM fair value (tracks price closely)
+    if v5.get("fmid_ts"):
+        fmid_ts = _json_list(v5["fmid_ts"])
+        fmid_v  = _json_list(v5["fmid"])
+        traces.append(f"""{{x:{fmid_ts},y:{fmid_v},name:'FastMid (MM ref)',mode:'lines',
+          line:{{color:'#a6e3a1',width:1.2,dash:'dash'}},opacity:0.85,
+          hovertemplate:'FastMid: %{{y:.2f}}<extra></extra>'}}""")
 
     # Our submitted passive quotes (subsample every 5th for file size)
     q_prod = [q for q in quotes if q.get("symbol") == product]
@@ -802,14 +841,31 @@ def _position_sizing_chart_js(
         bsz   = _json_list(v5["bid_size"])
         asz   = _json_list(v5["ask_size"])
         size_traces = f""",{{
-      x:{sz_ts},y:{bsz},name:'Bid size',mode:'lines',
+      x:{sz_ts},y:{bsz},name:'Bid size (MM)',mode:'lines',
       line:{{color:'#74c7ec',width:1,dash:'dot'}},yaxis:'y2',
       hovertemplate:'bid_sz: %{{y}}<extra></extra>'
     }},{{
-      x:{sz_ts},y:{asz},name:'Ask size',mode:'lines',
+      x:{sz_ts},y:{asz},name:'Ask size (MM)',mode:'lines',
       line:{{color:'#f38ba8',width:1,dash:'dot'}},yaxis:'y2',
       hovertemplate:'ask_sz: %{{y}}<extra></extra>'
     }}"""
+
+    # v7: anchor_limit reference lines — show the AR taker position boundary
+    anchor_shapes = ""
+    if v5.get("alim_ts") and v5["alim_ts"]:
+        alim = v5["alim"][0]  # static per session
+        anchor_shapes = f"""
+        {{type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:{alim},y1:{alim},
+          line:{{color:'#fab387',width:1,dash:'dot'}}}},
+        {{type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:-{alim},y1:-{alim},
+          line:{{color:'#fab387',width:1,dash:'dot'}}}},"""
+        anchor_annot = f"""
+        {{xref:'paper',yref:'y',x:0.99,y:{alim},text:'anchor +{int(alim)}u',
+          showarrow:false,font:{{color:'#fab387',size:9}},xanchor:'right'}},
+        {{xref:'paper',yref:'y',x:0.99,y:-{alim},text:'anchor -{int(alim)}u',
+          showarrow:false,font:{{color:'#fab387',size:9}},xanchor:'right'}},"""
+    else:
+        anchor_annot = ""
 
     layout_extra = """
       yaxis2: {title:'quote size',overlaying:'y',side:'right',gridcolor:'#313244',
@@ -819,9 +875,11 @@ def _position_sizing_chart_js(
   function plot_pos_{safe}() {{
     Plotly.newPlot('pos_{safe}',[{pos_trace}{size_traces}],
     Object.assign({{}},{_layout_js(layout_extra)},{{
-      title:'{product} — Position (left) + Quote Sizes / Inventory Bias (right)',
+      title:'{product} — Position (left) + MM Quote Sizes (right)',
       yaxis:{{title:'units',gridcolor:'#313244',zeroline:true}},
       margin:{{t:30,b:36,l:65,r:65}},
+      shapes:[{anchor_shapes}],
+      annotations:[{anchor_annot}],
     }}),{{responsive:true}});
   }}"""
 
@@ -1285,8 +1343,10 @@ def generate_html(
     <span class="legend-item">● blue = MAKER BUY</span>
     <span class="legend-item">● pink = MAKER SELL</span>
     <span class="legend-item">■ = other trader</span>
-    <span class="legend-item">yellow = AR FairValue</span>
-    <span class="legend-item">orange dashed = Anchor (v6)</span>
+    <span class="legend-item">yellow = AR FairValue (slow)</span>
+    <span class="legend-item">orange dashed = Anchor (v6/v7 slow)</span>
+    <span class="legend-item">green dashed = FastMid (v7 MM reference)</span>
+    <span class="legend-item">orange dotted = anchor_limit ± (v7 AR taker boundary)</span>
     <span class="legend-item">green band = BUY entry zone (FV - {taker_edge})</span>
     <span class="legend-item">red band = SELL entry zone (FV + {taker_edge})</span>
   </div>
@@ -1371,7 +1431,10 @@ def main() -> None:
             "Mode A — backtest analysis:\n"
             "  python -m prosperity.tooling.strategy_viz --backtest-json artifacts/backtest_results/round_4/hydro_mv_v5_best.json\n\n"
             "Mode B — live IMC log analysis:\n"
-            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.log\n\n"
+            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.log\n"
+            "  python -m prosperity.tooling.strategy_viz --log logs/round_4/tibo/hydro_mv_v5.json\n\n"
+            "Both .log and .json IMC files are accepted. When a .json is passed, the tool\n"
+            "automatically loads trade history from the sibling .log file (same name, .log ext).\n"
             "The two modes are mutually exclusive. --log uses ONLY live data; no backtest\n"
             "features are mixed in."
         ),
@@ -1379,7 +1442,10 @@ def main() -> None:
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--backtest-json", help="Path to backtest result JSON")
-    group.add_argument("--log",           help="Path to IMC submission log (.log file)")
+    group.add_argument("--log",           help="Path to IMC submission log (.log or .json file). "
+                                               "When passing a .json file that lacks tradeHistory, "
+                                               "the tool auto-loads the companion .log file from "
+                                               "the same directory.")
     parser.add_argument("--product",       default=None)
     parser.add_argument("--out",           default=None)
     parser.add_argument("--data-dir",      default=None)

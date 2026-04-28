@@ -222,6 +222,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "hydro_mv_v4":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v4.py", "HydroMVV4"),
     "hydro_mv_v5":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v5.py", "HydroMVV5"),
     "hydro_mv_v6":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v6.py", "HydroMVV6"),
+    "hydro_mv_v7":                 ("prosperity/strategies/round_4/tibo/hydro_mv_v7.py", "HydroMVV7"),
     # ── smile IV scalper ──
     "smile_iv_scalper":          ("prosperity/strategies/round_3/tibo/smile_iv_scalper.py", "SmileIVScalerStrategy"),
     # ── Theo v7 ──
