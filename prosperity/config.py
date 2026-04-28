@@ -235,7 +235,35 @@ ROUND_4: Dict[str, ProductConfig] = {
         for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
     },
 }
-ROUND_5: Dict[str, ProductConfig] = {}
+_R5_SIMPLE_MM = dict(
+    maker_size=3,
+    tighten_ticks=1,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+ROUND_5: Dict[str, ProductConfig] = {
+    **{
+        sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=_R5_SIMPLE_MM)
+        for sym in [
+            "GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_DARK_MATTER", "GALAXY_SOUNDS_PLANETARY_RINGS",
+            "GALAXY_SOUNDS_SOLAR_FLAMES", "GALAXY_SOUNDS_SOLAR_WINDS",
+            "SLEEP_POD_SUEDE", "SLEEP_POD_LAMB_WOOL", "SLEEP_POD_POLYESTER", "SLEEP_POD_NYLON", "SLEEP_POD_COTTON",
+            "MICROCHIP_CIRCLE", "MICROCHIP_OVAL", "MICROCHIP_SQUARE", "MICROCHIP_RECTANGLE", "MICROCHIP_TRIANGLE",
+            "PEBBLES_XS", "PEBBLES_S", "PEBBLES_M", "PEBBLES_L", "PEBBLES_XL",
+            "ROBOT_VACUUMING", "ROBOT_MOPPING", "ROBOT_DISHES", "ROBOT_LAUNDRY", "ROBOT_IRONING",
+            "UV_VISOR_YELLOW", "UV_VISOR_AMBER", "UV_VISOR_ORANGE", "UV_VISOR_RED", "UV_VISOR_MAGENTA",
+            "TRANSLATOR_SPACE_GRAY", "TRANSLATOR_ASTRO_BLACK", "TRANSLATOR_ECLIPSE_CHARCOAL",
+            "TRANSLATOR_GRAPHITE_MIST", "TRANSLATOR_VOID_BLUE",
+            "PANEL_1X2", "PANEL_2X2", "PANEL_1X4", "PANEL_2X4", "PANEL_4X4",
+            "OXYGEN_SHAKE_MORNING_BREATH", "OXYGEN_SHAKE_EVENING_BREATH", "OXYGEN_SHAKE_MINT",
+            "OXYGEN_SHAKE_CHOCOLATE", "OXYGEN_SHAKE_GARLIC",
+            "SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO",
+            "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY",
+        ]
+    },
+}
 
 
 ROUNDS: Dict[int, Dict[str, ProductConfig]] = {
@@ -16340,6 +16368,278 @@ MEMBER_OVERRIDES["r3_combined_best"] = {
         "VEV_5400": _tibo_vev_mm(5400, prevent_crossing=True),
         **{f"VEV_{k}": None for k in [5500, 6000, 6500]},
     },
+}
+
+
+_PEBBLES_ALL = ["PEBBLES_L", "PEBBLES_M", "PEBBLES_S", "PEBBLES_XL", "PEBBLES_XS"]
+
+MEMBER_OVERRIDES["tibo_r5_v1"] = {
+    5: {
+        # ── SNACKPACK CHOCOLATE-VANILLA pairs (sum=20000, return corr=-0.916) ──
+        "SNACKPACK_CHOCOLATE": ProductConfig(
+            symbol="SNACKPACK_CHOCOLATE", strategy="snackpack_pairs_v1", position_limit=10,
+            params=dict(
+                partner_product="SNACKPACK_VANILLA",
+                sum_target=20000.0,
+                edge_ticks=9.0,
+                passive_half_spread=8.0,
+                taker_size=10,
+                passive_size=5,
+                position_limit=10,
+                last_ts_value=999900,
+            ),
+        ),
+        "SNACKPACK_VANILLA": ProductConfig(
+            symbol="SNACKPACK_VANILLA", strategy="snackpack_pairs_v1", position_limit=10,
+            params=dict(
+                partner_product="SNACKPACK_CHOCOLATE",
+                sum_target=20000.0,
+                edge_ticks=9.0,
+                passive_half_spread=8.0,
+                taker_size=10,
+                passive_size=5,
+                position_limit=10,
+                last_ts_value=999900,
+            ),
+        ),
+        # ── PEBBLES basket conservation (sum=50000, std<3) ──────────────────
+        # XL and XS are the most volatile — conservation taker gives genuine edge
+        **{
+            sym: ProductConfig(
+                symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                params=dict(
+                    partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                    sum_target=50000.0,
+                    edge_ticks=7.0,
+                    passive_half_spread=6.0,
+                    taker_size=10,
+                    passive_size=5,
+                    ewma_alpha=0.05,
+                    position_limit=10,
+                    last_ts_value=999900,
+                ),
+            )
+            for sym in ["PEBBLES_XL", "PEBBLES_XS"]
+        },
+    }
+}
+
+_R5_PEBBLES_MM = dict(
+    maker_size=3,
+    tighten_ticks=1,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+
+MEMBER_OVERRIDES["tibo_r5_v2"] = {
+    5: {
+        # ── PEBBLES: XL+XS use conservation arb; L/M/S use simple MM ───────
+        **{
+            sym: ProductConfig(
+                symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                params=dict(
+                    partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                    sum_target=50000.0,
+                    edge_ticks=7.0,
+                    passive_half_spread=6.0,
+                    taker_size=10,
+                    passive_size=5,
+                    ewma_alpha=0.05,
+                    position_limit=10,
+                    last_ts_value=999900,
+                ),
+            )
+            for sym in ["PEBBLES_XL", "PEBBLES_XS"]
+        },
+        # L/M/S: plain MM (no directional bets from conservation)
+        "PEBBLES_L": ProductConfig(symbol="PEBBLES_L", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_M": ProductConfig(symbol="PEBBLES_M", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_S": ProductConfig(symbol="PEBBLES_S", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        # SNACKPACK: all 5 use simple MM (snackpack_pairs_v1 underperforms naive_tight_mm)
+        **{
+            sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=dict(
+                maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ))
+            for sym in ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY"]
+        },
+    }
+}
+
+
+_pebbles_arb_cfg = lambda sym: ProductConfig(
+    symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+    params=dict(
+        partner_products=[p for p in _PEBBLES_ALL if p != sym],
+        sum_target=50000.0,
+        edge_ticks=7.0,
+        passive_half_spread=6.0,
+        taker_size=10,
+        passive_size=0,    # taker-only: no passive MM (avoid trending-direction losses)
+        ewma_alpha=0.05,
+        position_limit=10,
+        last_ts_value=999900,
+    ),
+)
+
+MEMBER_OVERRIDES["tibo_r5_v3"] = {
+    5: {
+        # PEBBLES: ALL 5 use conservation taker-only (no passive MM)
+        # + separate naive_tight_mm for passive component (no directional bets from conservation)
+        **{sym: _pebbles_arb_cfg(sym) for sym in _PEBBLES_ALL},
+        # Override L/M/S with pure naive_tight_mm since taker-only arb + naive combo not possible
+        "PEBBLES_L": ProductConfig(symbol="PEBBLES_L", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_M": ProductConfig(symbol="PEBBLES_M", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_S": ProductConfig(symbol="PEBBLES_S", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        **{
+            sym: ProductConfig(
+                symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                params=dict(
+                    partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                    sum_target=50000.0,
+                    edge_ticks=7.0,
+                    passive_half_spread=6.0,
+                    taker_size=10,
+                    passive_size=0,    # taker-only for XL and XS: pure conservation arb
+                    ewma_alpha=0.05,
+                    position_limit=10,
+                    last_ts_value=999900,
+                ),
+            )
+            for sym in ["PEBBLES_XL", "PEBBLES_XS"]
+        },
+        # SNACKPACK: all naive_tight_mm
+        **{
+            sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=dict(
+                maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ))
+            for sym in ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY"]
+        },
+    }
+}
+
+
+MEMBER_OVERRIDES["tibo_r5_v4"] = {
+    5: {
+        # ── PEBBLES: XL+XS with conservation taker arb; L/M/S with naive MM ─
+        **{
+            sym: ProductConfig(
+                symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                params=dict(
+                    partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                    sum_target=50000.0,
+                    edge_ticks=7.0,
+                    passive_half_spread=6.0,
+                    taker_size=10,
+                    passive_size=5,
+                    ewma_alpha=0.05,
+                    position_limit=10,
+                    last_ts_value=999900,
+                ),
+            )
+            for sym in ["PEBBLES_XL", "PEBBLES_XS"]
+        },
+        "PEBBLES_L": ProductConfig(symbol="PEBBLES_L", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_M": ProductConfig(symbol="PEBBLES_M", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_S": ProductConfig(symbol="PEBBLES_S", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        # ── SNACKPACK: all naive MM (pairs strategy underperforms) ───────────
+        **{
+            sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=dict(
+                maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ))
+            for sym in ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY"]
+        },
+        # ── Skip SLEEP_POD_LAMB_WOOL: negative all 3 historical days (-30k) ─
+        "SLEEP_POD_LAMB_WOOL": None,
+    }
+}
+
+
+# ── AR1 mean-rev test configs ──────────────────────────────────────────────
+_ar1_cfg = lambda sym, thresh, passive: ProductConfig(
+    symbol=sym, strategy="ar1_mean_rev_v1", position_limit=10,
+    params=dict(
+        entry_threshold=thresh,
+        taker_size=10,
+        passive_size=passive,
+        passive_half_spread=4.0,
+        exit_ticks=0,
+        position_limit=10,
+        last_ts_value=999900,
+    ),
+)
+
+MEMBER_OVERRIDES["ar1_test"] = {
+    5: {
+        "ROBOT_DISHES": _ar1_cfg("ROBOT_DISHES", 15.0, 0),
+    }
+}
+
+MEMBER_OVERRIDES["ar1_test_v2"] = {
+    5: {
+        "ROBOT_DISHES": _ar1_cfg("ROBOT_DISHES", 20.0, 0),
+    }
+}
+
+MEMBER_OVERRIDES["ar1_test_v3"] = {
+    5: {
+        "ROBOT_DISHES": _ar1_cfg("ROBOT_DISHES", 15.0, 3),   # AR1 taker + passive MM
+    }
+}
+
+MEMBER_OVERRIDES["ar1_test_v4"] = {
+    5: {
+        "ROBOT_DISHES":  _ar1_cfg("ROBOT_DISHES", 15.0, 0),
+        "ROBOT_IRONING": _ar1_cfg("ROBOT_IRONING", 20.0, 0),
+    }
+}
+
+
+MEMBER_OVERRIDES["tibo_r5_v5"] = {
+    5: {
+        # ── PEBBLES: conservation taker arb on XL/XS; naive MM on L/M/S ───
+        **{
+            sym: ProductConfig(
+                symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                params=dict(
+                    partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                    sum_target=50000.0,
+                    edge_ticks=7.0,
+                    passive_half_spread=6.0,
+                    taker_size=10,
+                    passive_size=5,
+                    ewma_alpha=0.05,
+                    position_limit=10,
+                    last_ts_value=999900,
+                ),
+            )
+            for sym in ["PEBBLES_XL", "PEBBLES_XS"]
+        },
+        "PEBBLES_L": ProductConfig(symbol="PEBBLES_L", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_M": ProductConfig(symbol="PEBBLES_M", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_S": ProductConfig(symbol="PEBBLES_S", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        # ── ROBOT_DISHES: AR1 mean-reversion (AR1=-0.232, thresh=20 beats MM)
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(
+                entry_threshold=20.0,
+                taker_size=10,
+                passive_size=0,
+                exit_ticks=0,
+                position_limit=10,
+                last_ts_value=999900,
+            ),
+        ),
+        # ── SNACKPACK: naive MM (pairs strategy tested and underperforms) ──
+        **{
+            sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=dict(
+                maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ))
+            for sym in ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY"]
+        },
+        # ── Skip: consistently loses all 3 historical days (large intraday swing/reversal trap) ─
+        "SLEEP_POD_LAMB_WOOL": None,
+    }
 }
 
 

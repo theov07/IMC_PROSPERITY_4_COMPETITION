@@ -289,6 +289,10 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydro_mm_v201_ruled":         ("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201Ruled"),
     "hydro_mm_v201_influenced":    ("prosperity.strategies.round_4.tibo.hydro_strat_v201_influenced", "HydroMMV201Influenced"),
     "hydro_mm_v201_cancel_against":("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201CancelAgainst"),
+    # ── Round 5 — Tibo ────────────────────────────────────────────────────────
+    "snackpack_pairs_v1":          ("prosperity.strategies.round_5.tibo.snackpack_pairs_v1", "SnackpackPairsV1"),
+    "pebbles_arb_v1":              ("prosperity.strategies.round_5.tibo.pebbles_arb_v1", "PebblesArbV1"),
+    "ar1_mean_rev_v1":             ("prosperity.strategies.round_5.tibo.ar1_mean_rev_v1", "AR1MeanRevV1"),
 }
 
 
