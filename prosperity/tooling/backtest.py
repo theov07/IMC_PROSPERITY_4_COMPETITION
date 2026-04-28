@@ -33,6 +33,8 @@ def _resolve_strategy_alias(name: str) -> str:
         f"submissions.round_3.tibo.{name}",
         f"submissions.round_4.{name}",
         f"submissions.round_4.tibo.{name}",
+        f"submissions.round_5.{name}",
+        f"submissions.round_5.tibo.{name}",
     ]
     for candidate in candidates:
         try:
