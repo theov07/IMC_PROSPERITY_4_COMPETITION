@@ -13,6 +13,9 @@ _REGISTRY: Dict[str, Type[BaseStrategy]] = {}
 
 _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "market_maker": ("prosperity.strategies.base.market_maker", "MarketMakerStrategy"),
+    "pair_trader": ("prosperity.strategies.round_5.pair_trader", "PairTraderStrategy"),
+    "inventory_aware_mm": ("prosperity.strategies.round_5.inventory_mm", "InventoryAwareMMStrategy"),
+    "zscore_mm": ("prosperity.strategies.round_5.zscore_mm", "ZScoreMMStrategy"),
     "naive_tight_mm": ("prosperity.strategies.round_1.naive_tight_mm", "NaiveTightMarketMakerStrategy"),
     "naive_tight_mm_v2": ("prosperity.strategies.naive_tight_mm_v2", "NaiveTightMarketMakerV2Strategy"),
     "naive_tight_mm_v3": ("prosperity.strategies.naive_tight_mm_v3", "NaiveTightMarketMakerV3Strategy"),

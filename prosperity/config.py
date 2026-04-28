@@ -16410,6 +16410,234 @@ MEMBER_OVERRIDES["r5_v3_size10_t2"] = _r5_winners_with_size(10, 2)
 MEMBER_OVERRIDES["r5_v3_size7_t1"] = _r5_winners_with_size(7, 1)
 
 
+# r5_v4: pair trading on top inverse correlations (positive weight = anti-correlated)
+_R5_PAIRS = [
+    # (product, partner, weight)
+    # SNACKPACK Chocolate <-> Vanilla: -0.974
+    ("SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", +1.0),
+    ("SNACKPACK_VANILLA", "SNACKPACK_CHOCOLATE", +1.0),
+    # UV_VISOR YELLOW <-> AMBER: -0.909
+    ("UV_VISOR_YELLOW", "UV_VISOR_AMBER", +1.0),
+    # OXYGEN EVENING <-> GARLIC: -0.872
+    ("OXYGEN_SHAKE_EVENING_BREATH", "OXYGEN_SHAKE_GARLIC", +1.0),
+    ("OXYGEN_SHAKE_GARLIC", "OXYGEN_SHAKE_EVENING_BREATH", +1.0),
+    # ROBOT LAUNDRY <-> IRONING: -0.765
+    ("ROBOT_IRONING", "ROBOT_LAUNDRY", +1.0),
+    # SLEEP COTTON <-> NYLON: -0.764
+    ("SLEEP_POD_COTTON", "SLEEP_POD_NYLON", +1.0),
+    ("SLEEP_POD_NYLON", "SLEEP_POD_COTTON", +1.0),
+    # TRANSLATOR VOID_BLUE <-> GRAPHITE_MIST: -0.704
+    ("TRANSLATOR_VOID_BLUE", "TRANSLATOR_GRAPHITE_MIST", +1.0),
+]
+
+
+def _r5_v4_pair_trading():
+    """Use pair_trader for products with strong inverse pair, naive_tight_mm otherwise."""
+    out = {}
+    pair_dict = {p: (q, w) for p, q, w in _R5_PAIRS}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS and sym not in pair_dict:
+            out[sym] = None
+            continue
+        if sym in pair_dict:
+            partner, weight = pair_dict[sym]
+            out[sym] = _override(
+                ROUND_5[sym],
+                strategy="pair_trader",
+                cross_pair_partner=partner,
+                cross_pair_weight=weight,
+                z_window=200,
+                z_entry=1.5,
+                z_exit=0.3,
+                pair_size=10,
+                maker_size=5,
+                tighten_ticks=1,
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v4_pair_trading"] = _r5_v4_pair_trading()
+
+
+# r5_v5: mm_first strategy (Tibo's R1 champion) on all winners
+def _r5_mm_first():
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+            continue
+        out[sym] = ProductConfig(
+            symbol=sym,
+            strategy="mm_first",
+            position_limit=10,
+            params=dict(
+                inv_step_threshold=0.8,
+                take_edge=1.0,
+                maker_size_base_pct=0.5,  # 50% of limit = 5
+                pct_kept_for_takers=0.2,
+                mid_smooth_window=50,
+                mid_smooth_half_life=10,
+                gap_trigger_min=10,
+                gap_trigger_max_vol_pct=0.2,
+                gap_trigger_confirm_ticks=1,
+                tighten_ticks=1,
+                log_flush_ts=1000,
+                ts_increment=100,
+                last_ts_value=999900,
+            ),
+        )
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v5_mm_first"] = _r5_mm_first()
+
+
+# r5_v6: mm_first DISABLED takers (passive only)
+def _r5_mm_first_passive_only():
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+            continue
+        out[sym] = ProductConfig(
+            symbol=sym, strategy="mm_first", position_limit=10,
+            params=dict(
+                inv_step_threshold=0.8,
+                take_edge=999.0,  # disable takers
+                taker_buy_threshold=999999.0,
+                taker_sell_threshold=-999999.0,
+                maker_size_base_pct=0.5,
+                pct_kept_for_takers=0.0,
+                mid_smooth_window=50, mid_smooth_half_life=10,
+                gap_trigger_min=999,  # disable gap exploit
+                tighten_ticks=1,
+                log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ),
+        )
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v6_mm_first_passive"] = _r5_mm_first_passive_only()
+
+
+# r5_v7: naive tighten=2 (more aggressive penny improve)
+def _r5_v7_tighten():
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None; continue
+        out[sym] = _override(ROUND_5[sym], tighten_ticks=2)
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v7_tighten2"] = _r5_v7_tighten()
+
+
+# r5_v8: inventory_aware_mm (skew + hard pause)
+def _r5_v8_inv_mm():
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None; continue
+        out[sym] = ProductConfig(
+            symbol=sym, strategy="inventory_aware_mm", position_limit=10,
+            params=dict(
+                maker_size=5, tighten_ticks=1,
+                skew_enabled=True, skew_threshold=5, skew_offset=1,
+                hard_pause_at=9,
+                log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ),
+        )
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v8_inv_mm"] = _r5_v8_inv_mm()
+
+
+# r5_v9: zscore_mm on top mean-reverters, inventory_mm on rest
+_R5_MR = ["UV_VISOR_YELLOW", "GALAXY_SOUNDS_SOLAR_WINDS",
+          "GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_DARK_MATTER"]
+
+
+def _r5_v9_mixed():
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None; continue
+        if sym in _R5_MR:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="zscore_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=1,
+                    z_window=200, z_entry=1.5, z_skew_offset=1,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="inventory_aware_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=1,
+                    skew_enabled=True, skew_threshold=5, skew_offset=1,
+                    hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v9_mixed"] = _r5_v9_mixed()
+
+
+# r5_v10: per-product tighten based on spread (wide spread → tight more)
+_R5_WIDE_SPREAD = [  # spread > 14
+    "SNACKPACK_STRAWBERRY", "SNACKPACK_VANILLA", "SNACKPACK_RASPBERRY",
+    "PEBBLES_XL", "SNACKPACK_CHOCOLATE", "SNACKPACK_PISTACHIO",
+    "OXYGEN_SHAKE_GARLIC", "GALAXY_SOUNDS_BLACK_HOLES",
+    "UV_VISOR_RED", "UV_VISOR_YELLOW",  # 13.9
+    "GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_SOLAR_WINDS",
+    "GALAXY_SOUNDS_DARK_MATTER", "OXYGEN_SHAKE_MORNING_BREATH",
+    "OXYGEN_SHAKE_CHOCOLATE", "PEBBLES_M",  # spread 13
+]
+
+
+def _r5_v10_per_product_tighten():
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS: out[sym] = None; continue
+        tighten = 2 if sym in _R5_WIDE_SPREAD else 1
+        out[sym] = _override(ROUND_5[sym], tighten_ticks=tighten)
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v10_per_tighten"] = _r5_v10_per_product_tighten()
+
+
+# r5_v11: try inventory_aware_mm on LOSERS (might unlock them via skew/pause)
+def _r5_v11_save_losers():
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            # Try inventory_aware_mm with aggressive pause + skew
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="inventory_aware_mm", position_limit=10,
+                params=dict(
+                    maker_size=3, tighten_ticks=1,  # smaller size for losing trending
+                    skew_enabled=True, skew_threshold=3, skew_offset=2,
+                    hard_pause_at=7,  # pause earlier
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v11_save_losers"] = _r5_v11_save_losers()
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
