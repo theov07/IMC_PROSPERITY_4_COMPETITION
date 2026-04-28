@@ -11370,6 +11370,193 @@ MEMBER_OVERRIDES["hydro_v200_r4"] = {
     }
 }
 
+# ── Hydro MV strategies (directional mean-reversion + passive MM) ────────────
+# v4_best: AR directional MR, 22,060 PnL (beats spread-paying taker baseline)
+# v5_best: Passive MM + selective AR taker, 153,117 PnL (34% above v201 MM)
+
+# BEST v4: AR directional MR — 22,060 PnL, DD 3,751 (3-day realistic).
+# Signal: deviation of smoothed mid from AR fair value. M14 scale mode amplifies size.
+# Only beneficial feature from ablation: dev_size_scale (larger dev → bigger position).
+MEMBER_OVERRIDES["hydro_mv_v4_best"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v4",
+        position_limit=200,
+        params={
+            "anchor_price":           10000.0,
+            "anchor_alpha":           0.02,
+            "anchor_drift_bound":     1.5,
+            "ar_gain":                8.0,
+            "ar_smooth_half_life":    5,
+            "mid_smooth_half_life":   20,
+            "dev_smooth_half_life":   5,
+            "entry_threshold":        20.0,
+            "exit_threshold":         2.0,
+            "entry_size":             20,
+            "informed_trader_name":   "Mark 14",
+            "mark14_mode":            "scale",
+            "m14_agree_factor":       3.0,
+            "m14_lookback_ticks":     20,
+            "trend_guard_threshold":  0.0,
+            "stop_loss_mult":         0.0,
+            "toxic_flow_threshold":   0.0,
+            "dev_size_scale":         2.0,
+            "dev_size_max_mult":      5.0,
+            "vol_thresh_scale":       0.0,
+            "last_ts_value":          999900,
+            "log_flush_ts":           1000,
+            "ts_increment":           100,
+        })}
+}
+
+# BEST v5: Passive MM + selective AR taker — 153,117 PnL, DD 20,086 (3-day realistic).
+# 34% above v201 (114,350 PnL). Core insight: passive quoting earns the spread;
+# high ar_taker_edge (12) fires selectively → balanced position → more passive fill room.
+MEMBER_OVERRIDES["hydro_mv_v5_best"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v5",
+        position_limit=200,
+        params={
+            # AR model
+            "anchor_price":             10000,
+            "anchor_alpha":             0.02,
+            "anchor_drift_bound":       1.5,
+            "ar_gain":                  8.0,
+            "ar_smooth_half_life":      5,
+            "mid_smooth_half_life":     20,
+            "dev_smooth_half_life":     5,
+            # Passive MM
+            "passive_quoting":          True,
+            "maker_size_base_pct":      0.25,   # 50 units base per side
+            "pct_kept_for_takers":      0.2,
+            "use_inventory_bias":       True,
+            # AR taker (selective: only fires when deviation > 12 ticks from fair)
+            "use_ar_taker":             True,
+            "ar_taker_edge":            12.0,
+            "ar_taker_size_pct":        0.3,
+            # All other features off
+            "use_gap_exploit":          False,
+            "use_m14_gate":             False,
+            "use_ar_quote_bias":        False,
+            "use_anchor_guard":         False,
+            "informed_trader_name":     "Mark 14",
+            "last_ts_value":            999900,
+            "log_flush_ts":             1000,
+            "diag_enabled":             True,
+        })}
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# mv_v6: Dynamic anchor — inv_protected mode
+# Anchor only updates when |position| < pos_threshold × limit (flat or light).
+# Once we're heavily positioned the anchor freezes, preventing fair_value from
+# drifting further in the wrong direction and amplifying the taker signal.
+# quote_trace_enabled=True: full per-tick log of FairValue/Anchor/DevSmooth/etc,
+# flushed every log_flush_ts ticks so the visualizer sees dense data.
+# ─────────────────────────────────────────────────────────────────────────────
+_V6_BASE_PARAMS = {
+    "anchor_price":          10000,
+    "anchor_alpha":          0.02,      # overridden per variant
+    "anchor_drift_bound":    1.5,       # only used by "fixed" mode
+    "ar_gain":               8.0,
+    "ar_smooth_half_life":   5,
+    "mid_smooth_half_life":  20,
+    "dev_smooth_half_life":  5,
+    "passive_quoting":       True,
+    "maker_size_base_pct":   0.25,
+    "pct_kept_for_takers":   0.2,
+    "use_inventory_bias":    True,
+    "use_ar_taker":          True,
+    "ar_taker_edge":         12.0,
+    "ar_taker_size_pct":     0.3,
+    "use_gap_exploit":       False,
+    "use_m14_gate":          False,
+    "use_ar_quote_bias":     False,
+    "use_anchor_guard":      False,
+    "informed_trader_name":  "Mark 14",
+    "last_ts_value":         999900,
+    "quote_trace_enabled":   True,   # per-tick buffer, flushed every log_flush_ts
+    "log_flush_ts":          1000,   # flush ~100 rows per chunk (10 ticks × 100 chunks)
+}
+
+def _v6(anchor_mode: str, **extra) -> ProductConfig:
+    return ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v6", position_limit=200,
+        params={**_V6_BASE_PARAMS, "anchor_mode": anchor_mode, **extra},
+    )
+
+# v6a: best backtest — pos_threshold=30% (60u), alpha=0.007 → 179,172 PnL, DD=20,136
+MEMBER_OVERRIDES["hydro_mv_v6a"] = {
+    4: {"HYDROGEL_PACK": _v6("inv_protected", anchor_pos_threshold=0.30, anchor_alpha=0.007)}
+}
+# v6b: conservative — pos_threshold=20% (40u), alpha=0.005 → 178,785 PnL, DD=20,130
+MEMBER_OVERRIDES["hydro_mv_v6b"] = {
+    4: {"HYDROGEL_PACK": _v6("inv_protected", anchor_pos_threshold=0.20, anchor_alpha=0.005)}
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# mv_v7 — two-component passive MM
+#
+# Fix for v6 live failure: AR taker built runaway -200 short when price trended
+# up for hours. V7 splits inventory into two components:
+#   Anchor (40% = 80u): AR taker fires only when |pos| < 80. Same inv_protected
+#     anchor as v6b (alpha=0.005, freeze when |pos| >= 20% × 200).
+#   MM (remainder): always posts best_bid+1 / best_ask-1, inventory-adaptive
+#     sizing — reducing side gets more size, so position self-limits.
+#
+# 3-day backtest: 104,602 PnL | 9,067 abs DD | 25.3% | PnL/DD=11.5
+# vs v6b:         178,785 PnL | 20,130 abs DD | 88.9% | PnL/DD=8.9
+# ─────────────────────────────────────────────────────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v7"] = {
+    4: {"HYDROGEL_PACK": ProductConfig(
+        symbol="HYDROGEL_PACK", strategy="hydro_mv_v7", position_limit=200,
+        params=dict(
+            anchor_price=10000,
+            anchor_alpha=0.005,
+            anchor_pos_threshold=0.20,
+            ar_gain=8.0,
+            ar_smooth_half_life=5,
+            mid_smooth_half_life=20,
+            dev_smooth_half_life=5,
+            ar_taker_edge=15.0,
+            ar_taker_size_pct=0.30,
+            anchor_reserve_pct=0.40,
+            mm_mode="bestquote",
+            mm_base_size=20,
+            fast_mid_half_life=5,
+            mm_spread=1,
+            last_ts_value=999900,
+            quote_trace_enabled=True,
+            log_flush_ts=1000,
+        ),
+    )}
+}
+
+# ── mv_v1: z-score mean-reversion + Mark 14 gate ─────────────────────────────
+MEMBER_OVERRIDES["hydro_mv_v1"] = {
+    4: {
+        "HYDROGEL_PACK": ProductConfig(
+            symbol="HYDROGEL_PACK", strategy="hydro_mv_v1",
+            position_limit=200,
+            params=dict(
+                # z-score signal
+                zscore_window=50,
+                mid_smooth_half_life=10,
+                entry_z_threshold=2.0,
+                exit_z_threshold=0.5,
+                entry_size=20,
+                # Mark 14 gate
+                informed_trader_name="Mark 14",
+                m14_lookback_ticks=10,
+                m14_wait_ticks=10,
+                # logging (quote_trace emitted to stdout in live; features via feature_prices() in backtest)
+                quote_trace_enabled=True,
+                last_ts_value=999900,
+                log_flush_ts=1000,
+                ts_increment=100,
+            )),
+    },
+}
+
 # ── v201: Mark 14 informed-trader gate (3 variants) ───────────────────────────
 _HYDRO_V201_BASE_PARAMS = dict(
     **_HYDRO_V7B_PARAMS,
@@ -11398,23 +11585,6 @@ MEMBER_OVERRIDES["hydro_v201_influenced"] = {
             symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_influenced",
             position_limit=200,
             params=dict(**_HYDRO_V201_BASE_PARAMS, mark14_agree_factor=2.0)),
-    },
-}
-
-# Variant 3: Cancel-against — only strip orders that oppose Mark 14, keep all others
-MEMBER_OVERRIDES["hydro_v201_cancel_against"] = {
-    3: {
-        "HYDROGEL_PACK": ProductConfig(
-            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_cancel_against",
-            position_limit=200,
-            params=dict(**_HYDRO_V201_BASE_PARAMS)),
-        **_HYDRO_V201_NONE_PRODS,
-    },
-    4: {
-        "HYDROGEL_PACK": ProductConfig(
-            symbol="HYDROGEL_PACK", strategy="hydro_mm_v201_cancel_against",
-            position_limit=200,
-            params=dict(**_HYDRO_V201_BASE_PARAMS)),
     },
 }
 
