@@ -21781,6 +21781,86 @@ def _r5_v2640_carry_morning():
 MEMBER_OVERRIDES["best_v2640_carry_morning"] = _r5_v2640_carry_morning()
 
 
+# A3 merge work: start from v2640 champion, re-introduce the clearly stronger
+# v19 components where they win on multi-day BT and/or generalize better live.
+def _r5_best_v2800_v2640_plus_v19_A3():
+    base = dict(MEMBER_OVERRIDES["best_v2640_carry_morning"][5])
+    base["GALAXY_SOUNDS_BLACK_HOLES"] = ProductConfig(
+        symbol="GALAXY_SOUNDS_BLACK_HOLES", strategy="cross_group_trend_A2", position_limit=10,
+        params=dict(
+            signal_products=['SLEEP_POD_SUEDE', 'SLEEP_POD_LAMB_WOOL', 'SLEEP_POD_POLYESTER', 'SLEEP_POD_NYLON', 'SLEEP_POD_COTTON'],
+            signal_ema_hl=100, signal_threshold=80, signal_exit=26.666666666666668,
+            taker_size=10, passive_size=3, position_limit=10, last_ts_value=999900,
+            signal2_products=['ROBOT_VACUUMING', 'ROBOT_MOPPING', 'ROBOT_DISHES', 'ROBOT_LAUNDRY', 'ROBOT_IRONING'],
+            signal2_threshold=30,
+        ),
+    )
+    base["GALAXY_SOUNDS_DARK_MATTER"] = ProductConfig(
+        symbol="GALAXY_SOUNDS_DARK_MATTER", strategy="cross_group_trend_A2", position_limit=10,
+        params=dict(
+            signal_products=['SLEEP_POD_SUEDE', 'SLEEP_POD_LAMB_WOOL', 'SLEEP_POD_POLYESTER', 'SLEEP_POD_NYLON', 'SLEEP_POD_COTTON'],
+            signal_ema_hl=100, signal_threshold=300, signal_exit=100.0,
+            taker_size=10, passive_size=3, position_limit=10, last_ts_value=999900,
+        ),
+    )
+    base["OXYGEN_SHAKE_GARLIC"] = ProductConfig(
+        symbol="OXYGEN_SHAKE_GARLIC", strategy="trend_follow_v2", position_limit=10,
+        params=dict(
+            ema_half_life=50, threshold=80, exit_threshold=20,
+            trail_stop_thr=100, reference_update_interval=800, direction=1,
+            position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000,
+        ),
+    )
+    base["PEBBLES_XS"] = ProductConfig(
+        symbol="PEBBLES_XS", strategy="trend_follow_v2", position_limit=10,
+        params=dict(
+            ema_half_life=150, threshold=100, exit_threshold=30, direction=-1,
+            position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000,
+        ),
+    )
+    base["ROBOT_IRONING"] = ProductConfig(
+        symbol="ROBOT_IRONING", strategy="trend_follow_v2", position_limit=10,
+        params=dict(
+            ema_half_life=100, threshold=50, exit_threshold=20, direction=0,
+            position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000,
+        ),
+    )
+    base["SNACKPACK_VANILLA"] = ProductConfig(
+        symbol="SNACKPACK_VANILLA", strategy="snackpack_cross_mm_v1_A1", position_limit=10,
+        params=dict(
+            partner_product='SNACKPACK_CHOCOLATE', z_window=1900, shift_per_z=1.0,
+            z_clamp=3.0, maker_size=5, tighten_ticks=1, position_limit=10,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+    base["TRANSLATOR_ECLIPSE_CHARCOAL"] = ProductConfig(
+        symbol="TRANSLATOR_ECLIPSE_CHARCOAL", strategy="naive_tight_mm", position_limit=10,
+        params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2800_v2640_plus_v19_A3"] = _r5_best_v2800_v2640_plus_v19_A3()
+
+
+# Same as v2800, but keep v19's ROBOT_LAUNDRY because it generalized much
+# better on live despite slightly lower 3-day BT.
+def _r5_best_v2810_v2640_plus_v19_laundry_A3():
+    base = dict(MEMBER_OVERRIDES["best_v2800_v2640_plus_v19_A3"][5])
+    base["ROBOT_LAUNDRY"] = ProductConfig(
+        symbol="ROBOT_LAUNDRY", strategy="coint_mm_v1", position_limit=10,
+        params=dict(
+            partner_product='ROBOT_VACUUMING', mean_half_life=5000, z_window=2000,
+            entry_z=1.5, exit_z=0.0, taker_size=10, passive_size=1,
+            tighten_ticks=1, position_limit=10, last_ts_value=999900,
+        ),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2810_v2640_plus_v19_laundry_A3"] = _r5_best_v2810_v2640_plus_v19_laundry_A3()
+
+
 # v2650: v2630 + remove the GALAXY DARK_MATTER pair (live -3.3k, BT day4 +5.9k mixed)
 # But this might be overfit — just test
 def _r5_v2650_no_dark_matter():
@@ -21857,4 +21937,3 @@ def _r5_v2730_revive_all_carry():
 
 
 MEMBER_OVERRIDES["best_v2730_revive_all_carry"] = _r5_v2730_revive_all_carry()
-

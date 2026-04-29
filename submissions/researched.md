@@ -1365,3 +1365,63 @@ Config: `MEMBER_OVERRIDES["best_v19"]` — self-contained, no inheritance.
 Wrapper: `submissions/best_v19.py`
 
 
+# Iteration 9 — v19 vs v2640 merge pass (3rd analyst)
+
+Goal: merge Tibo's stronger-live `best_v19` with the other analyst's stronger-backtest `best_v2640_carry_morning`, but decide product by product from:
+- 3-day per-product backtest PnL (`day 2 / day 3 / day 4`)
+- live per-product reconstructed PnL from IMC logs
+- a day-4-live proxy using backtest `PnL@99900`
+
+Full detailed report:
+- `artifacts/analysis/round_5/v19_vs_v2640_merge_report_A3.md`
+
+Key findings:
+- Clear `v19` keeps:
+  - `GALAXY_SOUNDS_BLACK_HOLES`
+  - `GALAXY_SOUNDS_DARK_MATTER`
+  - `OXYGEN_SHAKE_GARLIC`
+  - `PEBBLES_XS`
+  - `ROBOT_IRONING`
+  - `SNACKPACK_VANILLA`
+  - `TRANSLATOR_ECLIPSE_CHARCOAL`
+- Clear `v2640` keeps:
+  - `GALAXY_SOUNDS_PLANETARY_RINGS`
+  - `PANEL_2X2`
+  - `PANEL_4X4`
+  - `PEBBLES_S`
+  - `OXYGEN_SHAKE_MORNING_BREATH`
+  - `UV_VISOR_ORANGE`
+  - `UV_VISOR_RED`
+  - most `pair_skip` / `carry` overlays where the 3-day edge remained dominant
+- Main mixed case:
+  - `ROBOT_LAUNDRY`: `v2640` wins full 3-day BT, but `v19` is far less toxic on the actual live slice and improves merged `D4@99900`
+
+Tested merged variants:
+
+| Config | D2 | D3 | D4 | Total | Max DD | D4@99900 |
+|--------|---:|---:|---:|------:|-------:|---------:|
+| `best_v19` | 288,154.0 | 263,651.0 | 378,061.0 | 929,866.0 | 25,773.0 | 31,730.5 |
+| `best_v2640_carry_morning` | 242,737.5 | 300,639.0 | 423,937.5 | 967,314.0 | 24,361.0 | 30,465.5 |
+| `best_v2800_v2640_plus_v19_A3` | 286,071.0 | 319,347.0 | 435,935.5 | **1,041,353.5** | 22,042.5 | 37,028.0 |
+| `best_v2810_v2640_plus_v19_laundry_A3` | **290,997.0** | **319,843.0** | 427,734.5 | 1,038,574.5 | **21,327.5** | **38,301.0** |
+
+Interpretation:
+- `best_v2800_v2640_plus_v19_A3` is the backtest-max champion.
+- `best_v2810_v2640_plus_v19_laundry_A3` gives back only `-2.8k` total PnL vs `v2800`, but improves:
+  - drawdown
+  - `D4@99900` live proxy
+  - the only genuinely mixed product (`ROBOT_LAUNDRY`)
+
+Recommendation:
+- For pure 3-day BT maximization: `best_v2800_v2640_plus_v19_A3`
+- For live-tilted deployment: `best_v2810_v2640_plus_v19_laundry_A3`
+
+Files created:
+- Configs in `prosperity/config.py`:
+  - `MEMBER_OVERRIDES["best_v2800_v2640_plus_v19_A3"]`
+  - `MEMBER_OVERRIDES["best_v2810_v2640_plus_v19_laundry_A3"]`
+- Backtest wrappers:
+  - `submissions/best_v2800_v2640_plus_v19_A3.py`
+  - `submissions/best_v2810_v2640_plus_v19_laundry_A3.py`
+- Exported IMC submission wrapper:
+  - `artifacts/submissions/round_5/best_v2810_v2640_plus_v19_laundry_A3_round5_submission.py`
