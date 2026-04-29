@@ -427,3 +427,93 @@ Changes from v6:
 Config: `MEMBER_OVERRIDES["best_v7"]` in `prosperity/config.py`  
 Wrapper: `submissions/best_v7.py`
 
+
+---
+
+## Iteration 3 — v7_2: Fixing losers + UV_VISOR_YELLOW (2nd analyst)
+
+### Context
+v6 baseline = **733,918 PnL**. Goal: fix 4 user-flagged losers + investigate correlations.
+
+### Q1: Cross-asset correlation strategy
+
+The `research/correl.md` table shows 11 product pairs where product_A leads product_B by `|lag|` ticks.
+Key pairs and actionability:
+
+| A (leader) | B (follower) | lag | corr | Current strats | Edge? |
+|---|---|---|---|---|---|
+| UV_VISOR_AMBER | PEBBLES_XS | 692 | 0.9629 | Both trend_v2 | Low — both already capture same trend |
+| SLEEP_POD_NYLON | PANEL_1X2 | 1000 | 0.8412 | Both trend_v2 | Low — same |
+| PANEL_1X4 → ROBOT_IRONING | 1000 | 0.8750 | trend_v2 / trend_v2 | Could enter IRONING earlier |
+| TRANSLATOR_VOID_BLUE | SLEEP_POD_SUEDE | 1000 | 0.8444 | naive_mm / naive_mm | Potential: use VOID_BLUE trend to trade SUEDE |
+| UV_VISOR_MAGENTA | SLEEP_POD_SUEDE | 1000 | 0.8669 | None / naive_mm | — |
+
+**Conclusion**: Where both products already use trend_v2 independently (AMBER→XS, NYLON→1X2), the cross-asset signal adds minimal PnL (both enter on the same underlying move). The more interesting case would be TRANSLATOR_VOID_BLUE → SLEEP_POD_SUEDE: using Void_Blue's EMA momentum to enter Suede early. Implementation would require reading Void_Blue's order depth inside Suede's strategy. Estimated gain: ~3-5k (low priority vs simpler fixes).
+
+**Not implemented in v7_2** — the simpler "set losers to None" approach yielded +83k which dwarfs the ~5k potential from lead-lag signals.
+
+### Q2: Fixing the losers
+
+#### Full per-product PnL audit (v6)
+Running the v6 backtest with `--json-out` revealed the actual losers:
+
+| Product | v6 PnL | Fix |
+|---|---|---|
+| PEBBLES_M | -14,756 | None |
+| PEBBLES_L | -11,500 | None |
+| TRANSLATOR_SPACE_GRAY | -11,188 | None |
+| PANEL_4X4 | -10,672 | None |
+| UV_VISOR_MAGENTA | -7,314 | None |
+| GALAXY_SOUNDS_SOLAR_FLAMES | -6,034 | None |
+| TRANSLATOR_GRAPHITE_MIST | -4,418 | None |
+| ROBOT_VACUUMING | -2,700 | None |
+
+**PEBBLES_L and M** were bigger losers than the user-flagged products. 
+
+#### Investigation: PEBBLES_L/M — why naive_mm fails
+
+The pebbles conservation law (XL+XS+L+M+S=50,000) holds PERFECTLY at mid prices at every tick. This means for PEBBLES_L:
+- `fair_L = 50,000 - XL - XS - M - S ≈ market_mid_L` always
+- XL arb works because XL has the largest moves (+3877/−1167/+3931 per day)
+- L and M have smaller, noisier moves. The MM gets adversely selected on larger intraday swings (PEBBLES_L: day4 -1798; PEBBLES_M: day3 +1883). naive_mm accumulates on the wrong side.
+
+**Attempted fix**: pebbles_arb_v1 on L and M (same conservation arb as XL). Result: WORSE (-30k and -27k vs -11.5k and -14.8k).
+**Why arb fails**: Because `fair_L ≈ market_mid_L` always, there's no price-level dislocation to exploit. The arb fires on bid/ask spread noise (1363 aggressive fills on L/day4 alone), paying spread 4072 times across 3 days. 
+
+**Resolution**: Set PEBBLES_L and PEBBLES_M to None. PEBBLES_S with naive_mm keeps making +38,672 (different market dynamics — consistent small downtrend with active market).
+
+#### UV_VISOR_YELLOW: NEW product discovered
+
+Not in previous analysis. Huge daily moves: day2=+1458, day3=+314, day4=-2005. trend_v2 results:
+
+| threshold | day2 | day3 | day4 | total |
+|---|---|---|---|---|
+| 500 | +8,985 | -7,805 | +12,580 | +13,760 |
+| 600 | +8,485 | -7,895 | +13,080 | +13,670 |
+| **700** | **+8,075** | **0** | **+11,210** | **+19,285** |
+| 800 | +6,875 | 0 | +10,600 | +17,475 |
+
+**Key finding**: Day 3 EMA signal reaches minimum −633. Threshold=500/600 triggers a false short (enters at t5700 price=10850, exits at t6863 price=11640 → −7,895 loss). Threshold=700 skips day3 entirely → 0 PnL day3.
+
+threshold=700 is optimal: **+19,285 vs naive_mm +4,592 = +14,693 gain**.
+
+### Final v7_2 config
+**tibo_r5_v7_2 = 817,194 PnL** (+83,276 over v6)
+
+Changes vs v6:
+- PEBBLES_L → None (+11,500)
+- PEBBLES_M → None (+14,756)
+- UV_VISOR_MAGENTA → None (+7,314)
+- TRANSLATOR_SPACE_GRAY → None (+11,188)
+- PANEL_4X4 → None (+10,672)
+- GALAXY_SOUNDS_SOLAR_FLAMES → None (+6,034)
+- TRANSLATOR_GRAPHITE_MIST → None (+4,418)
+- ROBOT_VACUUMING → None (+2,700)
+- UV_VISOR_YELLOW → trend_v2 th=700 (+14,693)
+
+Only remaining loser: OXYGEN_SHAKE_MINT at -36 (negligible).
+
+Files:
+- Config: `MEMBER_OVERRIDES["tibo_r5_v7_2"]` in `prosperity/config.py`
+- Backtest wrapper: `submissions/tibo_r5_v7_2.py`
+- IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v7_2_round5_submission.py` (54,800 bytes, all checks passed)

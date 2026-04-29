@@ -17556,6 +17556,32 @@ MEMBER_OVERRIDES["best_v7"] = {
     }
 }
 # All other 24 products fall through to base ROUND_5 config (naive_tight_mm maker_size=3)
+# ── Round 5 — tibo_r5_v7_2: v6 + stop losers + UV_VISOR_YELLOW ───────────────
+# 3-day realistic backtest: 817,194 PnL (+83,276 over tibo_r5_v6's 733,918)
+# Changes vs v6:
+#   - PEBBLES_L/M: None (-11.5k/-14.8k saved). Arb tested but worse (arb fires too aggressively because fair≈mid always).
+#   - 6 losers → None: UV_VISOR_MAGENTA -7.3k, TRANSLATOR_SPACE_GRAY -11.2k, PANEL_4X4 -10.7k,
+#       GALAXY_SOUNDS_SOLAR_FLAMES -6k, TRANSLATOR_GRAPHITE_MIST -4.4k, ROBOT_VACUUMING -2.7k
+#   - UV_VISOR_YELLOW: trend_v2 th=700 → +19,285 (was naive_mm +4,592). threshold=700 avoids
+#       day3 false-short (EMA dip reaches -633, below 700 → no entry).
+MEMBER_OVERRIDES["tibo_r5_v7_2"] = {
+    5: {
+        **MEMBER_OVERRIDES["tibo_r5_v6"][5],
+        # ── PEBBLES L/M: set to None (lose with both naive_mm and arb) ──────────────
+        "PEBBLES_L": None,
+        "PEBBLES_M": None,
+        # ── Stop the bleeding: set big losers to None ────────────────────────────────
+        "UV_VISOR_MAGENTA": None,
+        "TRANSLATOR_SPACE_GRAY": None,
+        "PANEL_4X4": None,
+        "GALAXY_SOUNDS_SOLAR_FLAMES": None,
+        "TRANSLATOR_GRAPHITE_MIST": None,
+        "ROBOT_VACUUMING": None,
+        # ── UV_VISOR_YELLOW: threshold=700 avoids day3 false-short (min_signal=-633) ──
+        # day2: long +8k, day3: no entry (EMA only reaches -633 < 700), day4: short +11k
+        "UV_VISOR_YELLOW": _r5_trend_v2("UV_VISOR_YELLOW", ema_hl=100, threshold=700, exit_thr=150),
+    },
+}
 
 
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
