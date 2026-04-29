@@ -17982,3 +17982,182 @@ MEMBER_OVERRIDES["best_v13_A2"] = {
         "TRANSLATOR_SPACE_GRAY": None,  # consistently loses in both backtest and live
     }
 }
+
+# ── v14 helpers ───────────────────────────────────────────────────────────────
+def _sc_trend14(sym: str, ema_hl: float, thr: float, exit_thr: float, direction: int = 0) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(ema_half_life=ema_hl, threshold=thr, exit_threshold=exit_thr,
+                                     direction=direction,
+                                     position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000))
+
+# ── test_v14_dir_A2: directional TFv2 test (Theo-informed directions) ─────────
+# Theo's directions from v12: MICROCHIP_OVAL=-10, MICROCHIP_TRIANGLE=-10,
+# UV_VISOR_RED=+10, SLEEP_POD_SUEDE=+10, SLEEP_POD_POLYESTER=+10,
+# OXYGEN_SHAKE_GARLIC=+10, PEBBLES_XS=-10
+_v14_base = MEMBER_OVERRIDES["best_v13_A2"][5].copy()
+_v14_dir = {
+    **_v14_base,
+    # Theo SHORT: MICROCHIP products always trend down
+    "MICROCHIP_OVAL":     _sc_trend14("MICROCHIP_OVAL",     ema_hl=100, thr=60,  exit_thr=20, direction=-1),
+    "MICROCHIP_TRIANGLE": _sc_trend14("MICROCHIP_TRIANGLE", ema_hl=100, thr=60,  exit_thr=20, direction=-1),
+    # Theo LONG: UV_VISOR_RED always trends up
+    "UV_VISOR_RED":       _sc_trend14("UV_VISOR_RED",       ema_hl=100, thr=60,  exit_thr=20, direction=+1),
+    # Theo LONG: SLEEP_POD products trend up — bidirectional was losing when it went short
+    "SLEEP_POD_SUEDE":    _sc_trend14("SLEEP_POD_SUEDE",    ema_hl=100, thr=60,  exit_thr=20, direction=+1),
+    "SLEEP_POD_POLYESTER": _sc_trend14("SLEEP_POD_POLYESTER", ema_hl=150, thr=200, exit_thr=80, direction=+1),
+    # Theo LONG: OXYGEN_SHAKE_GARLIC
+    "OXYGEN_SHAKE_GARLIC": _sc_trend14("OXYGEN_SHAKE_GARLIC", ema_hl=150, thr=200, exit_thr=80, direction=+1),
+    # Theo SHORT: PEBBLES_XS — existing TFv2 but lock direction to avoid wrong-way entries
+    "PEBBLES_XS":          _sc_trend14("PEBBLES_XS",          ema_hl=150, thr=100, exit_thr=30, direction=-1),
+    # ROBOT_IRONING: keep existing TFv2 bidirectional (momentum strategy in Theo, unclear direction)
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,  exit_thr=20),
+    # PEBBLES_S: keep naive_mm (38k baseline >> Theo's 19k directional) — no change
+}
+MEMBER_OVERRIDES["test_v14_dir_A2"] = {5: _v14_dir}
+
+# ── best_v14_A2 (OLD — session_start mode) — kept for reference ───────────────
+_v14_best = {
+    **_v14_base,
+    "MICROCHIP_OVAL":      _sc_trend14("MICROCHIP_OVAL",      ema_hl=100, thr=60,  exit_thr=20, direction=-1),
+    "MICROCHIP_TRIANGLE":  _sc_trend14("MICROCHIP_TRIANGLE",  ema_hl=100, thr=60,  exit_thr=20, direction=-1),
+    "PEBBLES_XS":          _sc_trend14("PEBBLES_XS",          ema_hl=150, thr=100, exit_thr=30, direction=-1),
+    "OXYGEN_SHAKE_GARLIC": _sc_trend14("OXYGEN_SHAKE_GARLIC", ema_hl=150, thr=200, exit_thr=80, direction=+1),
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,  exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v14_A2"] = {5: _v14_best}
+
+# ── v15: EMA-cross + trailing stop — generalises to non-monotonic live days ────
+# Root cause analysis from v12_A2 live log:
+#   PEBBLES_XS=0 live: price crossed -100 at tick 17 but then rallied to +200;
+#     slow EMA averaged out, never triggered. EMA-cross detects the DOWN momentum
+#     regardless of the initial counter-move.
+#   OXYGEN_SHAKE_GARLIC=0 live: price was negative for 90% of session, recovered
+#     to +278 in last 65 ticks; slow EMA anchored at -394 couldn't follow. EMA-cross
+#     fast/slow divergence fires even on late-session momentum.
+#   MICROCHIP_OVAL: price went UP first (+100 at tick 41) before falling -452;
+#     session-start EMA pulled up, delayed SHORT entry. EMA-cross detects reversal sooner.
+# Trail stop: exits when price reverses trail_stop_thr from extremum rather than
+#   waiting for EMA to cross back past session_start ± exit_thr — limits losses on
+#   reversal days while letting profitable trades run.
+def _sc_cross15(sym: str, fast_hl: float, slow_hl: float, thr: float,
+                exit_thr: float, trail: float, direction: int = 0) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(
+                             signal_mode="ema_cross",
+                             ema_fast_hl=fast_hl, ema_slow_hl=slow_hl,
+                             threshold=thr, exit_threshold=exit_thr,
+                             trail_stop_thr=trail, direction=direction,
+                             position_limit=10, ts_increment=100,
+                             last_ts_value=999900, log_flush_ts=1000))
+
+_v15_best = {
+    **_v14_base,
+    # MICROCHIP: consistently fall session-long. EMA-cross detects early downward push
+    # even after brief opening counter-move. SHORT-only prevents long entries on up days.
+    "MICROCHIP_OVAL":      _sc_cross15("MICROCHIP_OVAL",      fast_hl=30, slow_hl=500,
+                                        thr=40, exit_thr=20, trail=60, direction=-1),
+    "MICROCHIP_TRIANGLE":  _sc_cross15("MICROCHIP_TRIANGLE",  fast_hl=30, slow_hl=500,
+                                        thr=40, exit_thr=20, trail=60, direction=-1),
+    # PEBBLES_XS: dipped early then rallied, final net negative. EMA-cross catches
+    # downward momentum when it builds, trail stop exits quickly if it reverses.
+    "PEBBLES_XS":          _sc_cross15("PEBBLES_XS",          fast_hl=30, slow_hl=300,
+                                        thr=40, exit_thr=20, trail=60, direction=-1),
+    # OXYGEN_SHAKE_GARLIC: positive most of 3 BT days but can recover late in live.
+    # EMA-cross (fast_hl=20 for responsiveness) fires even on late-session recovery.
+    "OXYGEN_SHAKE_GARLIC": _sc_cross15("OXYGEN_SHAKE_GARLIC", fast_hl=20, slow_hl=300,
+                                        thr=60, exit_thr=20, trail=80, direction=+1),
+    # ROBOT_IRONING: clean monotonic trends. Keep session_start mode (lower overhead)
+    # but with thr=50 improvement from v14.
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,
+                                        exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v15_A2"] = {5: _v15_best}
+
+# ── best_v16_A2: session_start + reference_update + trail_stop ─────────────────
+# Fixes the two live failure modes of v14 without destroying backtest:
+#   1. PEBBLES_XS/MICROCHIP: counter-move at open pulls EMA away from reference →
+#      add reference_update_interval=800 so reference resets to EMA after 800 flat
+#      ticks; when price finally trends, signal fires from the updated (closer) base.
+#      In backtest, we enter in position before tick 800 → update never fires → unchanged.
+#   2. OXYGEN_SHAKE_GARLIC: negative for 90% of session (EMA anchored at bottom);
+#      reference_update_interval=800 resets reference to the low; when price spikes,
+#      signal = EMA - (low_reference) > threshold → fires even on a late recovery.
+#      In backtest Day3 (continuously falling), reference chases price down → signal
+#      never crosses +threshold → 0 PnL (avoids the -8,215 Day3 loss from v14).
+#   3. trail_stop_thr: protective measure — exits when price gives back trail ticks
+#      from the extremum rather than waiting for full reversal. Reduces loss on days
+#      where we enter but the trend doesn't sustain.
+def _sc_v16(sym: str, ema_hl: float, thr: float, exit_thr: float,
+             trail: float, ref_interval: int, direction: int = 0) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(ema_half_life=ema_hl, threshold=thr,
+                                     exit_threshold=exit_thr, trail_stop_thr=trail,
+                                     reference_update_interval=ref_interval,
+                                     direction=direction, position_limit=10,
+                                     ts_increment=100, last_ts_value=999900,
+                                     log_flush_ts=1000))
+
+_v16_best = {
+    **_v14_base,
+    # MICROCHIP: tend to fall from session open; faster EMA (hl=50) reduces lag
+    # on the initial UP counter-move; ref_update catches mid-session reversals.
+    "MICROCHIP_OVAL":      _sc_v16("MICROCHIP_OVAL",      ema_hl=50, thr=50,
+                                    exit_thr=20, trail=60, ref_interval=800, direction=-1),
+    "MICROCHIP_TRIANGLE":  _sc_v16("MICROCHIP_TRIANGLE",  ema_hl=50, thr=50,
+                                    exit_thr=20, trail=60, ref_interval=800, direction=-1),
+    # PEBBLES_XS: volatile but net-short most days; ref_update essential for live.
+    "PEBBLES_XS":          _sc_v16("PEBBLES_XS",          ema_hl=50, thr=60,
+                                    exit_thr=20, trail=80, ref_interval=800, direction=-1),
+    # OXYGEN_SHAKE_GARLIC: positive days trend up but sometimes only in last 20%.
+    # ref_update=800 resets to low reference; trail=100 locks partial gains.
+    "OXYGEN_SHAKE_GARLIC": _sc_v16("OXYGEN_SHAKE_GARLIC", ema_hl=50, thr=80,
+                                    exit_thr=20, trail=100, ref_interval=800, direction=+1),
+    # ROBOT_IRONING: clean monotonic trends, no counter-move issue; session_start works.
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,
+                                        exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v16_A2"] = {5: _v16_best}
+
+# ── best_v17_A2: cherry-pick best params per product ─────────────────────────
+# MICROCHIP_TRIANGLE reverted to v14 params: it correctly got 0 live (price went
+# UP all day, direction=-1 prevented loss — no over-fitting problem to fix).
+# The v16 faster EMA + ref_update caused excessive round-trip losses in backtest
+# (-13,536 Day2 vs -9,163 in v14) because the product is volatile on Day2.
+_v17_best = {
+    **_v14_base,
+    "MICROCHIP_OVAL":      _sc_v16("MICROCHIP_OVAL",      ema_hl=50, thr=50,
+                                    exit_thr=20, trail=60, ref_interval=800, direction=-1),
+    "MICROCHIP_TRIANGLE":  _sc_trend14("MICROCHIP_TRIANGLE", ema_hl=100, thr=60,
+                                        exit_thr=20, direction=-1),
+    "PEBBLES_XS":          _sc_v16("PEBBLES_XS",          ema_hl=50, thr=60,
+                                    exit_thr=20, trail=80, ref_interval=800, direction=-1),
+    "OXYGEN_SHAKE_GARLIC": _sc_v16("OXYGEN_SHAKE_GARLIC", ema_hl=50, thr=80,
+                                    exit_thr=20, trail=100, ref_interval=800, direction=+1),
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",    ema_hl=100, thr=50,
+                                        exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v17_A2"] = {5: _v17_best}
+
+# ── best_v18_A2: live-validated cherry-pick ────────────────────────────────────
+# Diagnosis from v17 live (26k) vs v13 live (28k):
+#   MICROCHIP_OVAL/TRIANGLE directional TFv2 backfired live:
+#     - TRIANGLE: price went UP, direction=-1 got 0 vs naive_mm 3,036 (spread income lost)
+#     - OVAL: fast EMA entered SHORT on -94 brief dip; trail fired at -1,470 loss;
+#             re-entry recovered most but still -1,392 vs naive_mm's steady +2,619
+#   PEBBLES_XS: fast ema_hl=50 entered SHORT on early dip; price recovered to +138;
+#     trail fired at -1,730 realized; ended -1,252 vs v13/v14 0 (no entry = no loss)
+#   Fix: MICROCHIP_OVAL + TRIANGLE → naive_mm (direction-agnostic, always makes spread)
+#        PEBBLES_XS → v14 params (ema_hl=150 thr=100: slow enough not to fire on brief dips)
+#   Keep: OXYGEN_SHAKE_GARLIC (ref_update fixed 0→2,458 live), ROBOT_IRONING (thr=50 improved)
+_v18_best = {
+    **_v14_base,
+    "MICROCHIP_OVAL":      _sc_mm("MICROCHIP_OVAL",      size=5),
+    "MICROCHIP_TRIANGLE":  _sc_mm("MICROCHIP_TRIANGLE",  size=3),
+    "PEBBLES_XS":          _sc_trend14("PEBBLES_XS",     ema_hl=150, thr=100,
+                                        exit_thr=30, direction=-1),
+    "OXYGEN_SHAKE_GARLIC": _sc_v16("OXYGEN_SHAKE_GARLIC", ema_hl=50, thr=80,
+                                    exit_thr=20, trail=100, ref_interval=800, direction=+1),
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",   ema_hl=100, thr=50,
+                                        exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v18_A2"] = {5: _v18_best}
