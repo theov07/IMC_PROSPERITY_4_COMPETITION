@@ -262,6 +262,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "coint_pairs_v1":   ("prosperity/strategies/round_5/tibo/coint_pairs_v1.py", "CointPairsV1"),
     "coint_mm_v1":      ("prosperity/strategies/round_5/tibo/coint_mm_v1.py", "CointMMV1"),
     "late_flatten_tight_mm_v1": ("prosperity/strategies/round_5/tibo/late_flatten_tight_mm_v1.py", "LateFlattenTightMMV1"),
+    "cross_group_trend_A2": ("prosperity/strategies/round_5/tibo/cross_group_trend_A2.py", "CrossGroupTrendA2"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).

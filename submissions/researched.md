@@ -1027,3 +1027,136 @@ A3's two genuine changes vs best_v10 (PANEL_2X2 size 5→3, ROBOT_LAUNDRY passiv
 
 Config: `MEMBER_OVERRIDES["best_v12_A1_A3"]` in `prosperity/config.py`
 Wrapper: `submissions/best_v12_A1_A3.py`
+
+
+# ANALYST 2 (A2) RESEARCH — 2026-04-29: Cross-Group Trend Strategy
+
+## Overview
+
+Explored cross-group correlations between SLEEP_POD (SP), GALAXY_SOUNDS (GS), and ROBOT (RB) groups, built a `cross_group_trend_A2` strategy, and achieved **+35,634 PnL improvement** over best_v12_A1_A3.
+
+Final config: **best_v13_A2 = 887,312 PnL** (+35,634 vs baseline 851,678)
+
+## Cross-Group Correlation Analysis
+
+### Confirmed correlations (overall 3-day level data)
+
+| Pair | Correlation |
+|------|------------|
+| SP avg vs GS avg | +86% |
+| SP avg vs RB avg | −75% |
+| GS avg vs RB avg | −58% |
+
+### Critical finding: correlations are mostly between-day, not within-day
+
+| Day | SP vs GS | SP vs RB | GS vs RB |
+|-----|----------|----------|----------|
+| 2 | 0.84 | +0.15 (!) | +0.28 |
+| 3 | 0.70 | −0.56 | −0.68 |
+| 4 | 0.21 | −0.20 | −0.40 |
+
+Tick-level return correlations are essentially zero (~0.01-0.04) — no predictive signal tick-by-tick. The high overall correlations are driven by between-day regime differences (some days all products up, others all down).
+
+### PCA results: unstable within groups
+
+PCA on each group per day shows unstable structure:
+- SLEEP_POD: PC1 explains 58-67% but loadings flip signs between days (NYLON goes UP on Day4 while group average goes DOWN)
+- GALAXY_SOUNDS: Very unstable PC structure, no consistent dominant product
+- ROBOT: DISHES always separate; MOPPING/IRONING/LAUNDRY/VACUUMING form a sub-group
+
+**Conclusion**: No stable PCA structure to exploit directly. Cannot use individual product PCA loadings as cross-group signals reliably.
+
+### Actionable signal: group AVERAGE EMA vs session start
+
+Despite individual product instability, the group AVERAGE provides a more robust daily direction indicator:
+
+| Day | SP avg move | GS avg move | RB avg move | SP-GS aligned? |
+|-----|-------------|-------------|-------------|----------------|
+| 2 | +654 | +808 | −86 | YES |
+| 3 | +893 | +358 | −329 | YES |
+| 4 | −200 | −277 | +59 | YES (all 3 days!) |
+
+SP group average perfectly predicts GS direction across all 3 days. Best targets: DARK_MATTER and BLACK_HOLES.
+
+## Strategy Design: cross_group_trend_A2
+
+File: `prosperity/strategies/round_5/tibo/cross_group_trend_A2.py`
+
+**Signal**: EMA of SP group average deviation from session start:
+- `sp_ema = EMA(mean(SP_product_mids) - session_start_SP_avg, hl=100)`
+
+**Optional second signal (inverted)**: EMA of RB group average:
+- `rb_ema = EMA(mean(RB_product_mids) - session_start_RB_avg, hl=100)`
+- Used as CONFIRMATION (RB down when SP up): combined signal = SP > thr AND RB < -rb_thr
+
+**Signal regimes**:
+- BULL: sp_ema > signal_threshold (AND rb_ema < -signal2_threshold if used)
+- BEAR: sp_ema < -signal_threshold (AND rb_ema > signal2_threshold)
+- NEUTRAL: neither
+
+**Trading logic**:
+- BULL: post passive bid only + taker buy on entry (position==0)
+- BEAR: post passive ask only + taker sell on entry (position==0)
+- NEUTRAL: post both bids and asks (naive_mm behavior)
+- Exit: when EMA crosses back through exit threshold
+
+## Backtest Results
+
+### Parameter search (simulation)
+
+| Product | Config | Simulated | Naive_mm baseline |
+|---------|--------|-----------|------------------|
+| DARK_MATTER | sp_thr=300 | +18,615 | +7,558 |
+| BLACK_HOLES | sp=80 + rb=30 | +34,065 | +15,419 |
+| DARK_MATTER | rb_thr=50 | +19,370 | +7,558 |
+| BLACK_HOLES | sp_thr=150 (sp only) | +30,045 | +15,419 |
+
+### Actual backtest results (realistic fill mode, days 2/3/4)
+
+| Config | 3-day PnL | Delta vs baseline |
+|--------|-----------|-------------------|
+| best_v12_A1_A3 (baseline) | 851,678 | — |
+| test_cgA2_dark_matter | 861,024 | +9,346 |
+| test_cgA2_black_holes | 877,966 | +26,288 |
+| test_cgA2_both (→ best_v13_A2) | **887,312** | **+35,634** |
+| test_cgA2_bh_sponly (sp=150 only) | 868,862 | +17,184 |
+
+### Per-product results for best_v13_A2
+
+| Product | Strategy | 3-day PnL | vs naive_mm |
+|---------|----------|-----------|-------------|
+| GALAXY_SOUNDS_BLACK_HOLES | cross_group_trend_A2 (sp=80, rb=30) | +41,708 | +26,288 |
+| GALAXY_SOUNDS_DARK_MATTER | cross_group_trend_A2 (sp=300 only) | +16,904 | +9,346 |
+
+### GS products NOT changed (cross-group signal doesn't help):
+
+- **GALAXY_SOUNDS_PLANETARY_RINGS**: cross-group strategy WORSE than naive_mm in simulation (threshold instability on Day 3 which only moves +158). Keep naive_mm.
+- **GALAXY_SOUNDS_SOLAR_WINDS**: Day 2 misalignment (SP up +654, SOLAR_WINDS DOWN −416). Too risky.
+- **GALAXY_SOUNDS_SOLAR_FLAMES**: No consistent GS-SP alignment (Day 3 inversion: SP up +893, SOLAR_FLAMES DOWN −694). Skip.
+
+## Why cross-group beats naive_mm for BLACK_HOLES and DARK_MATTER
+
+Naive_mm fails on "downtrend days" (Day 4: SP −200, GS −277): it accumulates long inventory at declining prices, taking MTM losses. In live v10, DARK_MATTER: −3,834 and BLACK_HOLES: −5,223.
+
+Cross-group strategy detects the regime using the SP group average EMA crossing −80 to −300 (depending on product) and goes SHORT instead. On Day 4, this flips a loss into a gain.
+
+The combined SP+RB signal (requiring BOTH SP > 80 AND RB < −30) is better than SP alone for BLACK_HOLES because it filters false positives where SP is momentarily positive but overall direction is uncertain.
+
+## Key learnings (A2)
+
+1. **Cross-day level correlations ≠ intra-day predictive signal**: The 86% SP-GS correlation is mostly between-day. Within days, tick-level correlations are <0.04. Use the cross-group signal as a daily regime indicator (EMA vs session start), not a tick-level signal.
+
+2. **Group average is more robust than individual product**: PCA structure is unstable (loadings flip each day). Group average EMA smooths out the within-group divergences (e.g., NYLON diverging from other SPs on Day 2).
+
+3. **Combined signal (SP + inverted RB) > SP alone for BLACK_HOLES**: +26,288 (combined) vs +17,184 (SP only). The RB signal adds confirmation that reduces false entries when SP is weakly positive but GS is not following.
+
+4. **Cross-group signal only helps products that CHANGE DIRECTION**: BLACK_HOLES always goes UP but the cross-group signal handles the edge case where SP goes DOWN (Day 4: SP −200 → signal is neutral/bearish, but BLACK_HOLES goes UP +1,320). The threshold=80 means the signal doesn't fire strongly negative on Day 4 (SP only down −200, EMA lags to ~−100), so the strategy remains neutral/passive for BLACK_HOLES on Day 4 rather than going short.
+
+## Files (A2 work)
+
+- Strategy: `prosperity/strategies/round_5/tibo/cross_group_trend_A2.py`
+- Config: `MEMBER_OVERRIDES["best_v13_A2"]` in `prosperity/config.py`
+- Helpers: `_v13_cg_A2()`, `_sc_mm()`, `_sc_trend()` in `prosperity/config.py`
+- Submission: `artifacts/submissions/round_5/best_v13_A2_round5_submission.py`
+- Backtest wrapper: `submissions/best_v13_A2.py`
+- All test configs (test_cgA2_*) cleaned up

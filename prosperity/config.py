@@ -17826,3 +17826,159 @@ MEMBER_OVERRIDES["best_v12_A1_A3"] = {
     }
 }
 
+
+# ── A2 cross-group strategy helpers ──────────────────────────────────────────
+# Signal groups: SLEEP_POD avg EMA (vs session start) → GALAXY_SOUNDS direction
+# Inverted signal: ROBOT avg EMA (vs session start) → inverse GS direction
+_SP_GROUP = [
+    "SLEEP_POD_SUEDE", "SLEEP_POD_LAMB_WOOL", "SLEEP_POD_POLYESTER",
+    "SLEEP_POD_NYLON", "SLEEP_POD_COTTON",
+]
+_RB_GROUP = [
+    "ROBOT_VACUUMING", "ROBOT_MOPPING", "ROBOT_DISHES",
+    "ROBOT_LAUNDRY", "ROBOT_IRONING",
+]
+
+def _v13_cg_A2(sym: str, sp_thr: float, rb_thr: float = 0,
+               ema_hl: float = 100, passive_size: int = 3,
+               taker_size: int = 10) -> ProductConfig:
+    """cross_group_trend_A2 config: SP (+ optional inverted RB) → target product."""
+    params = dict(
+        signal_products=_SP_GROUP,
+        signal_ema_hl=ema_hl,
+        signal_threshold=sp_thr,
+        signal_exit=sp_thr / 3,
+        taker_size=taker_size,
+        passive_size=passive_size,
+        position_limit=10,
+        last_ts_value=999900,
+    )
+    if rb_thr > 0:
+        params["signal2_products"] = _RB_GROUP
+        params["signal2_threshold"] = rb_thr
+    return ProductConfig(symbol=sym, strategy="cross_group_trend_A2",
+                         position_limit=10, params=params)
+
+
+# ── A2 test configs: cross-group signal for GALAXY_SOUNDS products ────────────
+# ── best_v13_A2: self-contained final config (A2 analyst) ────────────────────
+# Baseline: best_v12_A1_A3 = 851,678 PnL
+# A2 changes:
+#   GALAXY_SOUNDS_BLACK_HOLES → cross_group_trend_A2 (SP signal thr=80 + RB inverted thr=30)
+#     Backtest: +41,708 vs naive_mm +15,420 → +26,288 improvement
+#   GALAXY_SOUNDS_DARK_MATTER → cross_group_trend_A2 (SP signal thr=300 only)
+#     Backtest: +16,904 vs naive_mm +7,558 → +9,346 improvement
+# Total improvement: +35,634 → best_v13_A2 = 887,312 PnL
+#
+# Signal: SLEEP_POD group avg EMA vs session start (stable across days,
+#   86% cross-day corr with GALAXY_SOUNDS, -75% with ROBOT)
+# For BLACK_HOLES: combined SP>80 AND RB<-30 (robust, all 3 days positive)
+# For DARK_MATTER: SP>300 alone sufficient (low noise, all 3 days positive)
+#
+# Why cross-group beats naive_mm here:
+#   On "downtrend days" (SP down → GS down), naive_mm accumulates long inventory
+#   that gets marked down badly (live v10: DARK_MATTER -3,834, BLACK_HOLES -5,223).
+#   Cross-group strategy detects the regime early and goes SHORT → avoids the loss.
+def _sc_mm(sym: str, size: int = 3, limit: int = 10) -> ProductConfig:
+    """Self-contained naive_tight_mm shorthand for best_v13_A2."""
+    return ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=limit,
+                         params=dict(maker_size=size, tighten_ticks=1,
+                                     log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+def _sc_trend(sym: str, ema_hl: float, thr: float, exit_thr: float,
+              warmup: int = 0) -> ProductConfig:
+    """Self-contained trend_follow_v2 shorthand for best_v13_A2."""
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(ema_half_life=ema_hl, threshold=thr, exit_threshold=exit_thr,
+                                     warmup_ticks=warmup, position_limit=10,
+                                     ts_increment=100, last_ts_value=999900, log_flush_ts=1000))
+
+MEMBER_OVERRIDES["best_v13_A2"] = {
+    5: {
+        # ── PEBBLES ──────────────────────────────────────────────────────────
+        "PEBBLES_XL": ProductConfig(
+            symbol="PEBBLES_XL", strategy="pebbles_arb_v1", position_limit=10,
+            params=dict(partner_products=["PEBBLES_L", "PEBBLES_M", "PEBBLES_S", "PEBBLES_XS"],
+                        sum_target=50000.0, edge_ticks=7.0, passive_half_spread=6.0,
+                        taker_size=10, passive_size=5, ewma_alpha=0.05,
+                        position_limit=10, last_ts_value=999900)),
+        "PEBBLES_XS":  _sc_trend("PEBBLES_XS", ema_hl=150, thr=250, exit_thr=80),
+        "PEBBLES_L":   _sc_mm("PEBBLES_L",  size=3, limit=5),
+        # PEBBLES_M: None (removed — consistently losing in backtest AND live)
+        "PEBBLES_M":   None,
+        "PEBBLES_S":   _sc_mm("PEBBLES_S",  size=3),
+        # ── ROBOT ─────────────────────────────────────────────────────────────
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(entry_threshold=20.0, taker_size=10, passive_size=0,
+                        exit_ticks=0, position_limit=10, last_ts_value=999900)),
+        "ROBOT_MOPPING":  _sc_trend("ROBOT_MOPPING",  ema_hl=150, thr=100, exit_thr=40),
+        "ROBOT_IRONING":  _sc_trend("ROBOT_IRONING",  ema_hl=150, thr=100, exit_thr=40),
+        "ROBOT_LAUNDRY": ProductConfig(
+            symbol="ROBOT_LAUNDRY", strategy="coint_mm_v1", position_limit=10,
+            params=dict(partner_product="ROBOT_VACUUMING", mean_half_life=5000,
+                        z_window=2000, entry_z=1.5, exit_z=0.0,
+                        taker_size=10, passive_size=1, tighten_ticks=1,
+                        position_limit=10, last_ts_value=999900)),  # A3: passive_size 3→1
+        "ROBOT_VACUUMING": ProductConfig(
+            symbol="ROBOT_VACUUMING", strategy="coint_mm_v1", position_limit=10,
+            params=dict(partner_product="ROBOT_LAUNDRY", mean_half_life=5000,
+                        z_window=2000, entry_z=1.5, exit_z=0.0,
+                        taker_size=10, passive_size=3, tighten_ticks=1,
+                        position_limit=10, last_ts_value=999900)),
+        # ── GALAXY_SOUNDS ─────────────────────────────────────────────────────
+        # A2: cross-group strategy using SLEEP_POD avg as directional signal
+        "GALAXY_SOUNDS_BLACK_HOLES":  _v13_cg_A2("GALAXY_SOUNDS_BLACK_HOLES", sp_thr=80,  rb_thr=30),
+        "GALAXY_SOUNDS_DARK_MATTER":  _v13_cg_A2("GALAXY_SOUNDS_DARK_MATTER",  sp_thr=300),
+        "GALAXY_SOUNDS_PLANETARY_RINGS": _sc_mm("GALAXY_SOUNDS_PLANETARY_RINGS", size=3),  # A3: size=3
+        "GALAXY_SOUNDS_SOLAR_FLAMES":    _sc_mm("GALAXY_SOUNDS_SOLAR_FLAMES",    size=3, limit=5),
+        "GALAXY_SOUNDS_SOLAR_WINDS":     _sc_mm("GALAXY_SOUNDS_SOLAR_WINDS",     size=3),
+        # ── SLEEP_POD ─────────────────────────────────────────────────────────
+        "SLEEP_POD_LAMB_WOOL": None,  # intra-day spike trap, consistently loses
+        "SLEEP_POD_COTTON":    _sc_trend("SLEEP_POD_COTTON",    ema_hl=100, thr=80,  exit_thr=30),
+        "SLEEP_POD_NYLON":     _sc_trend("SLEEP_POD_NYLON",     ema_hl=100, thr=80,  exit_thr=30),
+        "SLEEP_POD_POLYESTER": _sc_trend("SLEEP_POD_POLYESTER", ema_hl=150, thr=600, exit_thr=150),
+        "SLEEP_POD_SUEDE":     _sc_mm("SLEEP_POD_SUEDE", size=3),
+        # ── MICROCHIP ─────────────────────────────────────────────────────────
+        "MICROCHIP_SQUARE":   _sc_trend("MICROCHIP_SQUARE", ema_hl=100, thr=250, exit_thr=80),
+        "MICROCHIP_OVAL":     _sc_mm("MICROCHIP_OVAL",     size=5),
+        "MICROCHIP_TRIANGLE": _sc_mm("MICROCHIP_TRIANGLE", size=3),
+        "MICROCHIP_CIRCLE":   _sc_mm("MICROCHIP_CIRCLE",   size=3),
+        "MICROCHIP_RECTANGLE": ProductConfig(
+            symbol="MICROCHIP_RECTANGLE", strategy="coint_mm_v1", position_limit=10,
+            params=dict(partner_product="MICROCHIP_SQUARE", mean_half_life=5000,
+                        z_window=1000, entry_z=1.2, exit_z=0.0,
+                        taker_size=10, passive_size=3, tighten_ticks=1,
+                        position_limit=10, last_ts_value=999900)),
+        # ── PANEL ─────────────────────────────────────────────────────────────
+        "PANEL_1X2": _sc_trend("PANEL_1X2", ema_hl=100, thr=80, exit_thr=30),
+        "PANEL_1X4": _sc_mm("PANEL_1X4", size=5),
+        "PANEL_2X2": _sc_mm("PANEL_2X2", size=3),  # A3: size 5→3
+        "PANEL_2X4": _sc_mm("PANEL_2X4", size=5),
+        "PANEL_4X4": _sc_mm("PANEL_4X4", size=3, limit=5),
+        # ── UV_VISOR ──────────────────────────────────────────────────────────
+        "UV_VISOR_AMBER":   _sc_trend("UV_VISOR_AMBER", ema_hl=100, thr=80, exit_thr=30),
+        "UV_VISOR_YELLOW":  _sc_trend("UV_VISOR_YELLOW", ema_hl=100, thr=700, exit_thr=150),
+        "UV_VISOR_ORANGE":  _sc_mm("UV_VISOR_ORANGE",  size=5),
+        "UV_VISOR_RED":     _sc_mm("UV_VISOR_RED",     size=5),
+        "UV_VISOR_MAGENTA": _sc_mm("UV_VISOR_MAGENTA", size=3, limit=5),
+        # ── OXYGEN_SHAKE ──────────────────────────────────────────────────────
+        "OXYGEN_SHAKE_GARLIC":          _sc_trend("OXYGEN_SHAKE_GARLIC", ema_hl=150, thr=700, exit_thr=150),
+        "OXYGEN_SHAKE_CHOCOLATE":       _sc_mm("OXYGEN_SHAKE_CHOCOLATE",       size=5),
+        "OXYGEN_SHAKE_EVENING_BREATH":  _sc_mm("OXYGEN_SHAKE_EVENING_BREATH",  size=5),
+        "OXYGEN_SHAKE_MORNING_BREATH":  _sc_mm("OXYGEN_SHAKE_MORNING_BREATH",  size=5),
+        "OXYGEN_SHAKE_MINT":            _sc_mm("OXYGEN_SHAKE_MINT",            size=3),
+        # ── SNACKPACK ─────────────────────────────────────────────────────────
+        "SNACKPACK_CHOCOLATE":  _sc_mm("SNACKPACK_CHOCOLATE",  size=5),
+        "SNACKPACK_VANILLA":    _sc_mm("SNACKPACK_VANILLA",    size=5),
+        "SNACKPACK_PISTACHIO":  _sc_mm("SNACKPACK_PISTACHIO",  size=5),
+        "SNACKPACK_STRAWBERRY": _sc_mm("SNACKPACK_STRAWBERRY", size=5),
+        "SNACKPACK_RASPBERRY":  _sc_mm("SNACKPACK_RASPBERRY",  size=5),
+        # ── TRANSLATOR ────────────────────────────────────────────────────────
+        "TRANSLATOR_VOID_BLUE":        _sc_mm("TRANSLATOR_VOID_BLUE",        size=5),
+        "TRANSLATOR_ASTRO_BLACK":      _sc_mm("TRANSLATOR_ASTRO_BLACK",      size=3),
+        "TRANSLATOR_ECLIPSE_CHARCOAL": _sc_mm("TRANSLATOR_ECLIPSE_CHARCOAL", size=3),
+        "TRANSLATOR_GRAPHITE_MIST":    _sc_mm("TRANSLATOR_GRAPHITE_MIST",    size=3, limit=5),
+        "TRANSLATOR_SPACE_GRAY": None,  # consistently loses in both backtest and live
+    }
+}
