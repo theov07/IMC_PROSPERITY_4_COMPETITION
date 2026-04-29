@@ -804,3 +804,226 @@ Also explored v8_b (trend_v2 at limit=5 for volatile products instead of naive_m
 - Config: `MEMBER_OVERRIDES["tibo_r5_v8_a"]` in `prosperity/config.py`
 - Backtest wrapper: `submissions/tibo_r5_v8_a.py`
 - IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v8_a_round5_submission.py` (56,687 bytes, all checks passed, 47 products)
+
+---
+
+# Iteration 6 — best_v12_A3 live-v10 loss diagnosis (3rd analyst)
+
+## Context
+
+Started from `best_v10`, re-read prior research, re-checked the advisor notes in `round_5_wiki.txt`, then used the live `v10` logs as the primary source of truth instead of blindly trusting the backtest.
+
+Live-v10 diagnosis:
+
+- the worst live cluster remained the MM-heavy names where we accumulated inventory and then got marked down late
+- but only some of those names were safe to touch, because several of them still had strong backtest edge and lost badly when we added late flattening
+- `ROBOT_LAUNDRY` was a different failure mode: the coint idea looked fine, but the passive overlay was too large relative to the useful taker signal
+
+## What I tested
+
+### 1. Naive MM carry names
+
+Tested one-product late-flatten probes on:
+
+- `PANEL_2X2`
+- `PANEL_1X4`
+- `GALAXY_SOUNDS_DARK_MATTER`
+- `OXYGEN_SHAKE_MORNING_BREATH`
+- `OXYGEN_SHAKE_EVENING_BREATH`
+
+Result:
+
+- `PANEL_1X4`, `GALAXY_SOUNDS_DARK_MATTER`, `OXYGEN_SHAKE_MORNING_BREATH`, `OXYGEN_SHAKE_EVENING_BREATH` all failed badly in backtest even though the live logs showed carry pain
+- `PANEL_2X2` was the only safe MM candidate: the product had the same live carry pattern, but unlike the others it had very little historical edge to destroy
+
+Then I tested `PANEL_2X2` variants:
+
+- `late_flatten size=5`: slight improvement on day 4, but poor on `2/3/4`
+- `naive_mm size=4`: effectively no change
+- `naive_mm size=3`: best result
+- `late_flatten size=3`: bad
+
+Kept conclusion:
+
+- do **not** use late flatten on `PANEL_2X2`
+- simply reduce `maker_size` from `5` to `3`
+
+Why this works:
+
+- the live loss was caused by being too long into the close
+- unlike other MM names, `PANEL_2X2` did not need the full size to keep its edge
+- smaller size reduces carry risk all day without introducing forced late-session churn
+
+### 2. ROBOT_LAUNDRY coint diagnosis
+
+The live logs suggested:
+
+- short-horizon markouts were not terrible
+- final inventory still hurt
+- the strategy likely had too much passive inventory riding on top of a decent coint signal
+
+Tested:
+
+- `coint_mm_closeout_A3`: new closeout-aware coint strategy, rejected
+- `coint_mm_v1 passive_size=1`: strong improvement
+- `coint_mm_v1 passive_size=0`: great on day 4, but worse on `2/3/4`
+
+Kept conclusion:
+
+- keep the existing coint structure
+- reduce only `ROBOT_LAUNDRY` passive overlay from `3` to `1`
+
+Why this works:
+
+- it preserves the signal-driven taker entries/exits
+- it removes most of the passive inventory accumulation that was polluting the book
+- full passive removal over-corrects and throws away too much earlier-day edge
+
+## Final keep: best_v12_A3
+
+Final changes relative to `best_v10`:
+
+- `PANEL_2X2`: `naive_tight_mm maker_size 5 -> 3`
+- `ROBOT_LAUNDRY`: `coint_mm_v1 passive_size 3 -> 1`
+
+Backtest results:
+
+| Config | Day 4 | Days 2/3/4 |
+|--------|------:|------------:|
+| `best_v10` | 365,376 | 848,106 |
+| `best_v12_A3` | **368,311** | **851,678** |
+
+Delta vs `best_v10`:
+
+- day 4: **+2,935**
+- days `2/3/4`: **+3,572**
+
+Per-product contribution of the kept changes:
+
+- `PANEL_2X2`: `7,142 -> 8,353` on `2/3/4` (`+1,211`)
+- `ROBOT_LAUNDRY`: `12,197 -> 14,558` on `2/3/4` (`+2,361`)
+
+## Files kept
+
+- Config: `MEMBER_OVERRIDES["best_v12_A3"]` in `prosperity/config.py`
+- Backtest wrapper: `submissions/best_v12_A3.py`
+- IMC submission wrapper: `artifacts/submissions/round_5/best_v12_A3_round5_submission.py`
+
+All temporary A3 probe configs and wrappers were removed after consolidation.
+
+
+# ANALYST 1 (A1) RESEARCH — 2026-04-29
+
+## Overview
+Analyzed v10 live log (day 4, total profit 22,791) vs 3-day backtest (848,106). Investigated root causes of live losses and tested 8 config variants. Final config: `best_v12_A1` = `best_v10` + minor size upgrade.
+
+## Live Log Analysis (v10 day 4)
+
+**Total live profit: 22,791** (vs expected ~283k/day from backtest)
+
+### Products losing in live (sorted worst to best):
+| Product | Live PnL | Strategy | Backtest 3-day |
+|---------|---------|---------|----------------|
+| GALAXY_SOUNDS_PLANETARY_RINGS | -7,335 | naive_mm size=3 | +18,604 |
+| GALAXY_SOUNDS_DARK_MATTER | -3,834 | naive_mm size=5 | +7,558 |
+| OXYGEN_SHAKE_MORNING_BREATH | -3,372 | naive_mm size=5 | +13,710 |
+| PANEL_2X2 | -2,806 | naive_mm size=5 | +7,142 |
+| PANEL_1X4 | -2,395 | naive_mm size=5 | +29,686 |
+| ROBOT_LAUNDRY | -2,368 | coint_mm_v1 | +12,197 |
+| OXYGEN_SHAKE_MINT | -2,183 | naive_mm size=3 | -36 |
+| SLEEP_POD_NYLON | -899 | trend_v2 | +19,734 |
+| SNACKPACK_RASPBERRY | -871 | naive_mm size=5 | +15,397 |
+
+### Root Cause Analysis
+
+**Naive_mm products (top 5 losers + SNACKPACK_RASPBERRY):** Price fell throughout live session. Naive_mm accumulates long inventory as price falls (posting bid at best_bid+1 repeatedly). At session end, pos=+7 with prices down 200-800 ticks → pure MTM loss. Example: GALAXY_SOUNDS_PLANETARY_RINGS pos=+7, price dropped -778 ticks → expected MTM loss ≈ 5,446 ticks.
+
+**ROBOT_LAUNDRY (coint_mm_v1):** The LAUNDRY-VACUUMING spread trended from +889 to +138 throughout the session (spread contracted -751 ticks). The rolling mean (z_win=2000) lagged behind the trend and repeatedly signaled the wrong direction. Resulted in LONG LAUNDRY position (+7 final pos) as price fell -524 ticks.
+
+**SLEEP_POD_NYLON (trend_v2):** Price went UP +168.5 in live but strategy ended with neg PnL. Trend follower likely went in wrong direction early and couldn't recover.
+
+## Strategies Tested
+
+### test1: Aggressive late_flatten on 6 biggest live losers
+**Result: 757,756 (-90,350 vs v10) — REJECTED**
+Parameters: passive unwind at ts=96000, taker at ts=99000, pos_gate=4.
+Failed because late_flatten fundamentally changes fill efficiency (0.580→0.190) even in the pre-late period. The backtest's price oscillations reward the strategy that keeps buying/selling passively at all times.
+
+### test2: trend_v2 for UV_VISOR_RED + GALAXY_SOUNDS_BLACK_HOLES
+**Result: 820,542 (-27,564 vs v10) — REJECTED**
+UV_VISOR_RED: up +842/+182/+698 in backtest; GALAXY_SOUNDS_BLACK_HOLES: up +1446/+688/+1320. Both consistent UP trends. But trend_v2 uses taker orders and misses oscillation profits that naive_mm captures. For moderate trends (day3 UV_VISOR_RED only +182 net), naive_mm gets much more from oscillations than trend_v2 gets from holding direction.
+
+### test4: Mild late_flatten on 6 live losers (ts=99500 start)
+**Result: 760,954 (-87,152 vs v10) — REJECTED**
+Even extremely mild late_flatten (only last 5 ticks) caused same magnitude damage as aggressive version (-87k vs -90k). The fill efficiency impact is structural, not timing-related.
+
+### test5: trend_v2 for UV_VISOR_RED only
+**Result: 831,332 (-16,774 vs v10) — REJECTED**
+UV_VISOR_RED confirmed UP in live (+593) and backtest, but trend_v2 still worse than naive_mm in 3-day backtest.
+
+### test6: Upgrade 7 default naive_mm products from size=3 to size=5
+**Result: 848,202 (+96 vs v10) — KEPT**
+Products: GALAXY_SOUNDS_BLACK_HOLES, GALAXY_SOUNDS_PLANETARY_RINGS, GALAXY_SOUNDS_SOLAR_WINDS, SLEEP_POD_SUEDE, MICROCHIP_CIRCLE, TRANSLATOR_ASTRO_BLACK, TRANSLATOR_ECLIPSE_CHARCOAL. These were the only products NOT explicitly overridden in best_v10 (using base ROUND_5 size=3). Upgrade to size=5 is safe and consistent with all other similar products.
+
+### test7: ROBOT_LAUNDRY + VACUUMING → naive_mm
+**Result: 825,180 (-22,926 vs v10) — REJECTED**
+Coint_mm is +26k better than naive_mm in 3-day backtest. The live failure was one bad session; keep coint.
+
+### test8: MICROCHIP_RECT → naive_mm + OXYGEN_SHAKE_EVENING_BREATH → AR1 mean-rev
+**Result: 763,856 (-84,250 vs v10) — REJECTED**
+OXYGEN_SHAKE_EVENING_BREATH has strong AR1=-0.115 consistently, but the oscillations (~20 ticks) are too small for a 20-tick entry threshold. AR1 strategy got nearly zero fills. MICROCHIP_RECT naive_mm also worse than coint (+4,676 vs +10,696).
+
+## New Alpha Investigated
+
+### Product group conservation laws
+Checked GALAXY_SOUNDS (sum CV=1.89%), SLEEP_POD (0.30%), MICROCHIP (1.55%), SNACKPACK (0.11%), UV_VISOR (0.41%), ROBOT (0.21%), OXYGEN (0.20%), PANEL (0.42%), TRANSLATOR (0.29%).
+**Finding:** PEBBLES has sum CV=0.01% (essentially perfect conservation). All other groups have CV 10-150× higher. Only PEBBLES conservation is tight enough to generate arb signals. SNACKPACK pairs trading was already tested by A1 iter1 and confirmed 44× worse than naive_mm.
+
+### AR1 systematic scan
+Checked all 50 products for AR1 autocorrelation:
+- ROBOT_IRONING: AR1=-0.118 (strongest consistent, all 3 days) but already on trend_v2 (+17,460)
+- OXYGEN_SHAKE_EVENING_BREATH: AR1=-0.115 (consistent) but oscillations too small for threshold=20
+- OXYGEN_SHAKE_CHOCOLATE: AR1=-0.080 (moderate)
+- ROBOT_DISHES: AR1=-0.098 average (only -0.290 on day 4, near-zero on days 2/3) — already exploited
+Only ROBOT_DISHES has AR1 signal strong enough to profit from. The AR1 on ROBOT_IRONING is tick-level noise while the product has a strong directional daily trend.
+
+### Cross-product correlations
+All within-group return correlations are < 0.015. Products are essentially independent even within the same product family. No lead-lag relationships. This confirms the earlier finding from A1 iter1.
+
+## Final Config: best_v12_A1
+
+**Backtest PnL (3-day realistic): 848,202 (+96 vs best_v10)**
+
+Changes vs best_v10:
+- 7 products upgraded from default naive_mm size=3 → size=5:
+  GALAXY_SOUNDS_BLACK_HOLES, GALAXY_SOUNDS_PLANETARY_RINGS, GALAXY_SOUNDS_SOLAR_WINDS,
+  SLEEP_POD_SUEDE, MICROCHIP_CIRCLE, TRANSLATOR_ASTRO_BLACK, TRANSLATOR_ECLIPSE_CHARCOAL
+
+All other strategies identical to best_v10.
+
+### Live robustness note
+The live losses in v10 (total -19k from 9 losing products vs backtest expectation) are NOT fixable without accepting large backtest PnL sacrifice. The losses stem from naive_mm carrying inventory in a session that trended down, which is unpredictable. The late_flatten approach that would help in live costs -90k in backtest — not an acceptable tradeoff for competition scoring.
+
+## Files Created
+
+- Config: `MEMBER_OVERRIDES["best_v12_A1"]` in `prosperity/config.py`
+- Backtest wrapper: `submissions/best_v12_A1.py` (superseded by best_v12_A1_A3, deleted)
+- IMC submission: `artifacts/submissions/round_5/best_v12_A1_round5_submission.py`
+- Test configs cleaned up (test1–test8 removed from config.py and submissions/)
+
+---
+
+# ITERATION 6: A1+A3 merge → best_v12_A1_A3 = 851,678 PnL
+
+A3's two genuine changes vs best_v10 (PANEL_2X2 size 5→3, ROBOT_LAUNDRY passive_size 3→1) together give +3,572. A1's change (+96) touches different products — no conflicts.
+
+`best_v12_A1_A3` = `best_v10` + A3's two changes. A1's size upgrades were NOT applied (user decision — kept for a future iteration). Built via inheritance from best_v10 rather than A3's self-contained dump, which had accumulated config bugs (wrong sizes on 9 products, PEBBLES_XL missing M from partners) that caused a −24k regression.
+
+| Config | Backtest PnL |
+|--------|-------------|
+| best_v10 | 848,106 |
+| best_v12_A3 (self-contained dump, buggy) | 823,564 |
+| **best_v12_A1_A3** | **851,678** |
+
+Config: `MEMBER_OVERRIDES["best_v12_A1_A3"]` in `prosperity/config.py`
+Wrapper: `submissions/best_v12_A1_A3.py`

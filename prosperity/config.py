@@ -17804,3 +17804,25 @@ MEMBER_OVERRIDES["best_v10"] = {
         "PEBBLES_L":                  _v8_mm_conservative("PEBBLES_L"),
     }
 }
+
+
+
+
+MEMBER_OVERRIDES["best_v12_A1_A3"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v10"][5],
+        # A3: reduce PANEL_2X2 maker_size 5→3 (carry risk reduction)
+        "PANEL_2X2": ProductConfig(
+            symbol="PANEL_2X2", strategy="naive_tight_mm", position_limit=10,
+            params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000,
+                        ts_increment=100, last_ts_value=999900)),
+        # A3: reduce ROBOT_LAUNDRY passive_size 3→1 (less passive inventory on coint leg)
+        "ROBOT_LAUNDRY": ProductConfig(
+            symbol="ROBOT_LAUNDRY", strategy="coint_mm_v1", position_limit=10,
+            params=dict(partner_product="ROBOT_VACUUMING", mean_half_life=5000,
+                        z_window=2000, entry_z=1.5, exit_z=0.0,
+                        taker_size=10, passive_size=1, tighten_ticks=1,
+                        position_limit=10, last_ts_value=999900)),
+    }
+}
+
