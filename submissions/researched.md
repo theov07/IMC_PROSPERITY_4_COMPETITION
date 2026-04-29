@@ -1106,6 +1106,8 @@ Submission wrapper: `submissions/best_v12_snackpack_A1.py`
 - STRAW+RASP sum z-score on both products: -12,850 vs baseline
 - Momentum cross (VANI vs STRAW cumulative return crossover): 85% "momentum" on days 2/3 but only 59% on day 4 — not exploitable (it's just STRAW's daily trend, not a signal)
 - PISTACHIO-STRAWBERRY momentum: tick correlation +0.91 but they diverge directionally (STRAW up, PISTA down) — no arb, just a structural level divergence
+
+
 # ANALYST 2 (A2) RESEARCH — 2026-04-29: Cross-Group Trend Strategy
 
 ## Overview
