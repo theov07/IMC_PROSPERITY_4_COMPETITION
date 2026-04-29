@@ -517,3 +517,5 @@ Files:
 - Config: `MEMBER_OVERRIDES["tibo_r5_v7_2"]` in `prosperity/config.py`
 - Backtest wrapper: `submissions/tibo_r5_v7_2.py`
 - IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v7_2_round5_submission.py` (54,800 bytes, all checks passed)
+
+The submission: tibo_r5_v7_2_best_round5_submission and config tibo_r5_v7_2_best integrates baseline v7 into v7_2, it is the best v7.
