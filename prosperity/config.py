@@ -17584,6 +17584,28 @@ MEMBER_OVERRIDES["tibo_r5_v7_2"] = {
 }
 
 
+# ── Round 5 — tibo_r5_v7_2_best: best_v7 (maker_size=5) + v7_2 (stop losers + YELLOW) ──
+# 3-day realistic backtest: 824,996 PnL (+91,078 vs v6 733,918)
+# best_v7 contributions: maker_size 3→5 on 16 all-positive products (+7,802 vs v6)
+# v7_2 contributions: 8 losers→None (+68.6k vs v6), UV_VISOR_YELLOW trend_v2 th=700 (+14.7k)
+MEMBER_OVERRIDES["tibo_r5_v7_2_best"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v7"][5],
+        # ── v7_2: set all losing products to None ────────────────────────────────────
+        "PEBBLES_L": None,           # -11,500 in v6 (overrides best_v7's naive_mm)
+        "PEBBLES_M": None,           # -14,756 in v6
+        "UV_VISOR_MAGENTA": None,    # -7,314 in v6
+        "TRANSLATOR_SPACE_GRAY": None,  # -11,188 in v6
+        "PANEL_4X4": None,           # -10,672 in v6
+        "GALAXY_SOUNDS_SOLAR_FLAMES": None,  # -6,034 in v6
+        "TRANSLATOR_GRAPHITE_MIST": None,    # -4,418 in v6
+        "ROBOT_VACUUMING": None,     # -2,700 in v6
+        # ── v7_2: UV_VISOR_YELLOW trend_v2 th=700 (day3 EMA dip=-633 < 700 → no entry) ──
+        "UV_VISOR_YELLOW": _v7_trend("UV_VISOR_YELLOW", ema_hl=100, threshold=700, exit_thr=150),
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
