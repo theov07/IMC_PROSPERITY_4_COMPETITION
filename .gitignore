@@ -81,6 +81,11 @@ artifacts/backtest_results/*
 artifacts/backtests/*
 artifacts/backtest_cache/
 
+# r5_compare working dir — backtest JSON dumps (300-400 MB each, >>100MB GitHub limit)
+artifacts/r5_compare/*.json
+artifacts/r5_compare/*.log
+artifacts/r5_compare/.*.log
+
 # Large HTML reports (counterparties tool, data explorer) — regenerable from data
 artifacts/analysis/round_*/counterparties_*.html
 artifacts/analysis/round_*/data_explorer_*.html

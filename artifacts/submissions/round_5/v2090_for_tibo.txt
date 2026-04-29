@@ -1,0 +1,143 @@
+================================================================================
+  R5 BACKTEST — best_v2090_revive_space_gray (FINAL CHAMPION)
+  Command: python -m prosperity.tooling.backtest \
+              --strategy best_v2090_revive_space_gray \
+              --match-trades realistic --round 5 --days 2 3 4
+================================================================================
+
+  TOTAL 3-day PnL : 959,945
+  Max DD chained : 24,328 (8.6%)
+  Day 4 (LIVE) DD: 16,326 (4.8%)
+  Win rate       : 0.548
+  Volume         : 60,024 (45,879 make / 14,145 take)
+
+================================================================================
+  PER-PRODUCT SUBTOTALS (sorted by PnL desc)
+================================================================================
+
+ Product                          │     PnL │ Trades │   Vol │ EndPos │ Strategy
+ ─────────────────────────────────┼─────────┼────────┼───────┼────────┼─────────
+ ROBOT_DISHES                     │ 139,774 │   1569 │  9325 │     7  │ ar1_mean_rev_v1 (Tibo)
+ PEBBLES_XL                       │  89,243 │   1218 │  5279 │     3  │ pebbles_arb_v1 (Tibo)
+ PEBBLES_S                        │  61,667 │    447 │  1551 │    10  │ pair_skip(XL)
+ MICROCHIP_SQUARE                 │  54,771 │     12 │    50 │   -10  │ trend_follow_v2 (Tibo)
+ PANEL_1X4                        │  29,686 │    643 │  1510 │     1  │ naive_tight_mm
+ MICROCHIP_RECTANGLE              │  26,320 │    339 │   675 │    -9  │ pair_skip(SQUARE)
+ PEBBLES_XS                       │  25,450 │      3 │    30 │   -10  │ trend_follow_v2 (Tibo)
+ OXYGEN_SHAKE_CHOCOLATE           │  23,573 │    643 │  1510 │     1  │ naive_tight_mm
+ UV_VISOR_AMBER                   │  21,955 │      3 │    30 │   -10  │ trend_follow_v2 (Tibo)
+ UV_VISOR_ORANGE                  │  21,491 │    440 │  1084 │     9  │ pair_skip(YELLOW)
+ OXYGEN_SHAKE_EVENING_BREATH      │  20,865 │    643 │  1510 │     1  │ naive_tight_mm
+ UV_VISOR_RED                     │  20,060 │    436 │  1053 │     2  │ pair_skip(AMBER)
+ SLEEP_POD_NYLON                  │  19,734 │      6 │    50 │    10  │ trend_follow_v2 (Tibo)
+ SLEEP_POD_COTTON                 │  19,665 │    423 │  1003 │     0  │ pair_skip(NYLON)
+ OXYGEN_SHAKE_GARLIC              │  19,445 │      2 │    20 │    10  │ trend_follow_v2 (Tibo)
+ UV_VISOR_YELLOW                  │  19,285 │      2 │    20 │   -10  │ trend_follow_v2 (Tibo)
+ SLEEP_POD_SUEDE                  │  19,094 │    440 │  1062 │     2  │ pair_skip(NYLON)
+ SNACKPACK_CHOCOLATE              │  19,062 │    643 │  1510 │     1  │ naive_tight_mm
+ MICROCHIP_CIRCLE                 │  18,878 │    350 │   675 │    -9  │ pair_skip(OVAL)
+ PANEL_2X4                        │  18,156 │    643 │  1510 │     1  │ naive_tight_mm
+ GALAXY_SOUNDS_PLANETARY_RINGS    │  18,163 │    643 │  1510 │     1  │ naive_tight_mm
+ ROBOT_IRONING                    │  17,460 │      8 │    50 │    10  │ trend_follow_v2 (Tibo)
+ ROBOT_LAUNDRY                    │  17,337 │    426 │  1025 │     3  │ pair_skip(VACUUMING)
+ TRANSLATOR_VOID_BLUE             │  16,562 │    643 │  1510 │     1  │ naive_tight_mm
+ GALAXY_SOUNDS_BLACK_HOLES        │  15,624 │    459 │  1096 │     9  │ pair_skip(PLANETARY_RINGS)
+ SNACKPACK_RASPBERRY              │  15,482 │    618 │  1496 │    -2  │ pair_skip(STRAWBERRY)
+ OXYGEN_SHAKE_MORNING_BREATH      │  13,710 │    643 │  1510 │     1  │ naive_tight_mm
+ ROBOT_VACUUMING                  │  13,855 │    940 │  2246 │     4  │ coint_mm_v1 (Tibo)
+ SLEEP_POD_POLYESTER              │  13,417 │      5 │    30 │   -10  │ trend_follow_v2 (Tibo)
+ PANEL_1X2                        │  12,550 │      9 │    90 │    10  │ trend_follow_v2 (Tibo)
+ TRANSLATOR_ECLIPSE_CHARCOAL      │  12,320 │    460 │  1135 │    -5  │ pair_skip(VOID)
+ MICROCHIP_TRIANGLE               │  12,214 │    515 │   989 │   -10  │ naive_tight_mm
+ MICROCHIP_OVAL                   │  11,872 │    365 │   710 │   -10  │ pair_skip(TRIANGLE)
+ ROBOT_MOPPING                    │  11,688 │     14 │    70 │   -10  │ trend_follow_v2 (Tibo)
+ SNACKPACK_PISTACHIO              │  10,995 │    643 │  1510 │     1  │ naive_tight_mm
+ GALAXY_SOUNDS_DARK_MATTER        │  10,666 │    421 │  1017 │     1  │ pair_skip(PLANETARY_RINGS)
+ GALAXY_SOUNDS_SOLAR_WINDS        │   8,720 │    643 │  1510 │     1  │ naive_tight_mm
+ TRANSLATOR_ASTRO_BLACK           │   8,294 │    643 │  1510 │     1  │ naive_tight_mm
+ SNACKPACK_STRAWBERRY             │   7,220 │    643 │  1510 │     1  │ naive_tight_mm
+ PANEL_2X2                        │   7,142 │    643 │  1510 │     1  │ naive_tight_mm
+ TRANSLATOR_GRAPHITE_MIST         │   6,798 │    576 │  1410 │    -4  │ inventory_carry_mm
+ TRANSLATOR_SPACE_GRAY            │   4,193 │    455 │  1101 │     3  │ pair_skip(VOID)  ← revived
+ SNACKPACK_VANILLA                │   4,051 │    614 │  1489 │     1  │ pair_skip(CHOCOLATE)
+ PEBBLES_L                        │   1,131 │    510 │  1797 │     6  │ inventory_carry_mm
+ PANEL_4X4                        │     240 │    560 │  1362 │    -4  │ inventory_carry_mm
+ GALAXY_SOUNDS_SOLAR_FLAMES       │      67 │    569 │  1374 │    -3  │ inventory_carry_mm
+ ─────────────────────────────────┼─────────┼────────┼───────┼────────┼─────────
+ PEBBLES_M                        │       0 │      0 │     0 │     0  │ DROPPED (Tibo)
+ OXYGEN_SHAKE_MINT                │       0 │      0 │     0 │     0  │ DROPPED (Leo)
+ SLEEP_POD_LAMB_WOOL              │       0 │      0 │     0 │     0  │ DROPPED (Tibo)
+ UV_VISOR_MAGENTA                 │       0 │      0 │     0 │     0  │ DROPPED (Leo)
+ ─────────────────────────────────┼─────────┼─────────────────┼────────┼─────────
+ TOTAL (3 days)                   │ 959,945 │  21573 │ 60024 │     -  │ 46 active
+
+================================================================================
+  STRATEGY MIX BREAKDOWN
+================================================================================
+
+ Tibo's specialized alphas (~440k):
+   pebbles_arb_v1     PEBBLES_XL                            +89k
+   ar1_mean_rev_v1    ROBOT_DISHES                          +140k
+   trend_follow_v2    11 products (Tibo's selection)        +97k
+   trend_follow_v2    MICROCHIP_SQUARE                      +55k
+   coint_mm_v1        ROBOT_VACUUMING (LAUNDRY now p_skip)  +14k
+
+ Pair-skip overlays — 15 active (~280k cumul):
+   PEBBLES_S         ←  PEBBLES_XL                          +62k
+   MICROCHIP_RECT    ←  MICROCHIP_SQUARE                    +26k
+   MICROCHIP_CIRCLE  ←  MICROCHIP_OVAL                      +19k
+   MICROCHIP_OVAL    ←  MICROCHIP_TRIANGLE                  +12k
+   ROBOT_LAUNDRY     ←  ROBOT_VACUUMING                     +17k
+   SLEEP_POD_SUEDE   ←  SLEEP_POD_NYLON                     +19k
+   SLEEP_POD_COTTON  ←  SLEEP_POD_NYLON                     +20k
+   UV_VISOR_RED      ←  UV_VISOR_AMBER                      +20k
+   UV_VISOR_ORANGE   ←  UV_VISOR_YELLOW                     +21k
+   TRANSL_ECLIPSE    ←  TRANSL_VOID                         +12k
+   TRANSL_SPACE_GRAY ←  TRANSL_VOID  (revived from dropped) +4k
+   GALAXY_DARK       ←  GALAXY_PLANET                       +11k
+   GALAXY_BLACK_HOLE ←  GALAXY_PLANET                       +16k
+   SNACK_VANILLA     ←  SNACK_CHOCOLATE                     +4k
+   SNACK_RASPBERRY   ←  SNACK_STRAWBERRY                    +15k
+
+ Inventory carry overlays:
+   PANEL_4X4, TRANSL_GRAPHITE_MIST, GALAXY_SOLAR_FLAMES, PEBBLES_L  +8k cumul
+
+ Drops:
+   PEBBLES_M, SLEEP_POD_LAMB_WOOL (Tibo)
+   OXYGEN_SHAKE_MINT, UV_VISOR_MAGENTA (Leo)
+
+================================================================================
+  DRAWDOWN PROFILE
+================================================================================
+
+  Day 2                                21,319     10.4%
+  Day 3                                24,328     73.8%   (% high but abs small — peak intra-day)
+  Day 4 (LIVE)                         16,326      4.8%   ← excellent for live
+  TOTAL (chained equity)               24,328      8.6%
+
+================================================================================
+  KEY DISCOVERY — Pattern asymétrique pair_skip
+================================================================================
+
+  Pour chaque paire corrélée intra-groupe, c'est le produit LAGGER qui bénéficie
+  d'un signal pair_skip basé sur le LEADER. L'inverse échoue toujours.
+
+  Validé : 15 wins, ~14 losses sur 50+ tests.
+
+  Logic: pair_z = z(self) + z(partner) [partner_sign=-1]
+     - if pair_z > 1.25 → skip BID  (don't load up when both rich)
+     - if pair_z < -1.25 → skip ASK (don't dump when both cheap)
+
+  Position limit cap = 10 (R5 specific), maker_size=5, tighten=1.
+
+================================================================================
+  vs v1611 baseline
+================================================================================
+
+  v1611 (previous "FINAL"):  880,725 PnL, 28,361 DD (9.7%), Day 4 DD 9.6%
+  v2090 (current):           959,945 PnL, 24,328 DD (8.6%), Day 4 DD 4.8%
+
+  Δ: +79,220 PnL (+9.0%), -4,033 DD (-14%), -4.8 pp Day 4 DD
+
+  Submission file:
+    artifacts/submissions/round_5/best_v2090_revive_space_gray_round5_submission.py
