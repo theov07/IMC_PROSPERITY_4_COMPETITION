@@ -17901,3 +17901,337 @@ MEMBER_OVERRIDES["best_v12_snackpack_A1"] = {
         "UV_VISOR_YELLOW": ProductConfig(symbol="UV_VISOR_YELLOW", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=100, threshold=700, exit_threshold=150, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
     }
 }
+# ── A2 cross-group strategy helpers ──────────────────────────────────────────
+# Signal groups: SLEEP_POD avg EMA (vs session start) → GALAXY_SOUNDS direction
+# Inverted signal: ROBOT avg EMA (vs session start) → inverse GS direction
+_SP_GROUP = [
+    "SLEEP_POD_SUEDE", "SLEEP_POD_LAMB_WOOL", "SLEEP_POD_POLYESTER",
+    "SLEEP_POD_NYLON", "SLEEP_POD_COTTON",
+]
+_RB_GROUP = [
+    "ROBOT_VACUUMING", "ROBOT_MOPPING", "ROBOT_DISHES",
+    "ROBOT_LAUNDRY", "ROBOT_IRONING",
+]
+
+def _v13_cg_A2(sym: str, sp_thr: float, rb_thr: float = 0,
+               ema_hl: float = 100, passive_size: int = 3,
+               taker_size: int = 10) -> ProductConfig:
+    """cross_group_trend_A2 config: SP (+ optional inverted RB) → target product."""
+    params = dict(
+        signal_products=_SP_GROUP,
+        signal_ema_hl=ema_hl,
+        signal_threshold=sp_thr,
+        signal_exit=sp_thr / 3,
+        taker_size=taker_size,
+        passive_size=passive_size,
+        position_limit=10,
+        last_ts_value=999900,
+    )
+    if rb_thr > 0:
+        params["signal2_products"] = _RB_GROUP
+        params["signal2_threshold"] = rb_thr
+    return ProductConfig(symbol=sym, strategy="cross_group_trend_A2",
+                         position_limit=10, params=params)
+
+
+# ── A2 test configs: cross-group signal for GALAXY_SOUNDS products ────────────
+# ── best_v13_A2: self-contained final config (A2 analyst) ────────────────────
+# Baseline: best_v12_A1_A3 = 851,678 PnL
+# A2 changes:
+#   GALAXY_SOUNDS_BLACK_HOLES → cross_group_trend_A2 (SP signal thr=80 + RB inverted thr=30)
+#     Backtest: +41,708 vs naive_mm +15,420 → +26,288 improvement
+#   GALAXY_SOUNDS_DARK_MATTER → cross_group_trend_A2 (SP signal thr=300 only)
+#     Backtest: +16,904 vs naive_mm +7,558 → +9,346 improvement
+# Total improvement: +35,634 → best_v13_A2 = 887,312 PnL
+#
+# Signal: SLEEP_POD group avg EMA vs session start (stable across days,
+#   86% cross-day corr with GALAXY_SOUNDS, -75% with ROBOT)
+# For BLACK_HOLES: combined SP>80 AND RB<-30 (robust, all 3 days positive)
+# For DARK_MATTER: SP>300 alone sufficient (low noise, all 3 days positive)
+#
+# Why cross-group beats naive_mm here:
+#   On "downtrend days" (SP down → GS down), naive_mm accumulates long inventory
+#   that gets marked down badly (live v10: DARK_MATTER -3,834, BLACK_HOLES -5,223).
+#   Cross-group strategy detects the regime early and goes SHORT → avoids the loss.
+def _sc_mm(sym: str, size: int = 3, limit: int = 10) -> ProductConfig:
+    """Self-contained naive_tight_mm shorthand for best_v13_A2."""
+    return ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=limit,
+                         params=dict(maker_size=size, tighten_ticks=1,
+                                     log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+def _sc_trend(sym: str, ema_hl: float, thr: float, exit_thr: float,
+              warmup: int = 0) -> ProductConfig:
+    """Self-contained trend_follow_v2 shorthand for best_v13_A2."""
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(ema_half_life=ema_hl, threshold=thr, exit_threshold=exit_thr,
+                                     warmup_ticks=warmup, position_limit=10,
+                                     ts_increment=100, last_ts_value=999900, log_flush_ts=1000))
+
+MEMBER_OVERRIDES["best_v13_A2"] = {
+    5: {
+        # ── PEBBLES ──────────────────────────────────────────────────────────
+        "PEBBLES_XL": ProductConfig(
+            symbol="PEBBLES_XL", strategy="pebbles_arb_v1", position_limit=10,
+            params=dict(partner_products=["PEBBLES_L", "PEBBLES_M", "PEBBLES_S", "PEBBLES_XS"],
+                        sum_target=50000.0, edge_ticks=7.0, passive_half_spread=6.0,
+                        taker_size=10, passive_size=5, ewma_alpha=0.05,
+                        position_limit=10, last_ts_value=999900)),
+        "PEBBLES_XS":  _sc_trend("PEBBLES_XS", ema_hl=150, thr=250, exit_thr=80),
+        "PEBBLES_L":   _sc_mm("PEBBLES_L",  size=3, limit=5),
+        # PEBBLES_M: None (removed — consistently losing in backtest AND live)
+        "PEBBLES_M":   None,
+        "PEBBLES_S":   _sc_mm("PEBBLES_S",  size=3),
+        # ── ROBOT ─────────────────────────────────────────────────────────────
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(entry_threshold=20.0, taker_size=10, passive_size=0,
+                        exit_ticks=0, position_limit=10, last_ts_value=999900)),
+        "ROBOT_MOPPING":  _sc_trend("ROBOT_MOPPING",  ema_hl=150, thr=100, exit_thr=40),
+        "ROBOT_IRONING":  _sc_trend("ROBOT_IRONING",  ema_hl=150, thr=100, exit_thr=40),
+        "ROBOT_LAUNDRY": ProductConfig(
+            symbol="ROBOT_LAUNDRY", strategy="coint_mm_v1", position_limit=10,
+            params=dict(partner_product="ROBOT_VACUUMING", mean_half_life=5000,
+                        z_window=2000, entry_z=1.5, exit_z=0.0,
+                        taker_size=10, passive_size=1, tighten_ticks=1,
+                        position_limit=10, last_ts_value=999900)),  # A3: passive_size 3→1
+        "ROBOT_VACUUMING": ProductConfig(
+            symbol="ROBOT_VACUUMING", strategy="coint_mm_v1", position_limit=10,
+            params=dict(partner_product="ROBOT_LAUNDRY", mean_half_life=5000,
+                        z_window=2000, entry_z=1.5, exit_z=0.0,
+                        taker_size=10, passive_size=3, tighten_ticks=1,
+                        position_limit=10, last_ts_value=999900)),
+        # ── GALAXY_SOUNDS ─────────────────────────────────────────────────────
+        # A2: cross-group strategy using SLEEP_POD avg as directional signal
+        "GALAXY_SOUNDS_BLACK_HOLES":  _v13_cg_A2("GALAXY_SOUNDS_BLACK_HOLES", sp_thr=80,  rb_thr=30),
+        "GALAXY_SOUNDS_DARK_MATTER":  _v13_cg_A2("GALAXY_SOUNDS_DARK_MATTER",  sp_thr=300),
+        "GALAXY_SOUNDS_PLANETARY_RINGS": _sc_mm("GALAXY_SOUNDS_PLANETARY_RINGS", size=3),  # A3: size=3
+        "GALAXY_SOUNDS_SOLAR_FLAMES":    _sc_mm("GALAXY_SOUNDS_SOLAR_FLAMES",    size=3, limit=5),
+        "GALAXY_SOUNDS_SOLAR_WINDS":     _sc_mm("GALAXY_SOUNDS_SOLAR_WINDS",     size=3),
+        # ── SLEEP_POD ─────────────────────────────────────────────────────────
+        "SLEEP_POD_LAMB_WOOL": None,  # intra-day spike trap, consistently loses
+        "SLEEP_POD_COTTON":    _sc_trend("SLEEP_POD_COTTON",    ema_hl=100, thr=80,  exit_thr=30),
+        "SLEEP_POD_NYLON":     _sc_trend("SLEEP_POD_NYLON",     ema_hl=100, thr=80,  exit_thr=30),
+        "SLEEP_POD_POLYESTER": _sc_trend("SLEEP_POD_POLYESTER", ema_hl=150, thr=600, exit_thr=150),
+        "SLEEP_POD_SUEDE":     _sc_mm("SLEEP_POD_SUEDE", size=3),
+        # ── MICROCHIP ─────────────────────────────────────────────────────────
+        "MICROCHIP_SQUARE":   _sc_trend("MICROCHIP_SQUARE", ema_hl=100, thr=250, exit_thr=80),
+        "MICROCHIP_OVAL":     _sc_mm("MICROCHIP_OVAL",     size=5),
+        "MICROCHIP_TRIANGLE": _sc_mm("MICROCHIP_TRIANGLE", size=3),
+        "MICROCHIP_CIRCLE":   _sc_mm("MICROCHIP_CIRCLE",   size=3),
+        "MICROCHIP_RECTANGLE": ProductConfig(
+            symbol="MICROCHIP_RECTANGLE", strategy="coint_mm_v1", position_limit=10,
+            params=dict(partner_product="MICROCHIP_SQUARE", mean_half_life=5000,
+                        z_window=1000, entry_z=1.2, exit_z=0.0,
+                        taker_size=10, passive_size=3, tighten_ticks=1,
+                        position_limit=10, last_ts_value=999900)),
+        # ── PANEL ─────────────────────────────────────────────────────────────
+        "PANEL_1X2": _sc_trend("PANEL_1X2", ema_hl=100, thr=80, exit_thr=30),
+        "PANEL_1X4": _sc_mm("PANEL_1X4", size=5),
+        "PANEL_2X2": _sc_mm("PANEL_2X2", size=3),  # A3: size 5→3
+        "PANEL_2X4": _sc_mm("PANEL_2X4", size=5),
+        "PANEL_4X4": _sc_mm("PANEL_4X4", size=3, limit=5),
+        # ── UV_VISOR ──────────────────────────────────────────────────────────
+        "UV_VISOR_AMBER":   _sc_trend("UV_VISOR_AMBER", ema_hl=100, thr=80, exit_thr=30),
+        "UV_VISOR_YELLOW":  _sc_trend("UV_VISOR_YELLOW", ema_hl=100, thr=700, exit_thr=150),
+        "UV_VISOR_ORANGE":  _sc_mm("UV_VISOR_ORANGE",  size=5),
+        "UV_VISOR_RED":     _sc_mm("UV_VISOR_RED",     size=5),
+        "UV_VISOR_MAGENTA": _sc_mm("UV_VISOR_MAGENTA", size=3, limit=5),
+        # ── OXYGEN_SHAKE ──────────────────────────────────────────────────────
+        "OXYGEN_SHAKE_GARLIC":          _sc_trend("OXYGEN_SHAKE_GARLIC", ema_hl=150, thr=700, exit_thr=150),
+        "OXYGEN_SHAKE_CHOCOLATE":       _sc_mm("OXYGEN_SHAKE_CHOCOLATE",       size=5),
+        "OXYGEN_SHAKE_EVENING_BREATH":  _sc_mm("OXYGEN_SHAKE_EVENING_BREATH",  size=5),
+        "OXYGEN_SHAKE_MORNING_BREATH":  _sc_mm("OXYGEN_SHAKE_MORNING_BREATH",  size=5),
+        "OXYGEN_SHAKE_MINT":            _sc_mm("OXYGEN_SHAKE_MINT",            size=3),
+        # ── SNACKPACK ─────────────────────────────────────────────────────────
+        "SNACKPACK_CHOCOLATE":  _sc_mm("SNACKPACK_CHOCOLATE",  size=5),
+        "SNACKPACK_VANILLA":    _sc_mm("SNACKPACK_VANILLA",    size=5),
+        "SNACKPACK_PISTACHIO":  _sc_mm("SNACKPACK_PISTACHIO",  size=5),
+        "SNACKPACK_STRAWBERRY": _sc_mm("SNACKPACK_STRAWBERRY", size=5),
+        "SNACKPACK_RASPBERRY":  _sc_mm("SNACKPACK_RASPBERRY",  size=5),
+        # ── TRANSLATOR ────────────────────────────────────────────────────────
+        "TRANSLATOR_VOID_BLUE":        _sc_mm("TRANSLATOR_VOID_BLUE",        size=5),
+        "TRANSLATOR_ASTRO_BLACK":      _sc_mm("TRANSLATOR_ASTRO_BLACK",      size=3),
+        "TRANSLATOR_ECLIPSE_CHARCOAL": _sc_mm("TRANSLATOR_ECLIPSE_CHARCOAL", size=3),
+        "TRANSLATOR_GRAPHITE_MIST":    _sc_mm("TRANSLATOR_GRAPHITE_MIST",    size=3, limit=5),
+        "TRANSLATOR_SPACE_GRAY": None,  # consistently loses in both backtest and live
+    }
+}
+
+# ── v14 helpers ───────────────────────────────────────────────────────────────
+def _sc_trend14(sym: str, ema_hl: float, thr: float, exit_thr: float, direction: int = 0) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(ema_half_life=ema_hl, threshold=thr, exit_threshold=exit_thr,
+                                     direction=direction,
+                                     position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000))
+
+# ── test_v14_dir_A2: directional TFv2 test (Theo-informed directions) ─────────
+# Theo's directions from v12: MICROCHIP_OVAL=-10, MICROCHIP_TRIANGLE=-10,
+# UV_VISOR_RED=+10, SLEEP_POD_SUEDE=+10, SLEEP_POD_POLYESTER=+10,
+# OXYGEN_SHAKE_GARLIC=+10, PEBBLES_XS=-10
+_v14_base = MEMBER_OVERRIDES["best_v13_A2"][5].copy()
+_v14_dir = {
+    **_v14_base,
+    # Theo SHORT: MICROCHIP products always trend down
+    "MICROCHIP_OVAL":     _sc_trend14("MICROCHIP_OVAL",     ema_hl=100, thr=60,  exit_thr=20, direction=-1),
+    "MICROCHIP_TRIANGLE": _sc_trend14("MICROCHIP_TRIANGLE", ema_hl=100, thr=60,  exit_thr=20, direction=-1),
+    # Theo LONG: UV_VISOR_RED always trends up
+    "UV_VISOR_RED":       _sc_trend14("UV_VISOR_RED",       ema_hl=100, thr=60,  exit_thr=20, direction=+1),
+    # Theo LONG: SLEEP_POD products trend up — bidirectional was losing when it went short
+    "SLEEP_POD_SUEDE":    _sc_trend14("SLEEP_POD_SUEDE",    ema_hl=100, thr=60,  exit_thr=20, direction=+1),
+    "SLEEP_POD_POLYESTER": _sc_trend14("SLEEP_POD_POLYESTER", ema_hl=150, thr=200, exit_thr=80, direction=+1),
+    # Theo LONG: OXYGEN_SHAKE_GARLIC
+    "OXYGEN_SHAKE_GARLIC": _sc_trend14("OXYGEN_SHAKE_GARLIC", ema_hl=150, thr=200, exit_thr=80, direction=+1),
+    # Theo SHORT: PEBBLES_XS — existing TFv2 but lock direction to avoid wrong-way entries
+    "PEBBLES_XS":          _sc_trend14("PEBBLES_XS",          ema_hl=150, thr=100, exit_thr=30, direction=-1),
+    # ROBOT_IRONING: keep existing TFv2 bidirectional (momentum strategy in Theo, unclear direction)
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,  exit_thr=20),
+    # PEBBLES_S: keep naive_mm (38k baseline >> Theo's 19k directional) — no change
+}
+MEMBER_OVERRIDES["test_v14_dir_A2"] = {5: _v14_dir}
+
+# ── best_v14_A2 (OLD — session_start mode) — kept for reference ───────────────
+_v14_best = {
+    **_v14_base,
+    "MICROCHIP_OVAL":      _sc_trend14("MICROCHIP_OVAL",      ema_hl=100, thr=60,  exit_thr=20, direction=-1),
+    "MICROCHIP_TRIANGLE":  _sc_trend14("MICROCHIP_TRIANGLE",  ema_hl=100, thr=60,  exit_thr=20, direction=-1),
+    "PEBBLES_XS":          _sc_trend14("PEBBLES_XS",          ema_hl=150, thr=100, exit_thr=30, direction=-1),
+    "OXYGEN_SHAKE_GARLIC": _sc_trend14("OXYGEN_SHAKE_GARLIC", ema_hl=150, thr=200, exit_thr=80, direction=+1),
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,  exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v14_A2"] = {5: _v14_best}
+
+# ── v15: EMA-cross + trailing stop — generalises to non-monotonic live days ────
+# Root cause analysis from v12_A2 live log:
+#   PEBBLES_XS=0 live: price crossed -100 at tick 17 but then rallied to +200;
+#     slow EMA averaged out, never triggered. EMA-cross detects the DOWN momentum
+#     regardless of the initial counter-move.
+#   OXYGEN_SHAKE_GARLIC=0 live: price was negative for 90% of session, recovered
+#     to +278 in last 65 ticks; slow EMA anchored at -394 couldn't follow. EMA-cross
+#     fast/slow divergence fires even on late-session momentum.
+#   MICROCHIP_OVAL: price went UP first (+100 at tick 41) before falling -452;
+#     session-start EMA pulled up, delayed SHORT entry. EMA-cross detects reversal sooner.
+# Trail stop: exits when price reverses trail_stop_thr from extremum rather than
+#   waiting for EMA to cross back past session_start ± exit_thr — limits losses on
+#   reversal days while letting profitable trades run.
+def _sc_cross15(sym: str, fast_hl: float, slow_hl: float, thr: float,
+                exit_thr: float, trail: float, direction: int = 0) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(
+                             signal_mode="ema_cross",
+                             ema_fast_hl=fast_hl, ema_slow_hl=slow_hl,
+                             threshold=thr, exit_threshold=exit_thr,
+                             trail_stop_thr=trail, direction=direction,
+                             position_limit=10, ts_increment=100,
+                             last_ts_value=999900, log_flush_ts=1000))
+
+_v15_best = {
+    **_v14_base,
+    # MICROCHIP: consistently fall session-long. EMA-cross detects early downward push
+    # even after brief opening counter-move. SHORT-only prevents long entries on up days.
+    "MICROCHIP_OVAL":      _sc_cross15("MICROCHIP_OVAL",      fast_hl=30, slow_hl=500,
+                                        thr=40, exit_thr=20, trail=60, direction=-1),
+    "MICROCHIP_TRIANGLE":  _sc_cross15("MICROCHIP_TRIANGLE",  fast_hl=30, slow_hl=500,
+                                        thr=40, exit_thr=20, trail=60, direction=-1),
+    # PEBBLES_XS: dipped early then rallied, final net negative. EMA-cross catches
+    # downward momentum when it builds, trail stop exits quickly if it reverses.
+    "PEBBLES_XS":          _sc_cross15("PEBBLES_XS",          fast_hl=30, slow_hl=300,
+                                        thr=40, exit_thr=20, trail=60, direction=-1),
+    # OXYGEN_SHAKE_GARLIC: positive most of 3 BT days but can recover late in live.
+    # EMA-cross (fast_hl=20 for responsiveness) fires even on late-session recovery.
+    "OXYGEN_SHAKE_GARLIC": _sc_cross15("OXYGEN_SHAKE_GARLIC", fast_hl=20, slow_hl=300,
+                                        thr=60, exit_thr=20, trail=80, direction=+1),
+    # ROBOT_IRONING: clean monotonic trends. Keep session_start mode (lower overhead)
+    # but with thr=50 improvement from v14.
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,
+                                        exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v15_A2"] = {5: _v15_best}
+
+# ── best_v16_A2: session_start + reference_update + trail_stop ─────────────────
+# Fixes the two live failure modes of v14 without destroying backtest:
+#   1. PEBBLES_XS/MICROCHIP: counter-move at open pulls EMA away from reference →
+#      add reference_update_interval=800 so reference resets to EMA after 800 flat
+#      ticks; when price finally trends, signal fires from the updated (closer) base.
+#      In backtest, we enter in position before tick 800 → update never fires → unchanged.
+#   2. OXYGEN_SHAKE_GARLIC: negative for 90% of session (EMA anchored at bottom);
+#      reference_update_interval=800 resets reference to the low; when price spikes,
+#      signal = EMA - (low_reference) > threshold → fires even on a late recovery.
+#      In backtest Day3 (continuously falling), reference chases price down → signal
+#      never crosses +threshold → 0 PnL (avoids the -8,215 Day3 loss from v14).
+#   3. trail_stop_thr: protective measure — exits when price gives back trail ticks
+#      from the extremum rather than waiting for full reversal. Reduces loss on days
+#      where we enter but the trend doesn't sustain.
+def _sc_v16(sym: str, ema_hl: float, thr: float, exit_thr: float,
+             trail: float, ref_interval: int, direction: int = 0) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(ema_half_life=ema_hl, threshold=thr,
+                                     exit_threshold=exit_thr, trail_stop_thr=trail,
+                                     reference_update_interval=ref_interval,
+                                     direction=direction, position_limit=10,
+                                     ts_increment=100, last_ts_value=999900,
+                                     log_flush_ts=1000))
+
+_v16_best = {
+    **_v14_base,
+    # MICROCHIP: tend to fall from session open; faster EMA (hl=50) reduces lag
+    # on the initial UP counter-move; ref_update catches mid-session reversals.
+    "MICROCHIP_OVAL":      _sc_v16("MICROCHIP_OVAL",      ema_hl=50, thr=50,
+                                    exit_thr=20, trail=60, ref_interval=800, direction=-1),
+    "MICROCHIP_TRIANGLE":  _sc_v16("MICROCHIP_TRIANGLE",  ema_hl=50, thr=50,
+                                    exit_thr=20, trail=60, ref_interval=800, direction=-1),
+    # PEBBLES_XS: volatile but net-short most days; ref_update essential for live.
+    "PEBBLES_XS":          _sc_v16("PEBBLES_XS",          ema_hl=50, thr=60,
+                                    exit_thr=20, trail=80, ref_interval=800, direction=-1),
+    # OXYGEN_SHAKE_GARLIC: positive days trend up but sometimes only in last 20%.
+    # ref_update=800 resets to low reference; trail=100 locks partial gains.
+    "OXYGEN_SHAKE_GARLIC": _sc_v16("OXYGEN_SHAKE_GARLIC", ema_hl=50, thr=80,
+                                    exit_thr=20, trail=100, ref_interval=800, direction=+1),
+    # ROBOT_IRONING: clean monotonic trends, no counter-move issue; session_start works.
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,
+                                        exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v16_A2"] = {5: _v16_best}
+
+# ── best_v17_A2: cherry-pick best params per product ─────────────────────────
+# MICROCHIP_TRIANGLE reverted to v14 params: it correctly got 0 live (price went
+# UP all day, direction=-1 prevented loss — no over-fitting problem to fix).
+# The v16 faster EMA + ref_update caused excessive round-trip losses in backtest
+# (-13,536 Day2 vs -9,163 in v14) because the product is volatile on Day2.
+_v17_best = {
+    **_v14_base,
+    "MICROCHIP_OVAL":      _sc_v16("MICROCHIP_OVAL",      ema_hl=50, thr=50,
+                                    exit_thr=20, trail=60, ref_interval=800, direction=-1),
+    "MICROCHIP_TRIANGLE":  _sc_trend14("MICROCHIP_TRIANGLE", ema_hl=100, thr=60,
+                                        exit_thr=20, direction=-1),
+    "PEBBLES_XS":          _sc_v16("PEBBLES_XS",          ema_hl=50, thr=60,
+                                    exit_thr=20, trail=80, ref_interval=800, direction=-1),
+    "OXYGEN_SHAKE_GARLIC": _sc_v16("OXYGEN_SHAKE_GARLIC", ema_hl=50, thr=80,
+                                    exit_thr=20, trail=100, ref_interval=800, direction=+1),
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",    ema_hl=100, thr=50,
+                                        exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v17_A2"] = {5: _v17_best}
+
+# ── best_v18_A2: live-validated cherry-pick ────────────────────────────────────
+# Diagnosis from v17 live (26k) vs v13 live (28k):
+#   MICROCHIP_OVAL/TRIANGLE directional TFv2 backfired live:
+#     - TRIANGLE: price went UP, direction=-1 got 0 vs naive_mm 3,036 (spread income lost)
+#     - OVAL: fast EMA entered SHORT on -94 brief dip; trail fired at -1,470 loss;
+#             re-entry recovered most but still -1,392 vs naive_mm's steady +2,619
+#   PEBBLES_XS: fast ema_hl=50 entered SHORT on early dip; price recovered to +138;
+#     trail fired at -1,730 realized; ended -1,252 vs v13/v14 0 (no entry = no loss)
+#   Fix: MICROCHIP_OVAL + TRIANGLE → naive_mm (direction-agnostic, always makes spread)
+#        PEBBLES_XS → v14 params (ema_hl=150 thr=100: slow enough not to fire on brief dips)
+#   Keep: OXYGEN_SHAKE_GARLIC (ref_update fixed 0→2,458 live), ROBOT_IRONING (thr=50 improved)
+_v18_best = {
+    **_v14_base,
+    "MICROCHIP_OVAL":      _sc_mm("MICROCHIP_OVAL",      size=5),
+    "MICROCHIP_TRIANGLE":  _sc_mm("MICROCHIP_TRIANGLE",  size=3),
+    "PEBBLES_XS":          _sc_trend14("PEBBLES_XS",     ema_hl=150, thr=100,
+                                        exit_thr=30, direction=-1),
+    "OXYGEN_SHAKE_GARLIC": _sc_v16("OXYGEN_SHAKE_GARLIC", ema_hl=50, thr=80,
+                                    exit_thr=20, trail=100, ref_interval=800, direction=+1),
+    "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",   ema_hl=100, thr=50,
+                                        exit_thr=20),
+}
+MEMBER_OVERRIDES["best_v18_A2"] = {5: _v18_best}

@@ -1106,4 +1106,248 @@ Submission wrapper: `submissions/best_v12_snackpack_A1.py`
 - STRAW+RASP sum z-score on both products: -12,850 vs baseline
 - Momentum cross (VANI vs STRAW cumulative return crossover): 85% "momentum" on days 2/3 but only 59% on day 4 — not exploitable (it's just STRAW's daily trend, not a signal)
 - PISTACHIO-STRAWBERRY momentum: tick correlation +0.91 but they diverge directionally (STRAW up, PISTA down) — no arb, just a structural level divergence
+# ANALYST 2 (A2) RESEARCH — 2026-04-29: Cross-Group Trend Strategy
+
+## Overview
+
+Explored cross-group correlations between SLEEP_POD (SP), GALAXY_SOUNDS (GS), and ROBOT (RB) groups, built a `cross_group_trend_A2` strategy, and achieved **+35,634 PnL improvement** over best_v12_A1_A3.
+
+Final config: **best_v13_A2 = 887,312 PnL** (+35,634 vs baseline 851,678)
+
+## Cross-Group Correlation Analysis
+
+### Confirmed correlations (overall 3-day level data)
+
+| Pair | Correlation |
+|------|------------|
+| SP avg vs GS avg | +86% |
+| SP avg vs RB avg | −75% |
+| GS avg vs RB avg | −58% |
+
+### Critical finding: correlations are mostly between-day, not within-day
+
+| Day | SP vs GS | SP vs RB | GS vs RB |
+|-----|----------|----------|----------|
+| 2 | 0.84 | +0.15 (!) | +0.28 |
+| 3 | 0.70 | −0.56 | −0.68 |
+| 4 | 0.21 | −0.20 | −0.40 |
+
+Tick-level return correlations are essentially zero (~0.01-0.04) — no predictive signal tick-by-tick. The high overall correlations are driven by between-day regime differences (some days all products up, others all down).
+
+### PCA results: unstable within groups
+
+PCA on each group per day shows unstable structure:
+- SLEEP_POD: PC1 explains 58-67% but loadings flip signs between days (NYLON goes UP on Day4 while group average goes DOWN)
+- GALAXY_SOUNDS: Very unstable PC structure, no consistent dominant product
+- ROBOT: DISHES always separate; MOPPING/IRONING/LAUNDRY/VACUUMING form a sub-group
+
+**Conclusion**: No stable PCA structure to exploit directly. Cannot use individual product PCA loadings as cross-group signals reliably.
+
+### Actionable signal: group AVERAGE EMA vs session start
+
+Despite individual product instability, the group AVERAGE provides a more robust daily direction indicator:
+
+| Day | SP avg move | GS avg move | RB avg move | SP-GS aligned? |
+|-----|-------------|-------------|-------------|----------------|
+| 2 | +654 | +808 | −86 | YES |
+| 3 | +893 | +358 | −329 | YES |
+| 4 | −200 | −277 | +59 | YES (all 3 days!) |
+
+SP group average perfectly predicts GS direction across all 3 days. Best targets: DARK_MATTER and BLACK_HOLES.
+
+## Strategy Design: cross_group_trend_A2
+
+File: `prosperity/strategies/round_5/tibo/cross_group_trend_A2.py`
+
+**Signal**: EMA of SP group average deviation from session start:
+- `sp_ema = EMA(mean(SP_product_mids) - session_start_SP_avg, hl=100)`
+
+**Optional second signal (inverted)**: EMA of RB group average:
+- `rb_ema = EMA(mean(RB_product_mids) - session_start_RB_avg, hl=100)`
+- Used as CONFIRMATION (RB down when SP up): combined signal = SP > thr AND RB < -rb_thr
+
+**Signal regimes**:
+- BULL: sp_ema > signal_threshold (AND rb_ema < -signal2_threshold if used)
+- BEAR: sp_ema < -signal_threshold (AND rb_ema > signal2_threshold)
+- NEUTRAL: neither
+
+**Trading logic**:
+- BULL: post passive bid only + taker buy on entry (position==0)
+- BEAR: post passive ask only + taker sell on entry (position==0)
+- NEUTRAL: post both bids and asks (naive_mm behavior)
+- Exit: when EMA crosses back through exit threshold
+
+## Backtest Results
+
+### Parameter search (simulation)
+
+| Product | Config | Simulated | Naive_mm baseline |
+|---------|--------|-----------|------------------|
+| DARK_MATTER | sp_thr=300 | +18,615 | +7,558 |
+| BLACK_HOLES | sp=80 + rb=30 | +34,065 | +15,419 |
+| DARK_MATTER | rb_thr=50 | +19,370 | +7,558 |
+| BLACK_HOLES | sp_thr=150 (sp only) | +30,045 | +15,419 |
+
+### Actual backtest results (realistic fill mode, days 2/3/4)
+
+| Config | 3-day PnL | Delta vs baseline |
+|--------|-----------|-------------------|
+| best_v12_A1_A3 (baseline) | 851,678 | — |
+| test_cgA2_dark_matter | 861,024 | +9,346 |
+| test_cgA2_black_holes | 877,966 | +26,288 |
+| test_cgA2_both (→ best_v13_A2) | **887,312** | **+35,634** |
+| test_cgA2_bh_sponly (sp=150 only) | 868,862 | +17,184 |
+
+### Per-product results for best_v13_A2
+
+| Product | Strategy | 3-day PnL | vs naive_mm |
+|---------|----------|-----------|-------------|
+| GALAXY_SOUNDS_BLACK_HOLES | cross_group_trend_A2 (sp=80, rb=30) | +41,708 | +26,288 |
+| GALAXY_SOUNDS_DARK_MATTER | cross_group_trend_A2 (sp=300 only) | +16,904 | +9,346 |
+
+### GS products NOT changed (cross-group signal doesn't help):
+
+- **GALAXY_SOUNDS_PLANETARY_RINGS**: cross-group strategy WORSE than naive_mm in simulation (threshold instability on Day 3 which only moves +158). Keep naive_mm.
+- **GALAXY_SOUNDS_SOLAR_WINDS**: Day 2 misalignment (SP up +654, SOLAR_WINDS DOWN −416). Too risky.
+- **GALAXY_SOUNDS_SOLAR_FLAMES**: No consistent GS-SP alignment (Day 3 inversion: SP up +893, SOLAR_FLAMES DOWN −694). Skip.
+
+## Why cross-group beats naive_mm for BLACK_HOLES and DARK_MATTER
+
+Naive_mm fails on "downtrend days" (Day 4: SP −200, GS −277): it accumulates long inventory at declining prices, taking MTM losses. In live v10, DARK_MATTER: −3,834 and BLACK_HOLES: −5,223.
+
+Cross-group strategy detects the regime using the SP group average EMA crossing −80 to −300 (depending on product) and goes SHORT instead. On Day 4, this flips a loss into a gain.
+
+The combined SP+RB signal (requiring BOTH SP > 80 AND RB < −30) is better than SP alone for BLACK_HOLES because it filters false positives where SP is momentarily positive but overall direction is uncertain.
+
+## Key learnings (A2)
+
+1. **Cross-day level correlations ≠ intra-day predictive signal**: The 86% SP-GS correlation is mostly between-day. Within days, tick-level correlations are <0.04. Use the cross-group signal as a daily regime indicator (EMA vs session start), not a tick-level signal.
+
+2. **Group average is more robust than individual product**: PCA structure is unstable (loadings flip each day). Group average EMA smooths out the within-group divergences (e.g., NYLON diverging from other SPs on Day 2).
+
+3. **Combined signal (SP + inverted RB) > SP alone for BLACK_HOLES**: +26,288 (combined) vs +17,184 (SP only). The RB signal adds confirmation that reduces false entries when SP is weakly positive but GS is not following.
+
+4. **Cross-group signal only helps products that CHANGE DIRECTION**: BLACK_HOLES always goes UP but the cross-group signal handles the edge case where SP goes DOWN (Day 4: SP −200 → signal is neutral/bearish, but BLACK_HOLES goes UP +1,320). The threshold=80 means the signal doesn't fire strongly negative on Day 4 (SP only down −200, EMA lags to ~−100), so the strategy remains neutral/passive for BLACK_HOLES on Day 4 rather than going short.
+
+## Files (A2 work)
+
+- Strategy: `prosperity/strategies/round_5/tibo/cross_group_trend_A2.py`
+- Config: `MEMBER_OVERRIDES["best_v13_A2"]` in `prosperity/config.py`
+- Helpers: `_v13_cg_A2()`, `_sc_mm()`, `_sc_trend()` in `prosperity/config.py`
+- Submission: `artifacts/submissions/round_5/best_v13_A2_round5_submission.py`
+- Backtest wrapper: `submissions/best_v13_A2.py`
+- All test configs (test_cgA2_*) cleaned up
+
+
+
+# ITERATION 7: ANALYST 2 (A2): merged work from theo and version best_v13_A2
+
+## Theo v12 Strategy Analysis: Live vs Backtest
+Core mechanism (how it actually works)
+Theo's strategy is pure directional betting, not market making:
+
+Every product has a hardcoded target_position: ±10 derived from training days 2/3/4
+The strategy takes its maximum position in 1-6 trades at day start and holds until end of day
+inv = 0.935 average — virtually all time at full position, zero risk management
+Variants: R5TrendFollower (immediate full entry), R5TrendFollowV2 (EMA gate before entry), R5MomentumFollower (EMA crossover gate before entry)
+The numbers explained
+Metric	Value
+Backtest (3 days)	765,013
+Backtest per day avg	255,004
+Live PnL (1 day)	52,899
+Ratio	14.5x (yours: 30x)
+Why his ratio is 14x vs your 30x:
+
+Two failure modes completely explain the gap:
+
+1. Reversals — 17 products went positive in backtest but NEGATIVE live
+The live day trended opposite to training for these products. They lost -30,512 live while earning +168,620 in backtest:
+
+
+SLEEP_POD_LAMB_WOOL        BT= +8,018   Live= -5,954  ← went long, price FELL
+GALAXY_SOUNDS_DARK_MATTER  BT= +3,155   Live= -4,568  ← went long, price FELL
+UV_VISOR_ORANGE            BT= +6,605   Live= -4,538  ← went short, price ROSE
+TRANSLATOR_ASTRO_BLACK     BT=+10,453   Live= -3,560  ← went short, price ROSE
+MICROCHIP_TRIANGLE         BT=+20,664   Live= -2,807  ← went short, price ROSE
+ROBOT_VACUUMING            BT=+18,068   Live=   -791
+ROBOT_DISHES               BT=+21,064   Live=   -177
+UV_VISOR_MAGENTA           BT=+17,725   Live=    -67
+... (17 total)              Total -30,512 live
+2. No-entries — 6 products had 0 live trades, missing 117,270 backtest PnL
+The EMA/momentum gate was tuned to specific training-day patterns and never fired on the live day:
+
+
+MICROCHIP_SQUARE       BT= 44,753  Live= 0  (TFv2: EMA threshold never crossed)
+ROBOT_IRONING          BT= 28,187  Live= 0  (TFv2 gate blocked)
+PANEL_4X4              BT= 13,271  Live= 0
+TRANSLATOR_GRAPHITE_MIST BT=12,749 Live= 0
+MICROCHIP_CIRCLE       BT= 11,655  Live= 0
+UV_VISOR_YELLOW        BT=  6,655  Live= 0
+Overfitting signals — product by product
+Critical overfitting: hardcoded directions from 3 training days
+
+The direction (+10 or -10) is fixed and derived by looking at which direction was profitable on days 2/3/4. But many products are NOT consistently trending the same direction — they just happened to trend right on those 3 specific days:
+
+Product	Day2	Day3	Day4	Consistency	Live outcome
+PANEL_1X4	-10,690	+23,669	-5,016	1/3 days positive	Went SHORT, +3,943 live (lucky)
+OXYGEN_SHAKE_MORNING_BREATH	-10,055	+14,600	-245	1/3 days positive	Went SHORT, +2,124 live (lucky)
+PANEL_1X2	+15,625	-4,305	-8,520	1/3 positive	Went SHORT, +3,514 live
+GALAXY_SOUNDS_SOLAR_WINDS	-4,225	+11,690	-5,155	1/3 positive	Went LONG, -463 live
+PEBBLES_XL	+36,685	-15,615	+40,060	2/3 with huge Day3 loss	+9,561 live (lucky, right day)
+HIGH_VAR products with fragile backtest PnL — these show huge day-to-day swings, meaning the total backtest PnL is dominated by 1 lucky day, not a robust edge.
+
+TFv2 thresholds overfitted to training timing — MICROCHIP_SQUARE made 31,546 on day 3 (a big trend day) and the entry_threshold=125, ema_half_life=150 was set precisely to enter on that type of day. On a different live day, the EMA never hit the threshold → 0 PnL.
+
+Momentum parameters tuned to 3 days only — fast_alpha=0.03, slow_alpha=0.003, threshold=3.0 was selected via grid search on the training set. Many products (ROBOT_DISHES, ROBOT_MOPPING, UV_VISOR_MAGENTA) reversed on live despite all 3 training days being positive in backtest.
+
+What genuinely works in Theo's approach
+Only 2 products were consistently positive across all 3 backtest days AND performed well live:
+
+UV_VISOR_RED: BT +17,015 / Live +5,856 — a real edge
+PEBBLES_S: BT +19,365 / Live +5,534 — a real edge
+Products that overperformed live (live > BT/3) are mostly concentrated SHORT positions that happened to capture a large down-move on that specific live day — not systematic alpha, just day-regime luck.
+
+What IS sound from Theo's framework:
+
+The EMA-crossover momentum gate is better than raw buy-and-hold (prevents dumb entry on flat days)
+Using IMC logs as holdout validation to filter parameter choices is methodologically correct
+Category-level momentum is a real signal direction to explore (but needs adaptive direction, not hardcoded)
+Recommendations for what to adopt from Theo
+From Theo, take:
+
+UV_VISOR_RED and PEBBLES_S have robust directional edges worth keeping — consider adding them to our strategy as fixed-direction entries
+The concept of using an EMA vs session-start gate before entering is sound — we already use this in trend_follow_v2
+Do NOT adopt:
+
+Any hardcoded direction for products with 1/3 or 2/3 day consistency — they will reverse on live
+The TFv2/Momentum thresholds as-is — they're overfitted to training day timing
+Products with HIGH_VAR flag: PEBBLES_XL, PEBBLES_M, PEBBLES_L, PANEL_1X4, OXYGEN_SHAKE_CHOCOLATE, OXYGEN_SHAKE_MORNING_BREATH — backtest PnL is concentrated in 1 lucky day
+The fundamental asymmetry: Our best_v13_A2 makes thousands of trades (24,492 over 3 days) and earns via market-making spreads + verified signals. Theo makes ~200 trades total. Market-making PnL is much more robust to unseen days. His ratio of 14x vs our 30x exactly reflects this — one bad direction day costs him nearly everything, while our MM approach is directional-neutral by default.
+
+sub-iteration:
+- integration of theo's good parts
+- Key fix that made this work: added direction param to trend_follow_v2.py (+1 = long-only, -1 = short-only, 0 = bidirectional default). Without it, MICROCHIP products were entering LONG before the main downtrend, causing massive losses. new: best_v14_A2_round5_submission.py.
+- issues found... Fix applied: reference_update_interval=800 — while flat, after 800 ticks reset the reference to the current EMA. This means the signal measures deviation from "where price was recently" rather than always from session open. When the counter-move happens first, the reference chases it; when the actual trend starts, the signal fires cleanly from the updated base. In backtest, the strategy enters position before tick 800, so the reference never updates — zero disruption to backtest behavior. Root cause summary: The EMA vs session_start signal fails when price counter-moves before trending. Two specific live failures:
+- new set of issue found: Core diagnosis
+The three regressions share the same root cause: the Theo-informed directional features (SHORT-only direction + faster EMA + trail_stop) create a false-entry → trail-stop-loss → miss-real-trend cycle on days with a counter-move before the main trend. The products where this fails (OVAL, PEBBLES_XS) happen to have an early counter-move in the live session that the faster EMA catches but shouldn't. MICROCHIP_TRIANGLE is a different failure: the live direction was opposite to training, so direction=-1 misses the MM income entirely.
+
+Naive_mm is more robust than directional TFv2 for MICROCHIP products because it captures spread regardless of direction. The backtest gain from TFv2 was overfitted to 3 training days of consistent DOWN trends.
+
+Proposed fixes
+MICROCHIP_OVAL → revert to naive_mm (size=5 like v13 baseline): always profitable regardless of direction, avoids the early-dip entry problem entirely.
+
+MICROCHIP_TRIANGLE → revert to naive_mm (size=3 like v13 baseline): same reasoning; lost 3,036 live by going directional on an UP day.
+
+PEBBLES_XS → revert to v14 params (direction=-1, ema_hl=150, thr=100, no trail, no ref_update): slow EMA with high threshold never fires on brief dips → 0 live (safe), 32,160 backtest (better than v13 baseline 25,450).
+
+OXYGEN_SHAKE_GARLIC → keep v17 params (ref_update=800, dir=+1, ema_hl=50, thr=80). This is a genuine fix that now works live.
+
+ROBOT_IRONING → keep v17 params (thr=50). Improvement confirmed live.
+
+Expected backtest: ~913k (lower than v17's 933k due to MICROCHIP reverting, but better than v13 baseline 887k). Expected live: ~31-32k (better than both v13's 28k and v17's 26k by fixing the three regressions while keeping the two improvements).
+
+final integrated version: best_v18_A2, it works well in live and still enhanced the backtest pnl
+
+
+
 
