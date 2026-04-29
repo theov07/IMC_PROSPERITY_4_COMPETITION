@@ -17613,6 +17613,1472 @@ def _r5_v11_save_losers():
 MEMBER_OVERRIDES["r5_v11_save_losers"] = _r5_v11_save_losers()
 
 
+def _r5_v12_basket_aware():
+    """basket_aware_mm on all 38 winners, drop the 12 losers.
+
+    Strategy reads SharedR5Context (injected by trader wrapper) for group z-score.
+    Skews ASK aggressive when product is rich vs group, BID aggressive when cheap.
+    Hard-pauses inv-increasing side when group itself is at z>2.
+    """
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            continue  # exclude losers (validated in v2)
+        out[sym] = ProductConfig(
+            symbol=sym, strategy="basket_aware_mm", position_limit=10,
+            params=dict(
+                maker_size=5, tighten_ticks=1,
+                pull_threshold=1.0, pull_skew_offset=1,
+                group_pull_threshold=2.0, hard_pause_at=9,
+                log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ),
+        )
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v12_basket_aware"] = _r5_v12_basket_aware()
+
+
+def _r5_v13_tracking_error():
+    """tracking_error_mm on TRANSLATOR + PEBBLES (flat-mean groups), naive_tight_mm elsewhere.
+
+    Hypothesis: groups with flat means (TRANSLATOR R²=0.005, PEBBLES R²=0.0)
+    have member deviation that mean-reverts -> tracking error trade.
+    """
+    flat_groups = {"TRANSLATOR", "PEBBLES"}
+    flat_products = set()
+    from prosperity.baskets.groups import GROUPS as _G
+    for g in flat_groups:
+        flat_products.update(_G[g])
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None  # exclude (validated in v2)
+        elif sym in flat_products:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="tracking_error_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=1,
+                    z_window=200, z_entry=1.0, z_skew_offset=1,
+                    hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v13_tracking_error"] = _r5_v13_tracking_error()
+
+
+def _r5_v14_pair_skip():
+    """Pair-skip MM on the strongly anti-corr SNACKPACK pairs.
+
+    Targets:
+      CHOCOLATE <-> VANILLA   (rho=-0.92 returns, lambda=0 tails)
+      RASPBERRY <-> STRAWBERRY (rho=-0.92, lambda=0)
+      PISTACHIO <-> RASPBERRY (rho=-0.83)
+      PEBBLES_XL <-> PEBBLES_S (rho=-0.48 returns, +0.07 tail)
+
+    Skip BID when product is rich vs partner (don't load up at high price).
+    Skip ASK when cheap (don't sell at low price). No price skewing.
+    """
+    PAIRS = {
+        # SNACKPACKs
+        "SNACKPACK_CHOCOLATE": "SNACKPACK_VANILLA",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+        "SNACKPACK_STRAWBERRY": "SNACKPACK_RASPBERRY",
+        "SNACKPACK_PISTACHIO": "SNACKPACK_RASPBERRY",
+        # PEBBLES
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "PEBBLES_L": "PEBBLES_XL",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym],
+                    partner_sign=-1.0,  # anti-correlated
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v14_pair_skip"] = _r5_v14_pair_skip()
+
+
+def _r5_v14b_pair_skip_curated():
+    """v14 selective: only the products where pair-skip improved PnL.
+
+    From v14 ablation:
+      PEBBLES_XL: +9,331
+      PEBBLES_S:  +8,792
+      SNACKPACK_VANILLA:   +495
+      SNACKPACK_RASPBERRY: +211
+    Removed (caused losses):
+      PEBBLES_L (-6,031)
+      SNACKPACK_PISTACHIO (-858)
+      SNACKPACK_STRAWBERRY (-452)
+      SNACKPACK_CHOCOLATE (-240)
+    """
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym],
+                    partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v14b_pair_skip_curated"] = _r5_v14b_pair_skip_curated()
+
+
+def _r5_v15_pair_skip_extended():
+    """v14b winners + try to salvage pebbles losers via pair_skip with PEBBLES_XL partner.
+
+    PEBBLES_M and PEBBLES_XS were R5_LOSERS in v2. Try to re-include them
+    with pair_skip_mm using PEBBLES_XL as their inverse partner.
+    """
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "PEBBLES_M": "PEBBLES_XL",
+        "PEBBLES_XS": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in {"PEBBLES_M", "PEBBLES_XS"}:
+            # Try to salvage
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v15_pair_skip_extended"] = _r5_v15_pair_skip_extended()
+
+
+def _r5_v15b_pair_skip_thresh3():
+    """Variant: thresh=3.0 (more selective skip) on v14b's 4 winners."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=3.0,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v15b_thresh3"] = _r5_v15b_pair_skip_thresh3()
+
+
+def _r5_v15c_pair_skip_thresh1():
+    """Variant: thresh=1.0 (less selective)."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.0,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v15c_thresh1"] = _r5_v15c_pair_skip_thresh1()
+
+
+def _r5_v16_impulse_pause():
+    """Apply impulse_pause_mm to the 7 followers of SNACKPACK group impulse.
+
+    From impulse-response analysis: SNACKPACK shock +2σ predicts -0.21 to -0.33σ
+    response at lag=1 in {OXYGEN_SHAKE, GALAXY_SOUNDS, UV_VISOR, SLEEP_POD,
+    TRANSLATOR, PANEL, ROBOT}. Pause inv-increasing side for 2 ticks after.
+    """
+    from prosperity.baskets.groups import GROUPS as _G
+    follower_groups = {"OXYGEN_SHAKE", "GALAXY_SOUNDS", "UV_VISOR", "SLEEP_POD",
+                       "TRANSLATOR", "PANEL", "ROBOT"}
+    follower_products = set()
+    for g in follower_groups:
+        follower_products.update(_G[g])
+
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in follower_products:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="impulse_pause_mm", position_limit=10,
+                params=dict(
+                    leader_group="SNACKPACK", leader_thresh=2.0, pause_ticks=2,
+                    maker_size=5, tighten_ticks=1, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v16_impulse_pause"] = _r5_v16_impulse_pause()
+
+
+def _r5_v17_combo_tighten():
+    """v14b pair_skip + tighten=2 on wide-spread (>14) non-paired winners.
+
+    Wide-spread products that aren't in pair_skip:
+      SNACKPACK_CHOCOLATE (16.47), SNACKPACK_PISTACHIO (15.93),
+      SNACKPACK_STRAWBERRY (17.83), OXYGEN_SHAKE_GARLIC (15.05),
+      GALAXY_SOUNDS_BLACK_HOLES (14.51)
+
+    For these, tighten=2 captures more of the spread per fill.
+    """
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    WIDE_SPREAD_TIGHTEN2 = {
+        "SNACKPACK_CHOCOLATE", "SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY",
+        "OXYGEN_SHAKE_GARLIC", "GALAXY_SOUNDS_BLACK_HOLES",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym in WIDE_SPREAD_TIGHTEN2:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="naive_tight_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=2,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v17_combo_tighten"] = _r5_v17_combo_tighten()
+
+
+def _make_pair_skip_config(PAIRS):
+    """Helper to build R5 config with pair_skip for given dict, naive elsewhere."""
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+# v18a: v14b + PISTACHIO with RASPBERRY partner
+MEMBER_OVERRIDES["r5_v18a_pist"] = _make_pair_skip_config({
+    "PEBBLES_XL": "PEBBLES_S",
+    "PEBBLES_S": "PEBBLES_XL",
+    "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+    "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    "SNACKPACK_PISTACHIO": "SNACKPACK_RASPBERRY",
+})
+
+# v18b: v14b + CHOCOLATE with VANILLA partner
+MEMBER_OVERRIDES["r5_v18b_choc"] = _make_pair_skip_config({
+    "PEBBLES_XL": "PEBBLES_S",
+    "PEBBLES_S": "PEBBLES_XL",
+    "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+    "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    "SNACKPACK_CHOCOLATE": "SNACKPACK_VANILLA",
+})
+
+# v18c: PEBBLES_XL paired with PEBBLES_M instead
+MEMBER_OVERRIDES["r5_v18c_pebbles_m"] = _make_pair_skip_config({
+    "PEBBLES_XL": "PEBBLES_M",
+    "PEBBLES_S": "PEBBLES_XL",
+    "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+    "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+})
+
+# v18d: PEBBLES_XL paired with PEBBLES_L
+MEMBER_OVERRIDES["r5_v18d_pebbles_l"] = _make_pair_skip_config({
+    "PEBBLES_XL": "PEBBLES_L",
+    "PEBBLES_S": "PEBBLES_XL",
+    "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+    "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+})
+
+# v18e: STRAWBERRY paired
+MEMBER_OVERRIDES["r5_v18e_straw"] = _make_pair_skip_config({
+    "PEBBLES_XL": "PEBBLES_S",
+    "PEBBLES_S": "PEBBLES_XL",
+    "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+    "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    "SNACKPACK_STRAWBERRY": "SNACKPACK_RASPBERRY",
+})
+
+# v18f: ALL SNACKPACKs paired with their strongest opposite
+MEMBER_OVERRIDES["r5_v18f_all_snack"] = _make_pair_skip_config({
+    "PEBBLES_XL": "PEBBLES_S",
+    "PEBBLES_S": "PEBBLES_XL",
+    "SNACKPACK_CHOCOLATE": "SNACKPACK_VANILLA",
+    "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+    "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    "SNACKPACK_STRAWBERRY": "SNACKPACK_RASPBERRY",
+    "SNACKPACK_PISTACHIO": "SNACKPACK_RASPBERRY",
+})
+
+
+def _v14b_with_overrides(pair_size=5, tighten=1, hard_pause_at=9, z_window=300):
+    """v14b template with parameter overrides."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=pair_size, tighten_ticks=tighten,
+                    z_window=z_window, hard_pause_at=hard_pause_at,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+# v19: size=10 (max) on pair products
+MEMBER_OVERRIDES["r5_v19_size10"] = _v14b_with_overrides(pair_size=10)
+
+# v20: hard_pause_at=7 (more conservative)
+MEMBER_OVERRIDES["r5_v20_pause7"] = _v14b_with_overrides(hard_pause_at=7)
+
+# v21: hard_pause_at=10 (no early pause)
+MEMBER_OVERRIDES["r5_v21_pause10"] = _v14b_with_overrides(hard_pause_at=10)
+
+# v22: z_window=500 (slower z, less noise)
+MEMBER_OVERRIDES["r5_v22_window500"] = _v14b_with_overrides(z_window=500)
+
+# v23: z_window=100 (faster z, more reactive)
+MEMBER_OVERRIDES["r5_v23_window100"] = _v14b_with_overrides(z_window=100)
+
+# v24: size=8
+MEMBER_OVERRIDES["r5_v24_size8"] = _v14b_with_overrides(pair_size=8)
+
+
+def _v14b_with_pair_thresh(pair_thresh):
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=pair_thresh,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+# v25/26/27: thresh sweep around 1.5
+MEMBER_OVERRIDES["r5_v25_thresh125"] = _v14b_with_pair_thresh(1.25)
+MEMBER_OVERRIDES["r5_v26_thresh175"] = _v14b_with_pair_thresh(1.75)
+MEMBER_OVERRIDES["r5_v27_thresh2"] = _v14b_with_pair_thresh(2.0)
+
+
+# === Live-stability-aware variants ===
+# Products with clear declining trend (day2 > day3 > day4) AND live < -3000
+_REGIME_FLIPPED_HIGH = {
+    "GALAXY_SOUNDS_PLANETARY_RINGS",   # bt +18k -> live -7k
+    "ROBOT_DISHES",                     # bt +15k -> live -4.5k
+    "GALAXY_SOUNDS_DARK_MATTER",        # bt +7k  -> live -3.8k
+    "OXYGEN_SHAKE_MORNING_BREATH",      # bt +13k -> live -3.4k
+}
+# Larger exclusion: anything live < -1500
+_REGIME_FLIPPED_BROAD = _REGIME_FLIPPED_HIGH | {
+    "PANEL_2X2",                        # bt +7k  -> live -2.8k
+    "ROBOT_LAUNDRY",                    # bt +6k  -> live -2.4k
+    "PANEL_1X4",                        # bt +29k -> live -2.4k
+    "UV_VISOR_AMBER",                   # bt +18k -> live -2.1k
+    "PEBBLES_XL",                       # bt +24k -> live -1.6k (was v14b winner)
+    "SLEEP_POD_SUEDE",                  # bt +14k, day2-4 trending down
+}
+
+
+def _v14b_drop_unstable(drop_set):
+    """v14b with regime-unstable products dropped."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in drop_set:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+# v28: drop the 4 most regime-flipped products
+MEMBER_OVERRIDES["r5_v28_drop_flipped"] = _v14b_drop_unstable(_REGIME_FLIPPED_HIGH)
+# v29: drop the 10 broad set
+MEMBER_OVERRIDES["r5_v29_drop_broad"] = _v14b_drop_unstable(_REGIME_FLIPPED_BROAD)
+
+
+def _r5_v30_te_skip_translator_pebbles():
+    """Tracking-error SKIP MM (skip side, no price skew) on flat-mean groups.
+
+    TRANSLATOR R²=0.005, PEBBLES R²=0.0 - flat mean -> dev should mean-revert.
+    """
+    flat_groups = {"TRANSLATOR", "PEBBLES"}
+    flat_products = set()
+    from prosperity.baskets.groups import GROUPS as _G
+    for g in flat_groups:
+        flat_products.update(_G[g])
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in flat_products:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="tracking_error_skip_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, dev_thresh=1.5, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v30_te_skip"] = _r5_v30_te_skip_translator_pebbles()
+
+
+def _r5_v31_combo_pair_te_skip():
+    """Combine v14b pair_skip on PEBBLES_XL/S+SNACK + tracking_error_skip on TRANSLATOR."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    from prosperity.baskets.groups import GROUPS as _G
+    translator_set = set(_G["TRANSLATOR"])
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym in translator_set:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="tracking_error_skip_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=1,
+                    z_window=300, dev_thresh=1.5, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v31_combo"] = _r5_v31_combo_pair_te_skip()
+
+
+def _r5_v32_live_aware():
+    """v14b + small size + aggressive pause for live-flipped products.
+
+    Instead of dropping (which costs 55k bt PnL), use defensive params:
+    size=3, hard_pause_at=5 -> trades less, exits faster.
+    """
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym in _REGIME_FLIPPED_HIGH:
+            # Defensive: smaller size + aggressive pause
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="inventory_aware_mm", position_limit=10,
+                params=dict(
+                    maker_size=3, tighten_ticks=1,
+                    skew_enabled=True, skew_threshold=2, skew_offset=2,
+                    hard_pause_at=5,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v32_live_aware"] = _r5_v32_live_aware()
+
+
+def _r5_v33_live_aware_broad():
+    """v32 but with broader regime-flipped set (10 products defensive)."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            # Pair logic (PEBBLES_XL has live_pnl=-1.6k, but in pair mode let it stay)
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym in _REGIME_FLIPPED_BROAD:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="inventory_aware_mm", position_limit=10,
+                params=dict(
+                    maker_size=3, tighten_ticks=1,
+                    skew_enabled=True, skew_threshold=2, skew_offset=2,
+                    hard_pause_at=5,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v33_live_aware_broad"] = _r5_v33_live_aware_broad()
+
+
+def _r5_v34_multi_pair():
+    """Multi-partner pair_skip:
+       PEBBLES_XL paired with basket of {S, M, L} (use cluster basket as partner)
+       SNACKPACK_RASPBERRY paired with cluster B = {STRAW, PIST}
+       SNACKPACK_VANILLA paired with CHOC alone (only single-partner)
+    """
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym == "PEBBLES_XL":
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="multi_pair_skip_mm", position_limit=10,
+                params=dict(
+                    partners=[("PEBBLES_S", 1.0), ("PEBBLES_L", 1.0)],
+                    partner_sign=-1.0, pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym == "PEBBLES_S":
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner="PEBBLES_XL", partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym == "SNACKPACK_RASPBERRY":
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="multi_pair_skip_mm", position_limit=10,
+                params=dict(
+                    partners=[("SNACKPACK_STRAWBERRY", 1.0), ("SNACKPACK_PISTACHIO", 1.0)],
+                    partner_sign=-1.0, pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym == "SNACKPACK_VANILLA":
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner="SNACKPACK_CHOCOLATE", partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v34_multi_pair"] = _r5_v34_multi_pair()
+
+
+def _r5_v35_tick_reversal():
+    """Apply tick_reversal_skip_mm to products with strong neg AR1 of PC1-resid:
+        ROBOT_DISHES (-0.22), ROBOT_IRONING (-0.12),
+        OXYGEN_SHAKE_EVENING_BREATH (-0.12), OXYGEN_SHAKE_CHOCOLATE (-0.08).
+    Plus v14b pair_skip on the 4 winners.
+    """
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    REVERSAL_PRODUCTS = {"ROBOT_DISHES", "ROBOT_IRONING",
+                          "OXYGEN_SHAKE_EVENING_BREATH", "OXYGEN_SHAKE_CHOCOLATE"}
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym in REVERSAL_PRODUCTS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="tick_reversal_skip_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=1, reversal_eps=0.5, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v35_tick_reversal"] = _r5_v35_tick_reversal()
+
+
+def _r5_v40_drop_planetary_only():
+    """Drop only GALAXY_SOUNDS_PLANETARY_RINGS (worst regime-flip: bt+18k -> live-7k)."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym == "GALAXY_SOUNDS_PLANETARY_RINGS":
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v40_drop_planetary"] = _r5_v40_drop_planetary_only()
+
+
+def _r5_v41_drop_top2_flipped():
+    """Drop the 2 worst regime-flipped products: PLANETARY_RINGS, ROBOT_DISHES."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    DROP = {"GALAXY_SOUNDS_PLANETARY_RINGS", "ROBOT_DISHES"}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in DROP:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v41_drop_top2"] = _r5_v41_drop_top2_flipped()
+
+
+def _r5_v42_size_dampen_flipped():
+    """Reduce maker_size to 2 on the 4 high-flipped products instead of dropping."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.5,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        elif sym in _REGIME_FLIPPED_HIGH:
+            # Smaller size = limit position growth and loss exposure
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="naive_tight_mm", position_limit=10,
+                params=dict(
+                    maker_size=2, tighten_ticks=1,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v42_size_dampen"] = _r5_v42_size_dampen_flipped()
+
+
+# Tighter thresholds based on v25 success
+MEMBER_OVERRIDES["r5_v45_thresh10"] = _v14b_with_pair_thresh(1.0)
+MEMBER_OVERRIDES["r5_v46_thresh11"] = _v14b_with_pair_thresh(1.1)
+MEMBER_OVERRIDES["r5_v47_thresh115"] = _v14b_with_pair_thresh(1.15)
+
+
+def _r5_v50_thresh125_drop_flipped():
+    """COMBO : thresh=1.25 (v25 win) + drop 4 high-flipped (v28 defensive).
+
+    Expected: best of both. Tighter pair_skip + remove regime-flipped drag.
+    """
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S",
+        "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in _REGIME_FLIPPED_HIGH:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v50_thresh125_drop_flipped"] = _r5_v50_thresh125_drop_flipped()
+
+
+def _r5_v51_thresh10_drop_flipped():
+    """thresh=1.0 + drop 4 flipped."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in _REGIME_FLIPPED_HIGH:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.0,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v51_thresh10_drop_flipped"] = _r5_v51_thresh10_drop_flipped()
+
+
+MEMBER_OVERRIDES["r5_v52_thresh075"] = _v14b_with_pair_thresh(0.75)
+MEMBER_OVERRIDES["r5_v53_thresh050"] = _v14b_with_pair_thresh(0.50)
+
+
+def _r5_v60_drop_extra():
+    """Drop 4 high-flipped + ROBOT_LAUNDRY (live -2.4k) + PANEL_2X2 (live -2.8k)."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    DROP = _REGIME_FLIPPED_HIGH | {"ROBOT_LAUNDRY", "PANEL_2X2"}
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in DROP:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.25,  # use winning thresh
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v60_drop_extra"] = _r5_v60_drop_extra()
+
+
+def _r5_v61_drop_broad_thresh125():
+    """Drop the 10 broad regime-flipped + thresh=1.25 (combine v29 + v25)."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in _REGIME_FLIPPED_BROAD:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v61_drop_broad_thresh125"] = _r5_v61_drop_broad_thresh125()
+
+
+def _r5_v70_drop_galaxy_panel_robot():
+    """Drop ENTIRE groups that flip regime: GALAXY_SOUNDS, PANEL, ROBOT.
+    + keep pair_skip on PEBBLES + SNACKPACK at thresh=1.25.
+    """
+    from prosperity.baskets.groups import GROUPS as _G
+    flipped_groups = {"GALAXY_SOUNDS", "PANEL", "ROBOT"}
+    drop_set = set()
+    for g in flipped_groups:
+        drop_set.update(_G[g])
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in drop_set:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v70_drop_groups"] = _r5_v70_drop_galaxy_panel_robot()
+
+
+def _r5_v71_keep_only_winners():
+    """Keep ONLY the live-winning groups: MICROCHIP, SLEEP_POD, TRANSLATOR, UV_VISOR
+    + PEBBLES + SNACKPACK + OXYGEN_SHAKE.
+    Drop GALAXY_SOUNDS, PANEL, ROBOT entirely.
+    """
+    return _r5_v70_drop_galaxy_panel_robot()  # same logic
+
+
+# Most aggressive: keep only consistent live winners
+def _r5_v72_consistent_only():
+    """Keep ONLY products that are positive in live AND backtest."""
+    import os as __os
+    from pathlib import Path as __P
+    _root = __P(__os.path.dirname(__os.path.abspath(__file__))).parent
+    df_live_path = _root / "artifacts" / "r5_live" / "analysis" / "live_per_product_pnl.csv"
+    keep_set = set()
+    if df_live_path.exists():
+        import csv
+        with open(df_live_path) as f:
+            reader = csv.reader(f)
+            next(reader)
+            for row in reader:
+                if not row[1] or row[1] == "0.0":
+                    continue
+                if float(row[1]) > 0:
+                    keep_set.add(row[0])
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym not in keep_set:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+# Need ROOT_DIR fix
+import os as _os
+from pathlib import Path as _Path
+ROOT_DIR = _Path(_os.path.dirname(_os.path.abspath(__file__))).parent
+MEMBER_OVERRIDES["r5_v72_consistent_only"] = _r5_v72_consistent_only()
+
+
+def _r5_v80_drop_broad_thresh10():
+    """drop_broad + thresh=1.0 (most aggressive defensive + tightest pair)."""
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in _REGIME_FLIPPED_BROAD:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.0,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v80_drop_broad_thresh10"] = _r5_v80_drop_broad_thresh10()
+
+
+def _r5_v100_consistent_thresh10():
+    """v72 (consistent live winners) + thresh=1.0 (more aggressive skip)."""
+    import os as __os
+    from pathlib import Path as __P
+    _root = __P(__os.path.dirname(__os.path.abspath(__file__))).parent
+    df_live_path = _root / "artifacts" / "r5_live" / "analysis" / "live_per_product_pnl.csv"
+    keep_set = set()
+    if df_live_path.exists():
+        import csv
+        with open(df_live_path) as f:
+            reader = csv.reader(f)
+            next(reader)
+            for row in reader:
+                if not row[1] or row[1] == "0.0":
+                    continue
+                if float(row[1]) > 0:
+                    keep_set.add(row[0])
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym not in keep_set:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.0,  # tighter
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v100_consistent_thresh10"] = _r5_v100_consistent_thresh10()
+
+
+def _r5_v110_high_live_only():
+    """Only keep products with live > +500 (very high conviction live winners)."""
+    import os as __os
+    from pathlib import Path as __P
+    _root = __P(__os.path.dirname(__os.path.abspath(__file__))).parent
+    df_live_path = _root / "artifacts" / "r5_live" / "analysis" / "live_per_product_pnl.csv"
+    keep_set = set()
+    if df_live_path.exists():
+        import csv
+        with open(df_live_path) as f:
+            reader = csv.reader(f)
+            next(reader)
+            for row in reader:
+                if not row[1] or row[1] == "0.0":
+                    continue
+                if float(row[1]) > 500:
+                    keep_set.add(row[0])
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym not in keep_set:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0, pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v110_high_live_only"] = _r5_v110_high_live_only()
+
+
+# Mathematically optimal drop set at P(regime continues) = 0.5
+# Computed via: drop iff bt > 0 AND P > bt/(bt-live)
+_OPTIMAL_DROP_P50 = {
+    "GALAXY_SOUNDS_DARK_MATTER",       # break_even 0.062
+    "GALAXY_SOUNDS_PLANETARY_RINGS",   # 0.077
+    "PANEL_2X2",                       # 0.078
+    "ROBOT_LAUNDRY",                   # 0.079
+    "ROBOT_DISHES",                    # 0.102
+    "OXYGEN_SHAKE_MORNING_BREATH",     # 0.119
+    "MICROCHIP_RECTANGLE",             # 0.222
+    "UV_VISOR_AMBER",                  # 0.223
+    "PANEL_1X4",                       # 0.292
+    "SNACKPACK_RASPBERRY",             # 0.374
+    "PEBBLES_XL",                      # 0.412
+}
+
+
+def _r5_v200_optimal_p50():
+    """Mathematically optimal drop set at P(regime continues) = 0.5.
+
+    Drop only products where break_even_P < 0.5, i.e., where dropping is
+    +EV at P=0.5. Keeps everything else (ALWAYS KEEP set).
+    """
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in _OPTIMAL_DROP_P50:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0,
+                    pair_thresh=1.25,  # winning thresh
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v200_optimal_p50"] = _r5_v200_optimal_p50()
+
+
+def _r5_v201_optimal_p70():
+    """Optimal at P=0.7 (more bullish on live continuing)."""
+    drops_p70 = _OPTIMAL_DROP_P50 | {"UV_VISOR_YELLOW", "OXYGEN_SHAKE_EVENING_BREATH"}
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in drops_p70:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0, pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v201_optimal_p70"] = _r5_v201_optimal_p70()
+
+
+def _r5_v202_optimal_p30():
+    """Optimal at P=0.3 (less bullish on live)."""
+    drops_p30 = {p for p in _OPTIMAL_DROP_P50 if {
+        "GALAXY_SOUNDS_DARK_MATTER": 0.062, "GALAXY_SOUNDS_PLANETARY_RINGS": 0.077,
+        "PANEL_2X2": 0.078, "ROBOT_LAUNDRY": 0.079, "ROBOT_DISHES": 0.102,
+        "OXYGEN_SHAKE_MORNING_BREATH": 0.119, "MICROCHIP_RECTANGLE": 0.222,
+        "UV_VISOR_AMBER": 0.223, "PANEL_1X4": 0.292,
+        "SNACKPACK_RASPBERRY": 0.374, "PEBBLES_XL": 0.412,
+    }[p] < 0.3}
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in drops_p30:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0, pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v202_optimal_p30"] = _r5_v202_optimal_p30()
+
+
+def _r5_v203_optimal_p60():
+    """Optimal at P=0.6 (sweet spot mid-bullish on live)."""
+    drops_p60 = _OPTIMAL_DROP_P50 | {"UV_VISOR_YELLOW"}
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in drops_p60:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0, pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v203_optimal_p60"] = _r5_v203_optimal_p60()
+
+
+def _r5_v300_v200_keep_pebbles_xl():
+    """v200 (optimal P=0.5) BUT keep PEBBLES_XL with pair_skip.
+
+    Hypothesis: live PEBBLES_XL = -1629 was under naive baseline, not pair_skip.
+    pair_skip should reduce the live loss via skip-side mechanism.
+    """
+    drops = _OPTIMAL_DROP_P50 - {"PEBBLES_XL"}
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in drops:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0, pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v300_v200_keep_pebbles_xl"] = _r5_v300_v200_keep_pebbles_xl()
+
+
+def _r5_v600_keep_both_pair_partners():
+    """Drop optimal P=0.5 set BUT keep PEBBLES_XL AND SNACKPACK_RASPBERRY
+    so both pair_skip pairs are functional.
+    """
+    drops = _OPTIMAL_DROP_P50 - {"PEBBLES_XL", "SNACKPACK_RASPBERRY"}
+    PAIRS = {
+        "PEBBLES_XL": "PEBBLES_S", "PEBBLES_S": "PEBBLES_XL",
+        "SNACKPACK_VANILLA": "SNACKPACK_CHOCOLATE",
+        "SNACKPACK_RASPBERRY": "SNACKPACK_STRAWBERRY",
+    }
+    out = {}
+    for sym in _R5_PRODUCTS:
+        if sym in _R5_LOSERS or sym in drops:
+            out[sym] = None
+        elif sym in PAIRS:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params=dict(
+                    partner=PAIRS[sym], partner_sign=-1.0, pair_thresh=1.25,
+                    maker_size=5, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = ROUND_5[sym]
+    return {5: out}
+
+
+MEMBER_OVERRIDES["r5_v600_keep_pair_partners"] = _r5_v600_keep_both_pair_partners()
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))

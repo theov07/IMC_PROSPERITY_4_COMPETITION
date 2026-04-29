@@ -1,4 +1,4 @@
-"""Backtester entrypoint — r5_v2_winners_only. Penny-improve MM on all 50 R5 products."""
+"""Backtester entrypoint — r5_v2_winners_only."""
 
 from prosperity.config import get_round_config
 from prosperity.persistence import dump_state, load_state

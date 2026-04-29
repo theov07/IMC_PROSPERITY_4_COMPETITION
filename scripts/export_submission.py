@@ -254,6 +254,17 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "r4_hydro_mv_v12_vol_tail_kill": ("prosperity/strategies/round_4/hydro_mv_v12_vol_tail_kill.py", "R4HydroMVV12VolTailKillStrategy"),
     "r4_hydro_mv_v11_mark_oracle": ("prosperity/strategies/round_4/hydro_mv_v11_mark_oracle.py", "R4HydroMVV11MarkOracleStrategy"),
     "r4_hydro_reversion_mm_slim": ("prosperity/strategies/round_4/hydro_reversion_mm_slim.py", "R4HydroReversionMMSlimStrategy"),
+    # ── Round 5 ──
+    "pair_skip_mm":           ("prosperity/strategies/round_5/pair_skip_mm.py", "PairSkipMMStrategy"),
+    "pair_trader":            ("prosperity/strategies/round_5/pair_trader.py", "PairTraderStrategy"),
+    "inventory_aware_mm":     ("prosperity/strategies/round_5/inventory_mm.py", "InventoryAwareMMStrategy"),
+    "zscore_mm":              ("prosperity/strategies/round_5/zscore_mm.py", "ZScoreMMStrategy"),
+    "basket_aware_mm":        ("prosperity/strategies/round_5/basket_mm.py", "BasketAwareMMStrategy"),
+    "tracking_error_mm":      ("prosperity/strategies/round_5/tracking_error_mm.py", "TrackingErrorMMStrategy"),
+    "tracking_error_skip_mm": ("prosperity/strategies/round_5/tracking_error_skip_mm.py", "TrackingErrorSkipMMStrategy"),
+    "impulse_pause_mm":       ("prosperity/strategies/round_5/impulse_pause_mm.py", "ImpulsePauseMMStrategy"),
+    "multi_pair_skip_mm":     ("prosperity/strategies/round_5/multi_pair_skip_mm.py", "MultiPairSkipMMStrategy"),
+    "tick_reversal_skip_mm":  ("prosperity/strategies/round_5/tick_reversal_skip_mm.py", "TickReversalSkipMMStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).
