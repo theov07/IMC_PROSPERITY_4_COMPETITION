@@ -28,11 +28,13 @@ def compare_strategies(
     data_dir: str,
     days: List[str],
     mode: TradeMatchingMode = TradeMatchingMode.queue,
+    products_filter: List[str] | None = None,
 ) -> Dict[str, Dict]:
     results: Dict[str, Dict] = {}
 
     for strat in strategies:
-        engine = BacktestEngine(data_dir, strat, round_num=round_num)
+        engine = BacktestEngine(data_dir, strat, round_num=round_num,
+                                products_filter=products_filter)
         summaries = []
         day_pnls = []
 
@@ -141,7 +143,25 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         choices=["pnl", "drawdown", "fill_efficiency", "inventory_pressure", "passive_adverse_rate"],
         help="Ranking metric for the comparison table.",
     )
+    parser.add_argument(
+        "--products",
+        nargs="*",
+        default=None,
+        help="Filter products to simulate (same semantics as backtest.py --products).",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    # Normalize --products
+    products_filter: List[str] | None = None
+    if args.products:
+        products_filter = []
+        for chunk in args.products:
+            for sym in chunk.split(","):
+                s = sym.strip()
+                if s:
+                    products_filter.append(s)
+        seen: set = set()
+        products_filter = [p for p in products_filter if not (p in seen or seen.add(p))]
 
     loader = MarketDataLoader(args.data_dir)
     days = args.days or loader.available_days(args.round)
@@ -152,6 +172,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         args.data_dir,
         days,
         mode=TradeMatchingMode(args.execution_rule),
+        products_filter=products_filter,
     )
     _print_table(results, args.rank_by)
 
