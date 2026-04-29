@@ -315,6 +315,9 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "ar1_mean_rev_v1":             ("prosperity.strategies.round_5.tibo.ar1_mean_rev_v1", "AR1MeanRevV1"),
     "trend_follow_v1": ("prosperity.strategies.round_5.tibo.trend_follow_v1", "TrendFollowV1"),
     "trend_follow_v2": ("prosperity.strategies.round_5.tibo.trend_follow_v2", "TrendFollowV2"),
+    "coint_pairs_v1":  ("prosperity.strategies.round_5.tibo.coint_pairs_v1", "CointPairsV1"),
+    "coint_mm_v1":     ("prosperity.strategies.round_5.tibo.coint_mm_v1", "CointMMV1"),
+    "late_flatten_tight_mm_v1": ("prosperity.strategies.round_5.tibo.late_flatten_tight_mm_v1", "LateFlattenTightMMV1"),
 }
 
 

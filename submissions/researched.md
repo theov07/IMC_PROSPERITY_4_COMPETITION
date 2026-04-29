@@ -427,3 +427,225 @@ Changes from v6:
 Config: `MEMBER_OVERRIDES["best_v7"]` in `prosperity/config.py`  
 Wrapper: `submissions/best_v7.py`
 
+
+
+# Iteration 4 (v8) — Cointegration Pairs Trading
+Reference: 1st analyst
+
+## Context
+Starting from best_v7 (741,720 PnL). Goal: exploit the cointegration relationships found in iteration 3 to build trading strategies.
+
+---
+
+## Key findings before building strategies
+
+**SNACKPACK cointegration is spurious**: ADF tests show RASPBERRY (p=0.0014) and VANILLA (p=0.0376) are individually near-stationary. Their "cointegration" is really just that each product mean-reverts on its own, not a genuine pair relationship. The naive_tight_mm already captures this. Not exploited.
+
+**Non-SNACKPACK pairs simulation** (normalized spread: A/mean_A - B/mean_B, 10 units, taker at bid/ask):
+
+| Pair | HL (ticks) | Best simulated PnL | Current v7 combined | Delta |
+|------|-----------|-------------------|--------------------|----|
+| MICROCHIP_OVAL ↔ TRIANGLE | 1059 | +75,210 | +22,889 | +52k |
+| ROBOT_LAUNDRY ↔ VACUUMING | 1015 | +45,935 | +6,371 | +40k |
+| SLEEP_POD_LAMB_WOOL ↔ NYLON | 1197 | +29,340 | +19,734 | +10k |
+| GALAXY_SOUNDS_FLAMES ↔ WINDS | 3762 | +3,645 | +1,090 | +3k |
+| MICROCHIP_RECTANGLE ↔ SQUARE | 6285 | -31,880 | +59,446 | ← don't touch |
+| UV_VISOR_AMBER ↔ MAGENTA | 7378 | -3,165 | +14,640 | ← skip |
+
+---
+
+## Two strategies built
+
+**`coint_pairs_v1`** (pure pairs, taker only):  
+- Normalized z-score of A/mA - B/mB  
+- Entry at ±entry_z, exit at 0
+
+**`coint_mm_v1`** (hybrid: coint z-score taker + passive naive_mm):  
+- Same z-score signal for taker orders  
+- ALSO posts passive bid/ask at best_bid+1 / best_ask-1 (passive_size units)  
+- Captures both spread and cointegration reversion
+
+---
+
+## Backtest progression (vs best_v7 = 741,720)
+
+| Config | Strategy | Delta vs v7 |
+|--------|----------|-------------|
+| v8a: OVAL+TRI (coint_pairs_v1) | pure pairs | +12,767 |
+| v8b: LAUNDRY+VACUUMING (coint_pairs_v1) | pure pairs | +13,038 |
+| v8c: LAMB_WOOL+NYLON (coint_pairs_v1) | pure pairs | -12,078 ← HURTS (NYLON trend_v2 disrupted) |
+| v8d: GALAXY pair | coint_pairs_v1 | +10k over v5, but -10k vs v8e |
+| v8ab combined | coint_pairs_v1 | +25,805 |
+| **v8e: OVAL=naive, TRI+LAUNDRY+VAC on coint_pairs_v1** | mixed | +29,124 |
+| **v8g: TRI+LAUNDRY+VAC on coint_mm_v1 (+ passive MM)** | hybrid | +60,626 |
+| **v8h: ALL 4 MICROCHIP+ROBOT on coint_mm_v1** | hybrid | +66,859 |
+| **v8j: + RECTANGLE reads from SQUARE** | hybrid | +73,184 |
+| **v8m: entry_z=1.2 for MICROCHIP (was 1.5)** | hybrid | +77,488 |
+
+Key insight: `coint_mm_v1` (hybrid) dramatically outperforms `coint_pairs_v1` (pure) because it combines spread capture (passive MM) with the cointegration signal. The MICROCHIP products especially benefit since they have tight spreads.
+
+---
+
+## Parameters for best_v8 cointegration products
+
+| Product | Strategy | Partner | z_win | entry_z | passive_size |
+|---------|----------|---------|-------|---------|--------------|
+| MICROCHIP_OVAL | coint_mm_v1 | TRIANGLE | 1000 | 1.2 | 5 |
+| MICROCHIP_TRIANGLE | coint_mm_v1 | OVAL | 1000 | 1.2 | 3 |
+| MICROCHIP_RECTANGLE | coint_mm_v1 | SQUARE | 1000 | 1.2 | 3 |
+| ROBOT_LAUNDRY | coint_mm_v1 | VACUUMING | 2000 | 1.5 | 3 |
+| ROBOT_VACUUMING | coint_mm_v1 | LAUNDRY | 2000 | 1.5 | 3 |
+
+MICROCHIP_SQUARE stays on trend_v2 (untouched, +54k). RECTANGLE reads SQUARE's price as cointegration signal.
+
+---
+
+## Rejected pairs (tested, worse than v7)
+
+- SLEEP_POD_LAMB_WOOL ↔ NYLON (v8c): -12k vs v7. NYLON trend_v2 is disrupted when both use coint.
+- GALAXY_SOUNDS_SOLAR_FLAMES ↔ WINDS (v8f): -10k vs v8e. Long HL=3762 means slow reversion.
+- OXYGEN_SHAKE_CHOCOLATE ↔ GARLIC (v8k): -4k vs v8h. Current strategies +42k >> pairs +12k.
+- UV_VISOR_AMBER ↔ MAGENTA: simulation -3k. AMBER trend_v2 irreplaceable.
+- MICROCHIP_RECTANGLE ↔ SQUARE pure pairs: simulation -32k. SQUARE uptrend too strong.
+
+---
+
+## First backtest of best_v8: 819,208 PnL, 26% drawdown
+
+Config at that point included MICROCHIP_OVAL/TRIANGLE on `coint_mm_v1`.
+
+---
+
+# ITERATION 5: Live diagnosis and best_v8 revision
+
+## Live test results (v8 vs v7)
+
+| Version | Live PnL | Notes |
+|---------|----------|-------|
+| best_v7 | 20,960 | Baseline |
+| best_v8 (original) | 16,009 | −4,951 vs v7 |
+| best_v8 (EWMA fix) | 16,001 | Memory overflow fixed, same result |
+
+## Root cause: traderData memory overflow (FIXED)
+
+`coint_mm_v1` originally stored a `zbuf` rolling list of 1000–2000 floats per product.  
+5 coint products × ~28,000 chars each ≈ **140,500 chars** total in traderData.  
+This silently overflowed IMC's traderData limit, corrupting the state of `trend_v2` strategies (SLEEP_POD_NYLON, ROBOT_MOPPING, PANEL_1X2 all showed position=0 in v8 vs ±10 in v7).
+
+**Fix**: replaced `zbuf` list with EWMA running mean + variance (Welford O(1) update). Memory reduced from ~140,500 to ~600 chars (234× reduction). Applied to `coint_mm_v1.py`.
+
+However, even after the fix, the live PnL gap remained (16,001 vs 20,960). The memory fix was necessary but not sufficient.
+
+## Root cause 2: MICROCHIP cointegration pair broke down in live
+
+Per-product live PnL comparison (best_v8_new vs best_v7):
+
+| Product | Strategy in v8 | v7 PnL | v8 PnL | Delta |
+|---------|---------------|--------|--------|-------|
+| MICROCHIP_OVAL | coint_mm_v1 | +2,619 | −1,371 | **−3,990** |
+| MICROCHIP_TRIANGLE | coint_mm_v1 | +3,036 | +2,113 | **−923** |
+| ROBOT_LAUNDRY | coint_mm_v1 | −2,368 | −2,368 | 0 |
+| ROBOT_VACUUMING | coint_mm_v1 | +979 | +952 | −27 |
+
+The **−4,913 delta is entirely explained by MICROCHIP_OVAL and TRIANGLE**.
+
+What happened on OVAL: at ts=58,000 and ts=63,200 the z-score fired taker BUY orders (OVAL looked cheap vs TRIANGLE). But OVAL kept falling from 7,401 → 7,239 → 7,128 — the spread widened from −1,900 to −2,237 over 14,000 ticks without reverting. Classic "catching a falling knife."
+
+The cointegration relationship exists in the historical data but the spread's **reversion timescale** is much longer than `z_win=1000` ticks assumes. With alpha=2/1001 and no warmup from the previous day, the EWMA statistics start fresh each live day, making the z-score unreliable in the first few thousand ticks. The ROBOT_LAUNDRY/VACUUMING pair worked because their cointegration relationship held (0 delta).
+
+## Fix applied: best_v8 updated
+
+MICROCHIP_OVAL and MICROCHIP_TRIANGLE reverted to `naive_tight_mm` (same as v7).  
+MICROCHIP_RECTANGLE kept on `coint_mm_v1` reading SQUARE (live delta was only −18).  
+ROBOT_LAUNDRY/VACUUMING kept on `coint_mm_v1` (worked fine in live, 0 delta).
+
+## Final config: best_v8 = 767,422 backtest PnL
+
+Config: `MEMBER_OVERRIDES["best_v8"]` in `prosperity/config.py`  
+Wrapper: `submissions/best_v8.py`  
+Strategy files: `coint_mm_v1.py` (O(1) EWMA memory), `coint_pairs_v1.py`
+
+| Product | Strategy | Change vs original v8 |
+|---------|----------|-----------------------|
+| MICROCHIP_OVAL | naive_tight_mm size=5 | ← reverted (coint broke live) |
+| MICROCHIP_TRIANGLE | naive_tight_mm size=3 | ← reverted |
+| MICROCHIP_RECTANGLE | coint_mm_v1 reads SQUARE | unchanged |
+| ROBOT_LAUNDRY | coint_mm_v1 z_win=2000 | unchanged (worked in live) |
+| ROBOT_VACUUMING | coint_mm_v1 z_win=2000 | unchanged |
+
+Backtest is lower than original v8 (767k vs 819k) because the historical data favors the MICROCHIP coint — but live results showed it doesn't hold. The v7 baseline in live was +20,960; this config should be close to that or better (ROBOT coint adds ~0 delta in live).
+
+# ITERATION 4: Live MM inventory carry fix
+
+Reference: 3rd analyst
+
+## Goal
+
+Analyze the live `best_v7` logs instead of blindly optimizing backtests, focusing first on the products still using `naive_tight_mm`.
+
+## What the live logs showed
+
+The main issue was not toxic fills. On the worst live MM names, short-horizon markouts were still positive, but the strategy repeatedly finished with leftover long inventory into a falling close.
+
+Clearest examples from live:
+
+| Product | Live PnL | Final pos | Mid move | Read |
+|---------|----------|-----------|----------|------|
+| TRANSLATOR_SPACE_GRAY | -6,777 | +7 | -669 | good fills, bad close carry |
+| GALAXY_SOUNDS_PLANETARY_RINGS | -7,335 | +7 | -778 | same pattern |
+| PANEL_2X2 | -2,806 | +7 | -386 | same pattern |
+| UV_VISOR_YELLOW | -422 | +7 | -65.5 | same pattern |
+
+So the live failure mode was: we got paid to accumulate inventory, then donated MTM by carrying it into the end of the session.
+
+## What I tested
+
+I created a sequence of additive-only live-MM variants:
+
+- first variant: broad inventory-aware MM overlay on 9 weak live names
+- second variant: softer version, keeping intraday MM but adding earlier late-session flattening
+- third variant: very narrow final-ticks flattening on 4 names
+- `best_v7_live_mmfix4`: final kept version, same close-only idea but only on 3 names:
+  - `TRANSLATOR_SPACE_GRAY`
+  - `PANEL_2X2`
+  - `UV_VISOR_YELLOW`
+
+Shared strategy kept: `late_flatten_tight_mm_v1`
+
+Rejected:
+
+- the first two broader variants were too intrusive and gave up too much historical PnL
+- the third narrow variant improved day 4 but still hurt the `2/3/4` historical chain too much
+- `GALAXY_SOUNDS_PLANETARY_RINGS` was removed from the final version because the close-only intervention helped the live replay thesis but worsened its day-4 backtest
+
+## Final keep: `best_v7_live_mmfix4`
+
+Files:
+
+- `submissions/best_v7_live_mmfix4.py`
+- `prosperity/config.py`
+- `prosperity/strategies/round_5/tibo/late_flatten_tight_mm_v1.py`
+
+Behaviour:
+
+- keep `naive_tight_mm` intraday
+- only intervene at the very end of the session
+- stop leaning into the same-side inventory late
+- use a tiny passive/taker flatten when position is still large near the close
+
+## Why this works better
+
+This fix matches the actual live failure mode much more closely than the earlier broad overlays. It does not try to redesign MM logic intraday. It only removes the specific end-of-session inventory leak that showed up in the logs.
+
+Results:
+
+| Config | Days | PnL | Max DD |
+|--------|------|-----|--------|
+| `best_v7` | 4 | 314,243 | 19,330 |
+| `best_v7_live_mmfix4` | 4 | 319,917 | 21,182 |
+| `best_v7` | 2/3/4 | 741,720 | 40,294 |
+| `best_v7_live_mmfix4` | 2/3/4 | 747,656 | 38,227 |
+
+Takeaway:
+
+`best_v7_live_mmfix4` is the first live-motivated MM fix from this line of research that improved both the live-replay day and the full historical sanity check. That is why it was kept and the earlier variants were discarded.

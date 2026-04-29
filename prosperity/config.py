@@ -8739,7 +8739,7 @@ MEMBER_OVERRIDES["r4_hydro_mv_v7_maker30_fair110"] = {
 }
 
 
-MEMBER_OVERRIDES["r4_hydro_mv_v8_mmsoft"] = {
+MEMBER_OVERRIDES["r4_hydro_mv_v7_mmsoft"] = {
     4: {
         "HYDROGEL_PACK": _override(
             ROUND_4["HYDROGEL_PACK"],
@@ -17557,6 +17557,42 @@ MEMBER_OVERRIDES["best_v7"] = {
 }
 # All other 24 products fall through to base ROUND_5 config (naive_tight_mm maker_size=3)
 
+MEMBER_OVERRIDES["best_v7_live_mmfix4"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v7"][5],
+        # Narrower live fix than mmfix3:
+        # - keep the close-only flatten mechanic
+        # - drop GALAXY_SOUNDS_PLANETARY_RINGS because it worsened day-4 backtest
+        # - keep only symbols that were live-negative, weak on day-4 backtest,
+        #   and improved under the close-only intervention
+        "TRANSLATOR_SPACE_GRAY": ProductConfig(
+            symbol="TRANSLATOR_SPACE_GRAY",
+            strategy="late_flatten_tight_mm_v1",
+            position_limit=10,
+            params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                        late_passive_unwind_start_ts=99700, late_taker_unwind_start_ts=99900,
+                        late_unwind_qty=2, late_unwind_pos_gate=5),
+        ),
+        "PANEL_2X2": ProductConfig(
+            symbol="PANEL_2X2",
+            strategy="late_flatten_tight_mm_v1",
+            position_limit=10,
+            params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                        late_passive_unwind_start_ts=99700, late_taker_unwind_start_ts=99900,
+                        late_unwind_qty=2, late_unwind_pos_gate=5),
+        ),
+        "UV_VISOR_YELLOW": ProductConfig(
+            symbol="UV_VISOR_YELLOW",
+            strategy="late_flatten_tight_mm_v1",
+            position_limit=10,
+            params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                        late_passive_unwind_start_ts=99700, late_taker_unwind_start_ts=99900,
+                        late_unwind_qty=2, late_unwind_pos_gate=5),
+        ),
+    }
+}
+# Goal: tiny close-only intervention on the clearest live MM leaks.
+
 
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
@@ -17568,3 +17604,99 @@ def get_round_config(round_num: int, member: str = "champion") -> Dict[str, Prod
         else:
             base[symbol] = cfg
     return base
+
+def _v8_coint_mm(sym: str, partner: str, z_win: int, entry_z: float,
+                 passive_size: int = 3) -> ProductConfig:
+    """CointMMV1 helper for best_v8 config."""
+    return ProductConfig(
+        symbol=sym, strategy="coint_mm_v1", position_limit=10,
+        params=dict(partner_product=partner, mean_half_life=5000,
+                    z_window=z_win, entry_z=entry_z, exit_z=0.0,
+                    taker_size=10, passive_size=passive_size, tighten_ticks=1,
+                    position_limit=10, last_ts_value=999900))
+
+
+MEMBER_OVERRIDES["best_v8"] = {
+    5: {
+        # ── PEBBLES: conservation arb on XL; trend_v2 on XS; naive MM on L/M/S ─
+        "PEBBLES_XL": _v7_pebbles_arb("PEBBLES_XL"),
+        "PEBBLES_XS": _v7_trend("PEBBLES_XS", ema_hl=150, threshold=250, exit_thr=80),
+        "PEBBLES_L":  _v7_mm("PEBBLES_L"),
+        "PEBBLES_M":  _v7_mm("PEBBLES_M"),
+        "PEBBLES_S":  _v7_mm("PEBBLES_S"),
+        # ── ROBOT_DISHES: AR1 mean-reversion (+140k) ─────────────────────────
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(entry_threshold=20.0, taker_size=10, passive_size=0,
+                        exit_ticks=0, position_limit=10, last_ts_value=999900),
+        ),
+        # ── MICROCHIP: passive MM for OVAL/TRIANGLE (coint unstable in live)
+        # RECT still reads SQUARE as partner (≈0 delta, low risk)
+        "MICROCHIP_OVAL":     _v7_mm("MICROCHIP_OVAL",     size=5),
+        "MICROCHIP_TRIANGLE": _v7_mm("MICROCHIP_TRIANGLE", size=3),
+        "MICROCHIP_RECTANGLE":_v8_coint_mm("MICROCHIP_RECTANGLE","MICROCHIP_SQUARE", z_win=1000, entry_z=1.2, passive_size=3),
+        "MICROCHIP_SQUARE":   _v7_trend("MICROCHIP_SQUARE", ema_hl=100, threshold=250, exit_thr=80),
+        # ── ROBOT: LAUNDRY↔VACUUMING cointegration pair (held in live) ───────
+        "ROBOT_LAUNDRY":   _v8_coint_mm("ROBOT_LAUNDRY",   "ROBOT_VACUUMING", z_win=2000, entry_z=1.5, passive_size=3),
+        "ROBOT_VACUUMING": _v8_coint_mm("ROBOT_VACUUMING", "ROBOT_LAUNDRY",   z_win=2000, entry_z=1.5, passive_size=3),
+        # ── SNACKPACK: naive MM size=5 (all-positive days) ────────────────────
+        "SNACKPACK_CHOCOLATE":  _v7_mm("SNACKPACK_CHOCOLATE",  size=5),
+        "SNACKPACK_VANILLA":    _v7_mm("SNACKPACK_VANILLA",    size=5),
+        "SNACKPACK_PISTACHIO":  _v7_mm("SNACKPACK_PISTACHIO",  size=5),
+        "SNACKPACK_STRAWBERRY": _v7_mm("SNACKPACK_STRAWBERRY", size=5),
+        "SNACKPACK_RASPBERRY":  _v7_mm("SNACKPACK_RASPBERRY",  size=5),
+        # ── Skip SLEEP_POD_LAMB_WOOL (intraday spike trap) ───────────────────
+        "SLEEP_POD_LAMB_WOOL": None,
+        # ── Trend followers ────────────────────────────────────────────────────
+        "UV_VISOR_AMBER":       _v7_trend("UV_VISOR_AMBER",      ema_hl=100, threshold=80,  exit_thr=30),
+        "ROBOT_MOPPING":        _v7_trend("ROBOT_MOPPING",       ema_hl=150, threshold=100, exit_thr=40),
+        "SLEEP_POD_COTTON":     _v7_trend("SLEEP_POD_COTTON",    ema_hl=100, threshold=80,  exit_thr=30),
+        "SLEEP_POD_NYLON":      _v7_trend("SLEEP_POD_NYLON",     ema_hl=100, threshold=80,  exit_thr=30),
+        "SLEEP_POD_POLYESTER":  _v7_trend("SLEEP_POD_POLYESTER", ema_hl=150, threshold=600, exit_thr=150),
+        "PANEL_1X2":            _v7_trend("PANEL_1X2",           ema_hl=100, threshold=80,  exit_thr=30),
+        "ROBOT_IRONING":        _v7_trend("ROBOT_IRONING",       ema_hl=150, threshold=100, exit_thr=40),
+        "OXYGEN_SHAKE_GARLIC":  _v7_trend("OXYGEN_SHAKE_GARLIC", ema_hl=150, threshold=700, exit_thr=150),
+        # ── All-positive naive MM products: size=5 ────────────────────────────
+        "PANEL_1X4":                   _v7_mm("PANEL_1X4",                   size=5),
+        "OXYGEN_SHAKE_CHOCOLATE":      _v7_mm("OXYGEN_SHAKE_CHOCOLATE",      size=5),
+        "OXYGEN_SHAKE_EVENING_BREATH": _v7_mm("OXYGEN_SHAKE_EVENING_BREATH", size=5),
+        "TRANSLATOR_VOID_BLUE":        _v7_mm("TRANSLATOR_VOID_BLUE",        size=5),
+        "PANEL_2X4":                   _v7_mm("PANEL_2X4",                   size=5),
+        "UV_VISOR_ORANGE":             _v7_mm("UV_VISOR_ORANGE",             size=5),
+        "OXYGEN_SHAKE_MORNING_BREATH": _v7_mm("OXYGEN_SHAKE_MORNING_BREATH", size=5),
+        "UV_VISOR_RED":                _v7_mm("UV_VISOR_RED",                size=5),
+        "GALAXY_SOUNDS_DARK_MATTER":   _v7_mm("GALAXY_SOUNDS_DARK_MATTER",   size=5),
+        "PANEL_2X2":                   _v7_mm("PANEL_2X2",                   size=5),
+    }
+}
+# All other 24 products fall through to base ROUND_5 config (naive_tight_mm size=3)
+
+
+def _late_flatten_mm(sym: str, maker_size: int = 3) -> ProductConfig:
+    """naive_tight_mm with end-of-session inventory flatten (from best_v7_live_mmfix4)."""
+    return ProductConfig(
+        symbol=sym, strategy="late_flatten_tight_mm_v1", position_limit=10,
+        params=dict(maker_size=maker_size, tighten_ticks=1,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                    late_passive_unwind_start_ts=99700,
+                    late_taker_unwind_start_ts=99900,
+                    late_unwind_qty=2, late_unwind_pos_gate=5))
+
+
+# ── best_v9: best_v8 + live MM fix (from best_v7_live_mmfix4) ────────────────
+# Merges two lines of work:
+#   - best_v8: coint_mm on ROBOT_LAUNDRY/VACUUMING + RECT, revised MICROCHIP to naive_mm
+#   - best_v7_live_mmfix4: close-only inventory flatten on 3 products that had
+#     carry losses in live (TRANSLATOR_SPACE_GRAY, PANEL_2X2, UV_VISOR_YELLOW)
+# The flatten logic doesn't fire in normal backtest ticks but removes the
+# end-of-session MTM drag that appeared in the live logs.
+MEMBER_OVERRIDES["best_v9"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v8"][5],
+        # Live MM fix: replace naive_tight_mm with late_flatten_tight_mm_v1
+        # for 3 products that repeatedly carried inventory into a falling close
+        "TRANSLATOR_SPACE_GRAY": _late_flatten_mm("TRANSLATOR_SPACE_GRAY", maker_size=3),
+        "PANEL_2X2":             _late_flatten_mm("PANEL_2X2",             maker_size=5),
+        "UV_VISOR_YELLOW":       _late_flatten_mm("UV_VISOR_YELLOW",       maker_size=3),
+    }
+}
