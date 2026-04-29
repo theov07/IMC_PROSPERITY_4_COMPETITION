@@ -17774,3 +17774,33 @@ MEMBER_OVERRIDES["best_v9"] = {
         "UV_VISOR_YELLOW":       _late_flatten_mm("UV_VISOR_YELLOW",       maker_size=3),
     }
 }
+
+
+# ── best_v10: merge of best_v9 (1st/3rd analyst) + tibo_r5_v8_a (2nd analyst) ──
+#
+# Conflict resolutions (user decision 2026-04-29):
+#   TRANSLATOR_SPACE_GRAY → None (v8_a wins: consistently bad in both backtest −11k AND live −6,777)
+#   UV_VISOR_YELLOW       → trend_v2 th=700 (v8_a wins: +19,285 vs naive_mm +4,592 in backtest)
+#   ROBOT_VACUUMING       → coint_mm_v1 (v9 wins: cointegration held in live, 0 delta)
+#   PEBBLES_M             → None (v8_a wins: −14,756 backtest AND −357 live)
+#   PANEL_2X2             → naive_mm size=5 (v8_a wins: no late_flatten needed)
+#
+# Non-conflicting additions from v8_a (halved position limit for live-volatile products):
+#   PANEL_4X4, TRANSLATOR_GRAPHITE_MIST, GALAXY_SOUNDS_SOLAR_FLAMES,
+#   UV_VISOR_MAGENTA, PEBBLES_L → naive_mm limit=5
+MEMBER_OVERRIDES["best_v10"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v9"][5],
+        # ── Conflict resolutions (v8_a wins) ─────────────────────────────────
+        "TRANSLATOR_SPACE_GRAY": None,                                            # v9 had late_flatten → None
+        "UV_VISOR_YELLOW":       _v7_trend("UV_VISOR_YELLOW", ema_hl=100, threshold=700, exit_thr=150),  # v9 had late_flatten → trend_v2
+        "PEBBLES_M":             None,                                            # v9 had naive_mm → None
+        "PANEL_2X2":             _v7_mm("PANEL_2X2", size=5),                    # v9 had late_flatten → naive_mm
+        # ── Non-conflicting v8_a additions (halved limit for volatile products) ─
+        "PANEL_4X4":                  _v8_mm_conservative("PANEL_4X4"),
+        "TRANSLATOR_GRAPHITE_MIST":   _v8_mm_conservative("TRANSLATOR_GRAPHITE_MIST"),
+        "GALAXY_SOUNDS_SOLAR_FLAMES": _v8_mm_conservative("GALAXY_SOUNDS_SOLAR_FLAMES"),
+        "UV_VISOR_MAGENTA":           _v8_mm_conservative("UV_VISOR_MAGENTA"),
+        "PEBBLES_L":                  _v8_mm_conservative("PEBBLES_L"),
+    }
+}
