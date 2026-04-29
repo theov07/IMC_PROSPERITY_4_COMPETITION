@@ -21319,3 +21319,46 @@ def _r5_v2670_carry_amber():
 
 MEMBER_OVERRIDES["best_v2670_carry_amber"] = _r5_v2670_carry_amber()
 
+
+# v2700: v2640 + revive LAMB_WOOL with carry (simulator alpha hypothesis: more orders = more fills)
+def _r5_v2700_lamb_carry():
+    base = dict(MEMBER_OVERRIDES["best_v2640_carry_morning"][5])
+    base["SLEEP_POD_LAMB_WOOL"] = _inventory_carry("SLEEP_POD_LAMB_WOOL")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2700_lamb_carry"] = _r5_v2700_lamb_carry()
+
+
+# v2710: v2640 + revive MAGENTA with carry
+def _r5_v2710_magenta_carry():
+    base = dict(MEMBER_OVERRIDES["best_v2640_carry_morning"][5])
+    base["UV_VISOR_MAGENTA"] = _inventory_carry("UV_VISOR_MAGENTA")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2710_magenta_carry"] = _r5_v2710_magenta_carry()
+
+
+# v2720: v2640 + revive PEBBLES_M with carry
+def _r5_v2720_pebbles_m_carry():
+    base = dict(MEMBER_OVERRIDES["best_v2640_carry_morning"][5])
+    base["PEBBLES_M"] = _inventory_carry("PEBBLES_M")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2720_pebbles_m_carry"] = _r5_v2720_pebbles_m_carry()
+
+
+# v2730: v2640 + revive ALL 4 dropped products with carry (max test of orders=fills hypothesis)
+def _r5_v2730_revive_all_carry():
+    base = dict(MEMBER_OVERRIDES["best_v2640_carry_morning"][5])
+    base["SLEEP_POD_LAMB_WOOL"] = _inventory_carry("SLEEP_POD_LAMB_WOOL")
+    base["UV_VISOR_MAGENTA"] = _inventory_carry("UV_VISOR_MAGENTA")
+    base["PEBBLES_M"] = _inventory_carry("PEBBLES_M")
+    base["OXYGEN_SHAKE_MINT"] = _inventory_carry("OXYGEN_SHAKE_MINT")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2730_revive_all_carry"] = _r5_v2730_revive_all_carry()
+
