@@ -235,6 +235,36 @@ ROUND_4: Dict[str, ProductConfig] = {
         for k in [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
     },
 }
+_R5_SIMPLE_MM = dict(
+    maker_size=3,
+    tighten_ticks=1,
+    log_flush_ts=1000,
+    ts_increment=100,
+    last_ts_value=999900,
+)
+_R5_PEBBLES_MM = _R5_SIMPLE_MM  # alias used by tibo_r5_v5/v6/best_v7 configs
+
+ROUND_5: Dict[str, ProductConfig] = {
+    **{
+        sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=_R5_SIMPLE_MM)
+        for sym in [
+            "GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_DARK_MATTER", "GALAXY_SOUNDS_PLANETARY_RINGS",
+            "GALAXY_SOUNDS_SOLAR_FLAMES", "GALAXY_SOUNDS_SOLAR_WINDS",
+            "SLEEP_POD_SUEDE", "SLEEP_POD_LAMB_WOOL", "SLEEP_POD_POLYESTER", "SLEEP_POD_NYLON", "SLEEP_POD_COTTON",
+            "MICROCHIP_CIRCLE", "MICROCHIP_OVAL", "MICROCHIP_SQUARE", "MICROCHIP_RECTANGLE", "MICROCHIP_TRIANGLE",
+            "PEBBLES_XS", "PEBBLES_S", "PEBBLES_M", "PEBBLES_L", "PEBBLES_XL",
+            "ROBOT_VACUUMING", "ROBOT_MOPPING", "ROBOT_DISHES", "ROBOT_LAUNDRY", "ROBOT_IRONING",
+            "UV_VISOR_YELLOW", "UV_VISOR_AMBER", "UV_VISOR_ORANGE", "UV_VISOR_RED", "UV_VISOR_MAGENTA",
+            "TRANSLATOR_SPACE_GRAY", "TRANSLATOR_ASTRO_BLACK", "TRANSLATOR_ECLIPSE_CHARCOAL",
+            "TRANSLATOR_GRAPHITE_MIST", "TRANSLATOR_VOID_BLUE",
+            "PANEL_1X2", "PANEL_2X2", "PANEL_1X4", "PANEL_2X4", "PANEL_4X4",
+            "OXYGEN_SHAKE_MORNING_BREATH", "OXYGEN_SHAKE_EVENING_BREATH", "OXYGEN_SHAKE_MINT",
+            "OXYGEN_SHAKE_CHOCOLATE", "OXYGEN_SHAKE_GARLIC",
+            "SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO",
+            "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY",
+        ]
+    },
+}
 _R5_PRODUCTS = [
     "GALAXY_SOUNDS_DARK_MATTER", "GALAXY_SOUNDS_BLACK_HOLES",
     "GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_SOLAR_WINDS",
@@ -282,6 +312,8 @@ ROUNDS: Dict[int, Dict[str, ProductConfig]] = {
     4: ROUND_4,
     5: ROUND_5,
 }
+
+_R5_PRODUCTS = list(ROUND_5.keys())
 
 
 # ── Per-member overrides (for experimentation) ──────────────────────
@@ -8744,7 +8776,7 @@ MEMBER_OVERRIDES["r4_hydro_mv_v7_maker30_fair110"] = {
 }
 
 
-MEMBER_OVERRIDES["r4_hydro_mv_v8_mmsoft"] = {
+MEMBER_OVERRIDES["r4_hydro_mv_v7_mmsoft"] = {
     4: {
         "HYDROGEL_PACK": _override(
             ROUND_4["HYDROGEL_PACK"],
@@ -17354,6 +17386,325 @@ MEMBER_OVERRIDES["r3_combined_best"] = {
 }
 
 
+_PEBBLES_ALL = ["PEBBLES_L", "PEBBLES_M", "PEBBLES_S", "PEBBLES_XL", "PEBBLES_XS"]
+
+MEMBER_OVERRIDES["tibo_r5_v5"] = {
+    5: {
+        # ── PEBBLES: conservation taker arb on XL/XS; naive MM on L/M/S ───
+        **{
+            sym: ProductConfig(
+                symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                params=dict(
+                    partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                    sum_target=50000.0,
+                    edge_ticks=7.0,
+                    passive_half_spread=6.0,
+                    taker_size=10,
+                    passive_size=5,
+                    ewma_alpha=0.05,
+                    position_limit=10,
+                    last_ts_value=999900,
+                ),
+            )
+            for sym in ["PEBBLES_XL", "PEBBLES_XS"]
+        },
+        "PEBBLES_L": ProductConfig(symbol="PEBBLES_L", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_M": ProductConfig(symbol="PEBBLES_M", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_S": ProductConfig(symbol="PEBBLES_S", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        # ── ROBOT_DISHES: AR1 mean-reversion (AR1=-0.232, thresh=20 beats MM)
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(
+                entry_threshold=20.0,
+                taker_size=10,
+                passive_size=0,
+                exit_ticks=0,
+                position_limit=10,
+                last_ts_value=999900,
+            ),
+        ),
+        # ── SNACKPACK: naive MM (pairs strategy tested and underperforms) ──
+        **{
+            sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=dict(
+                maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ))
+            for sym in ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY"]
+        },
+        # ── Skip: consistently loses all 3 historical days (large intraday swing/reversal trap) ─
+        "SLEEP_POD_LAMB_WOOL": None,
+    }
+}
+
+
+# ── Round 5 — Tibo's trend-following strategies ──────────────────────────────
+
+def _r5_trend_v2(sym: str, ema_hl: int = 100, threshold: float = 80.0, exit_thr: float = 30.0, warmup: int = 0) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym,
+        strategy="trend_follow_v2",
+        position_limit=10,
+        params=dict(
+            ema_half_life=ema_hl,
+            threshold=threshold,
+            exit_threshold=exit_thr,
+            warmup_ticks=warmup,
+            position_limit=10,
+            ts_increment=100,
+            last_ts_value=999900,
+            log_flush_ts=1000,
+        ),
+    )
+
+
+
+# ── Round 5 — tibo_r5_v6: v5 + trend_v2 where it beats naive_mm ──────────────
+# 3-day realistic backtest: 733,918 PnL (+142,704 over tibo_r5_v5's 591,214)
+# trend_v2 wins: MICROCHIP_SQUARE (+46k), PANEL_1X2 (+31k), ROBOT_MOPPING (+25k),
+#   PEBBLES_XS (+14k), UV_VISOR_AMBER (+7k), SLEEP_POD_NYLON (+5k),
+#   SLEEP_POD_POLYESTER (+5k), SLEEP_POD_COTTON (+3k), ROBOT_IRONING (+3k),
+#   OXYGEN_SHAKE_GARLIC (+3k)
+# v5 strategy kept where it wins: PEBBLES_XL (arb), PANEL_1X4, SLEEP_POD_SUEDE,
+#   TRANSLATOR_VOID_BLUE, MICROCHIP_TRIANGLE, PANEL_2X4, MICROCHIP_OVAL, GALAXY_SOUNDS_BLACK_HOLES
+MEMBER_OVERRIDES["tibo_r5_v6"] = {
+    5: {
+        # ── PEBBLES: arb on XL only; trend_v2 on XS (beats arb by +13,701); naive MM on L/M/S ──
+        **{
+            sym: ProductConfig(
+                symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                params=dict(
+                    partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                    sum_target=50000.0, edge_ticks=7.0, passive_half_spread=6.0,
+                    taker_size=10, passive_size=5, ewma_alpha=0.05,
+                    position_limit=10, last_ts_value=999900,
+                ),
+            )
+            for sym in ["PEBBLES_XL"]
+        },
+        "PEBBLES_XS": _r5_trend_v2("PEBBLES_XS", ema_hl=150, threshold=250, exit_thr=80),
+        "PEBBLES_L": ProductConfig(symbol="PEBBLES_L", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_M": ProductConfig(symbol="PEBBLES_M", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        "PEBBLES_S": ProductConfig(symbol="PEBBLES_S", strategy="naive_tight_mm", position_limit=10, params=_R5_PEBBLES_MM),
+        # ── ROBOT_DISHES: AR1 mean-reversion (best single product, +140k) ────
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(entry_threshold=20.0, taker_size=10, passive_size=0,
+                        exit_ticks=0, position_limit=10, last_ts_value=999900),
+        ),
+        # ── SNACKPACK: naive MM (all 5) ──────────────────────────────────────
+        **{
+            sym: ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10, params=dict(
+                maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ))
+            for sym in ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO",
+                        "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY"]
+        },
+        # ── Skip SLEEP_POD_LAMB_WOOL (intra-day spike, consistently loses) ───
+        "SLEEP_POD_LAMB_WOOL": None,
+        # ── trend_v2 winners (beat naive_mm in v5) ──────────────────────────
+        "UV_VISOR_AMBER": _r5_trend_v2("UV_VISOR_AMBER", ema_hl=100, threshold=80, exit_thr=30),
+        "ROBOT_MOPPING": _r5_trend_v2("ROBOT_MOPPING", ema_hl=150, threshold=100, exit_thr=40),
+        "SLEEP_POD_COTTON": _r5_trend_v2("SLEEP_POD_COTTON", ema_hl=100, threshold=80, exit_thr=30),
+        "SLEEP_POD_NYLON": _r5_trend_v2("SLEEP_POD_NYLON", ema_hl=100, threshold=80, exit_thr=30),
+        "SLEEP_POD_POLYESTER": _r5_trend_v2("SLEEP_POD_POLYESTER", ema_hl=150, threshold=600, exit_thr=150),
+        "PANEL_1X2": _r5_trend_v2("PANEL_1X2", ema_hl=100, threshold=80, exit_thr=30),
+        "ROBOT_IRONING": _r5_trend_v2("ROBOT_IRONING", ema_hl=150, threshold=100, exit_thr=40),
+        "OXYGEN_SHAKE_GARLIC": _r5_trend_v2("OXYGEN_SHAKE_GARLIC", ema_hl=150, threshold=700, exit_thr=150),
+        "MICROCHIP_SQUARE": _r5_trend_v2("MICROCHIP_SQUARE", ema_hl=100, threshold=250, exit_thr=80),
+    },
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# best_v7 — Round 5 best composite strategy (self-contained, no inheritance)
+# 3-day realistic backtest: ~741,720 PnL
+# Improvements over v6 (733,918):
+#   +4,986 — SNACKPACK maker_size 3→5 (all 3 days positive, safe to increase)
+#   +2,816 — 11 other all-positive naive_tight_mm products maker_size 3→5
+#   Total delta: +7,802
+# Task 2 rejected: PEBBLES_L/M conservation taker-only = 712k < 734k (naive_mm wins)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_BEST_V7_TREND_PARAMS = dict(
+    ts_increment=100, last_ts_value=999900, log_flush_ts=1000,
+)
+
+def _v7_mm(sym: str, size: int = 3) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=10,
+                         params=dict(maker_size=size, tighten_ticks=1,
+                                     log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+def _v7_trend(sym: str, ema_hl: int, threshold: float, exit_thr: float, warmup: int = 0) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="trend_follow_v2", position_limit=10,
+                         params=dict(ema_half_life=ema_hl, threshold=threshold,
+                                     exit_threshold=exit_thr, warmup_ticks=warmup,
+                                     position_limit=10, **_BEST_V7_TREND_PARAMS))
+
+def _v7_pebbles_arb(sym: str) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+                         params=dict(partner_products=[p for p in _PEBBLES_ALL if p != sym],
+                                     sum_target=50000.0, edge_ticks=7.0, passive_half_spread=6.0,
+                                     taker_size=10, passive_size=5, ewma_alpha=0.05,
+                                     position_limit=10, last_ts_value=999900))
+
+MEMBER_OVERRIDES["best_v7"] = {
+    5: {
+        # ── PEBBLES: conservation arb on XL; trend_v2 on XS; naive MM on L/M/S ─
+        "PEBBLES_XL": _v7_pebbles_arb("PEBBLES_XL"),
+        "PEBBLES_XS": _v7_trend("PEBBLES_XS", ema_hl=150, threshold=250, exit_thr=80),
+        "PEBBLES_L":  _v7_mm("PEBBLES_L"),
+        "PEBBLES_M":  _v7_mm("PEBBLES_M"),
+        "PEBBLES_S":  _v7_mm("PEBBLES_S"),
+        # ── ROBOT_DISHES: AR1 mean-reversion (thresh=20, +140k) ─────────────────
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(entry_threshold=20.0, taker_size=10, passive_size=0,
+                        exit_ticks=0, position_limit=10, last_ts_value=999900),
+        ),
+        # ── SNACKPACK: all naive MM size=5 (all 3 days positive, saturation at 5) ─
+        "SNACKPACK_CHOCOLATE":  _v7_mm("SNACKPACK_CHOCOLATE",  size=5),
+        "SNACKPACK_VANILLA":    _v7_mm("SNACKPACK_VANILLA",    size=5),
+        "SNACKPACK_PISTACHIO":  _v7_mm("SNACKPACK_PISTACHIO",  size=5),
+        "SNACKPACK_STRAWBERRY": _v7_mm("SNACKPACK_STRAWBERRY", size=5),
+        "SNACKPACK_RASPBERRY":  _v7_mm("SNACKPACK_RASPBERRY",  size=5),
+        # ── Skip: intra-day spike reversal trap, -30k all 3 historical days ─────
+        "SLEEP_POD_LAMB_WOOL": None,
+        # ── Trend followers (beat naive_mm in v5/v6 head-to-head) ────────────────
+        "UV_VISOR_AMBER":       _v7_trend("UV_VISOR_AMBER",       ema_hl=100, threshold=80,  exit_thr=30),
+        "ROBOT_MOPPING":        _v7_trend("ROBOT_MOPPING",        ema_hl=150, threshold=100, exit_thr=40),
+        "SLEEP_POD_COTTON":     _v7_trend("SLEEP_POD_COTTON",     ema_hl=100, threshold=80,  exit_thr=30),
+        "SLEEP_POD_NYLON":      _v7_trend("SLEEP_POD_NYLON",      ema_hl=100, threshold=80,  exit_thr=30),
+        "SLEEP_POD_POLYESTER":  _v7_trend("SLEEP_POD_POLYESTER",  ema_hl=150, threshold=600, exit_thr=150),
+        "PANEL_1X2":            _v7_trend("PANEL_1X2",            ema_hl=100, threshold=80,  exit_thr=30),
+        "ROBOT_IRONING":        _v7_trend("ROBOT_IRONING",        ema_hl=150, threshold=100, exit_thr=40),
+        "OXYGEN_SHAKE_GARLIC":  _v7_trend("OXYGEN_SHAKE_GARLIC",  ema_hl=150, threshold=700, exit_thr=150),
+        "MICROCHIP_SQUARE":     _v7_trend("MICROCHIP_SQUARE",     ema_hl=100, threshold=250, exit_thr=80),
+        # ── All-positive naive MM products: size=5 (market saturation, 5=7) ─────
+        "PANEL_1X4":                  _v7_mm("PANEL_1X4",                  size=5),
+        "OXYGEN_SHAKE_CHOCOLATE":     _v7_mm("OXYGEN_SHAKE_CHOCOLATE",     size=5),
+        "OXYGEN_SHAKE_EVENING_BREATH":_v7_mm("OXYGEN_SHAKE_EVENING_BREATH",size=5),
+        "TRANSLATOR_VOID_BLUE":       _v7_mm("TRANSLATOR_VOID_BLUE",       size=5),
+        "PANEL_2X4":                  _v7_mm("PANEL_2X4",                  size=5),
+        "UV_VISOR_ORANGE":            _v7_mm("UV_VISOR_ORANGE",            size=5),
+        "OXYGEN_SHAKE_MORNING_BREATH":_v7_mm("OXYGEN_SHAKE_MORNING_BREATH",size=5),
+        "MICROCHIP_OVAL":             _v7_mm("MICROCHIP_OVAL",             size=5),
+        "UV_VISOR_RED":               _v7_mm("UV_VISOR_RED",               size=5),
+        "GALAXY_SOUNDS_DARK_MATTER":  _v7_mm("GALAXY_SOUNDS_DARK_MATTER",  size=5),
+        "PANEL_2X2":                  _v7_mm("PANEL_2X2",                  size=5),
+    }
+}
+# All other 24 products fall through to base ROUND_5 config (naive_tight_mm maker_size=3)
+# ── Round 5 — tibo_r5_v7_2: v6 + stop losers + UV_VISOR_YELLOW ───────────────
+# 3-day realistic backtest: 817,194 PnL (+83,276 over tibo_r5_v6's 733,918)
+# Changes vs v6:
+#   - PEBBLES_L/M: None (-11.5k/-14.8k saved). Arb tested but worse (arb fires too aggressively because fair≈mid always).
+#   - 6 losers → None: UV_VISOR_MAGENTA -7.3k, TRANSLATOR_SPACE_GRAY -11.2k, PANEL_4X4 -10.7k,
+#       GALAXY_SOUNDS_SOLAR_FLAMES -6k, TRANSLATOR_GRAPHITE_MIST -4.4k, ROBOT_VACUUMING -2.7k
+#   - UV_VISOR_YELLOW: trend_v2 th=700 → +19,285 (was naive_mm +4,592). threshold=700 avoids
+#       day3 false-short (EMA dip reaches -633, below 700 → no entry).
+MEMBER_OVERRIDES["tibo_r5_v7_2"] = {
+    5: {
+        **MEMBER_OVERRIDES["tibo_r5_v6"][5],
+        # ── PEBBLES L/M: set to None (lose with both naive_mm and arb) ──────────────
+        "PEBBLES_L": None,
+        "PEBBLES_M": None,
+        # ── Stop the bleeding: set big losers to None ────────────────────────────────
+        "UV_VISOR_MAGENTA": None,
+        "TRANSLATOR_SPACE_GRAY": None,
+        "PANEL_4X4": None,
+        "GALAXY_SOUNDS_SOLAR_FLAMES": None,
+        "TRANSLATOR_GRAPHITE_MIST": None,
+        "ROBOT_VACUUMING": None,
+        # ── UV_VISOR_YELLOW: threshold=700 avoids day3 false-short (min_signal=-633) ──
+        # day2: long +8k, day3: no entry (EMA only reaches -633 < 700), day4: short +11k
+        "UV_VISOR_YELLOW": _r5_trend_v2("UV_VISOR_YELLOW", ema_hl=100, threshold=700, exit_thr=150),
+    },
+}
+
+
+# ── Round 5 — tibo_r5_v7_2_best: best_v7 (maker_size=5) + v7_2 (stop losers + YELLOW) ──
+# 3-day realistic backtest: 824,996 PnL (+91,078 vs v6 733,918)
+# best_v7 contributions: maker_size 3→5 on 16 all-positive products (+7,802 vs v6)
+# v7_2 contributions: 8 losers→None (+68.6k vs v6), UV_VISOR_YELLOW trend_v2 th=700 (+14.7k)
+MEMBER_OVERRIDES["tibo_r5_v7_2_best"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v7"][5],
+        # ── v7_2: set all losing products to None ────────────────────────────────────
+        "PEBBLES_L": None,           # -11,500 in v6 (overrides best_v7's naive_mm)
+        "PEBBLES_M": None,           # -14,756 in v6
+        "UV_VISOR_MAGENTA": None,    # -7,314 in v6
+        "TRANSLATOR_SPACE_GRAY": None,  # -11,188 in v6
+        "PANEL_4X4": None,           # -10,672 in v6
+        "GALAXY_SOUNDS_SOLAR_FLAMES": None,  # -6,034 in v6
+        "TRANSLATOR_GRAPHITE_MIST": None,    # -4,418 in v6
+        "ROBOT_VACUUMING": None,     # -2,700 in v6
+        # ── v7_2: UV_VISOR_YELLOW trend_v2 th=700 (day3 EMA dip=-633 < 700 → no entry) ──
+        "UV_VISOR_YELLOW": _v7_trend("UV_VISOR_YELLOW", ema_hl=100, threshold=700, exit_thr=150),
+    },
+}
+
+
+# ── Round 5 — v8_a: restore 6 live-profitable products at halved position limit ──
+# Mitigation A: keep TRANSLATOR_SPACE_GRAY + PEBBLES_M at None (consistently bad),
+# restore the 6 wrongly-removed products with limit=5 to cap max inventory loss.
+# Tradeoff: backtest ~-20k vs v7_2_best, but ~+7k on live day compared to v7_2_best.
+def _v8_mm_conservative(sym: str) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=5,
+                         params=dict(maker_size=3, tighten_ticks=1,
+                                     log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+MEMBER_OVERRIDES["tibo_r5_v8_a"] = {
+    5: {
+        **MEMBER_OVERRIDES["tibo_r5_v7_2_best"][5],
+        # Restore 6 wrongly-removed products with position_limit=5 (half of standard 10)
+        # They were profitable in live day: PANEL_4X4 +5567, GRAPHITE_MIST +4191,
+        # SOLAR_FLAMES +2306, ROBOT_VACUUMING +979, UV_VISOR_MAGENTA +598, PEBBLES_L +337
+        "PANEL_4X4":                    _v8_mm_conservative("PANEL_4X4"),
+        "TRANSLATOR_GRAPHITE_MIST":     _v8_mm_conservative("TRANSLATOR_GRAPHITE_MIST"),
+        "GALAXY_SOUNDS_SOLAR_FLAMES":   _v8_mm_conservative("GALAXY_SOUNDS_SOLAR_FLAMES"),
+        "ROBOT_VACUUMING":              _v8_mm_conservative("ROBOT_VACUUMING"),
+        "UV_VISOR_MAGENTA":             _v8_mm_conservative("UV_VISOR_MAGENTA"),
+        "PEBBLES_L":                    _v8_mm_conservative("PEBBLES_L"),
+        # TRANSLATOR_SPACE_GRAY and PEBBLES_M stay None (lost in live too)
+    },
+}
+
+MEMBER_OVERRIDES["best_v7_live_mmfix4"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v7"][5],
+        # Narrower live fix than mmfix3:
+        # - keep the close-only flatten mechanic
+        # - drop GALAXY_SOUNDS_PLANETARY_RINGS because it worsened day-4 backtest
+        # - keep only symbols that were live-negative, weak on day-4 backtest,
+        #   and improved under the close-only intervention
+        "TRANSLATOR_SPACE_GRAY": ProductConfig(
+            symbol="TRANSLATOR_SPACE_GRAY",
+            strategy="late_flatten_tight_mm_v1",
+            position_limit=10,
+            params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                        late_passive_unwind_start_ts=99700, late_taker_unwind_start_ts=99900,
+                        late_unwind_qty=2, late_unwind_pos_gate=5),
+        ),
+        "PANEL_2X2": ProductConfig(
+            symbol="PANEL_2X2",
+            strategy="late_flatten_tight_mm_v1",
+            position_limit=10,
+            params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                        late_passive_unwind_start_ts=99700, late_taker_unwind_start_ts=99900,
+                        late_unwind_qty=2, late_unwind_pos_gate=5),
+        ),
+        "UV_VISOR_YELLOW": ProductConfig(
+            symbol="UV_VISOR_YELLOW",
+            strategy="late_flatten_tight_mm_v1",
+            position_limit=10,
+            params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                        late_passive_unwind_start_ts=99700, late_taker_unwind_start_ts=99900,
+                        late_unwind_qty=2, late_unwind_pos_gate=5),
+        ),
+    }
+}
+# Goal: tiny close-only intervention on the clearest live MM leaks.
+
+
 # ── Round 5 baselines ──────────────────────────────────────────────
 MEMBER_OVERRIDES["r5_baseline_mm"] = {5: {sym: ROUND_5[sym] for sym in _R5_PRODUCTS}}
 
@@ -19090,3 +19441,128 @@ def get_round_config(round_num: int, member: str = "champion") -> Dict[str, Prod
             base[symbol] = cfg
     return base
 
+def _v8_coint_mm(sym: str, partner: str, z_win: int, entry_z: float,
+                 passive_size: int = 3) -> ProductConfig:
+    """CointMMV1 helper for best_v8 config."""
+    return ProductConfig(
+        symbol=sym, strategy="coint_mm_v1", position_limit=10,
+        params=dict(partner_product=partner, mean_half_life=5000,
+                    z_window=z_win, entry_z=entry_z, exit_z=0.0,
+                    taker_size=10, passive_size=passive_size, tighten_ticks=1,
+                    position_limit=10, last_ts_value=999900))
+
+
+MEMBER_OVERRIDES["best_v8"] = {
+    5: {
+        # ── PEBBLES: conservation arb on XL; trend_v2 on XS; naive MM on L/M/S ─
+        "PEBBLES_XL": _v7_pebbles_arb("PEBBLES_XL"),
+        "PEBBLES_XS": _v7_trend("PEBBLES_XS", ema_hl=150, threshold=250, exit_thr=80),
+        "PEBBLES_L":  _v7_mm("PEBBLES_L"),
+        "PEBBLES_M":  _v7_mm("PEBBLES_M"),
+        "PEBBLES_S":  _v7_mm("PEBBLES_S"),
+        # ── ROBOT_DISHES: AR1 mean-reversion (+140k) ─────────────────────────
+        "ROBOT_DISHES": ProductConfig(
+            symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10,
+            params=dict(entry_threshold=20.0, taker_size=10, passive_size=0,
+                        exit_ticks=0, position_limit=10, last_ts_value=999900),
+        ),
+        # ── MICROCHIP: passive MM for OVAL/TRIANGLE (coint unstable in live)
+        # RECT still reads SQUARE as partner (≈0 delta, low risk)
+        "MICROCHIP_OVAL":     _v7_mm("MICROCHIP_OVAL",     size=5),
+        "MICROCHIP_TRIANGLE": _v7_mm("MICROCHIP_TRIANGLE", size=3),
+        "MICROCHIP_RECTANGLE":_v8_coint_mm("MICROCHIP_RECTANGLE","MICROCHIP_SQUARE", z_win=1000, entry_z=1.2, passive_size=3),
+        "MICROCHIP_SQUARE":   _v7_trend("MICROCHIP_SQUARE", ema_hl=100, threshold=250, exit_thr=80),
+        # ── ROBOT: LAUNDRY↔VACUUMING cointegration pair (held in live) ───────
+        "ROBOT_LAUNDRY":   _v8_coint_mm("ROBOT_LAUNDRY",   "ROBOT_VACUUMING", z_win=2000, entry_z=1.5, passive_size=3),
+        "ROBOT_VACUUMING": _v8_coint_mm("ROBOT_VACUUMING", "ROBOT_LAUNDRY",   z_win=2000, entry_z=1.5, passive_size=3),
+        # ── SNACKPACK: naive MM size=5 (all-positive days) ────────────────────
+        "SNACKPACK_CHOCOLATE":  _v7_mm("SNACKPACK_CHOCOLATE",  size=5),
+        "SNACKPACK_VANILLA":    _v7_mm("SNACKPACK_VANILLA",    size=5),
+        "SNACKPACK_PISTACHIO":  _v7_mm("SNACKPACK_PISTACHIO",  size=5),
+        "SNACKPACK_STRAWBERRY": _v7_mm("SNACKPACK_STRAWBERRY", size=5),
+        "SNACKPACK_RASPBERRY":  _v7_mm("SNACKPACK_RASPBERRY",  size=5),
+        # ── Skip SLEEP_POD_LAMB_WOOL (intraday spike trap) ───────────────────
+        "SLEEP_POD_LAMB_WOOL": None,
+        # ── Trend followers ────────────────────────────────────────────────────
+        "UV_VISOR_AMBER":       _v7_trend("UV_VISOR_AMBER",      ema_hl=100, threshold=80,  exit_thr=30),
+        "ROBOT_MOPPING":        _v7_trend("ROBOT_MOPPING",       ema_hl=150, threshold=100, exit_thr=40),
+        "SLEEP_POD_COTTON":     _v7_trend("SLEEP_POD_COTTON",    ema_hl=100, threshold=80,  exit_thr=30),
+        "SLEEP_POD_NYLON":      _v7_trend("SLEEP_POD_NYLON",     ema_hl=100, threshold=80,  exit_thr=30),
+        "SLEEP_POD_POLYESTER":  _v7_trend("SLEEP_POD_POLYESTER", ema_hl=150, threshold=600, exit_thr=150),
+        "PANEL_1X2":            _v7_trend("PANEL_1X2",           ema_hl=100, threshold=80,  exit_thr=30),
+        "ROBOT_IRONING":        _v7_trend("ROBOT_IRONING",       ema_hl=150, threshold=100, exit_thr=40),
+        "OXYGEN_SHAKE_GARLIC":  _v7_trend("OXYGEN_SHAKE_GARLIC", ema_hl=150, threshold=700, exit_thr=150),
+        # ── All-positive naive MM products: size=5 ────────────────────────────
+        "PANEL_1X4":                   _v7_mm("PANEL_1X4",                   size=5),
+        "OXYGEN_SHAKE_CHOCOLATE":      _v7_mm("OXYGEN_SHAKE_CHOCOLATE",      size=5),
+        "OXYGEN_SHAKE_EVENING_BREATH": _v7_mm("OXYGEN_SHAKE_EVENING_BREATH", size=5),
+        "TRANSLATOR_VOID_BLUE":        _v7_mm("TRANSLATOR_VOID_BLUE",        size=5),
+        "PANEL_2X4":                   _v7_mm("PANEL_2X4",                   size=5),
+        "UV_VISOR_ORANGE":             _v7_mm("UV_VISOR_ORANGE",             size=5),
+        "OXYGEN_SHAKE_MORNING_BREATH": _v7_mm("OXYGEN_SHAKE_MORNING_BREATH", size=5),
+        "UV_VISOR_RED":                _v7_mm("UV_VISOR_RED",                size=5),
+        "GALAXY_SOUNDS_DARK_MATTER":   _v7_mm("GALAXY_SOUNDS_DARK_MATTER",   size=5),
+        "PANEL_2X2":                   _v7_mm("PANEL_2X2",                   size=5),
+    }
+}
+# All other 24 products fall through to base ROUND_5 config (naive_tight_mm size=3)
+
+
+def _late_flatten_mm(sym: str, maker_size: int = 3) -> ProductConfig:
+    """naive_tight_mm with end-of-session inventory flatten (from best_v7_live_mmfix4)."""
+    return ProductConfig(
+        symbol=sym, strategy="late_flatten_tight_mm_v1", position_limit=10,
+        params=dict(maker_size=maker_size, tighten_ticks=1,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                    late_passive_unwind_start_ts=99700,
+                    late_taker_unwind_start_ts=99900,
+                    late_unwind_qty=2, late_unwind_pos_gate=5))
+
+
+# ── best_v9: best_v8 + live MM fix (from best_v7_live_mmfix4) ────────────────
+# Merges two lines of work:
+#   - best_v8: coint_mm on ROBOT_LAUNDRY/VACUUMING + RECT, revised MICROCHIP to naive_mm
+#   - best_v7_live_mmfix4: close-only inventory flatten on 3 products that had
+#     carry losses in live (TRANSLATOR_SPACE_GRAY, PANEL_2X2, UV_VISOR_YELLOW)
+# The flatten logic doesn't fire in normal backtest ticks but removes the
+# end-of-session MTM drag that appeared in the live logs.
+MEMBER_OVERRIDES["best_v9"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v8"][5],
+        # Live MM fix: replace naive_tight_mm with late_flatten_tight_mm_v1
+        # for 3 products that repeatedly carried inventory into a falling close
+        "TRANSLATOR_SPACE_GRAY": _late_flatten_mm("TRANSLATOR_SPACE_GRAY", maker_size=3),
+        "PANEL_2X2":             _late_flatten_mm("PANEL_2X2",             maker_size=5),
+        "UV_VISOR_YELLOW":       _late_flatten_mm("UV_VISOR_YELLOW",       maker_size=3),
+    }
+}
+
+
+# ── best_v10: merge of best_v9 (1st/3rd analyst) + tibo_r5_v8_a (2nd analyst) ──
+#
+# Conflict resolutions (user decision 2026-04-29):
+#   TRANSLATOR_SPACE_GRAY → None (v8_a wins: consistently bad in both backtest −11k AND live −6,777)
+#   UV_VISOR_YELLOW       → trend_v2 th=700 (v8_a wins: +19,285 vs naive_mm +4,592 in backtest)
+#   ROBOT_VACUUMING       → coint_mm_v1 (v9 wins: cointegration held in live, 0 delta)
+#   PEBBLES_M             → None (v8_a wins: −14,756 backtest AND −357 live)
+#   PANEL_2X2             → naive_mm size=5 (v8_a wins: no late_flatten needed)
+#
+# Non-conflicting additions from v8_a (halved position limit for live-volatile products):
+#   PANEL_4X4, TRANSLATOR_GRAPHITE_MIST, GALAXY_SOUNDS_SOLAR_FLAMES,
+#   UV_VISOR_MAGENTA, PEBBLES_L → naive_mm limit=5
+MEMBER_OVERRIDES["best_v10"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v9"][5],
+        # ── Conflict resolutions (v8_a wins) ─────────────────────────────────
+        "TRANSLATOR_SPACE_GRAY": None,                                            # v9 had late_flatten → None
+        "UV_VISOR_YELLOW":       _v7_trend("UV_VISOR_YELLOW", ema_hl=100, threshold=700, exit_thr=150),  # v9 had late_flatten → trend_v2
+        "PEBBLES_M":             None,                                            # v9 had naive_mm → None
+        "PANEL_2X2":             _v7_mm("PANEL_2X2", size=5),                    # v9 had late_flatten → naive_mm
+        # ── Non-conflicting v8_a additions (halved limit for volatile products) ─
+        "PANEL_4X4":                  _v8_mm_conservative("PANEL_4X4"),
+        "TRANSLATOR_GRAPHITE_MIST":   _v8_mm_conservative("TRANSLATOR_GRAPHITE_MIST"),
+        "GALAXY_SOUNDS_SOLAR_FLAMES": _v8_mm_conservative("GALAXY_SOUNDS_SOLAR_FLAMES"),
+        "UV_VISOR_MAGENTA":           _v8_mm_conservative("UV_VISOR_MAGENTA"),
+        "PEBBLES_L":                  _v8_mm_conservative("PEBBLES_L"),
+    }
+}

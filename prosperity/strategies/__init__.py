@@ -318,6 +318,16 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "hydro_mm_v201_cancel_against":("prosperity.strategies.round_4.tibo.hydro_strat_v201", "HydroMMV201CancelAgainst"),
     "r4_gamma_scalp_zgated_slim": ("prosperity.strategies.round_4.gamma_scalp_zgated_slim", "R4GammaScalpZGatedSlimStrategy"),
     "r4_hydro_reversion_mm_slim": ("prosperity.strategies.round_4.hydro_reversion_mm_slim", "R4HydroReversionMMSlimStrategy"),
+
+    # ── Round 5 — Tibo ────────────────────────────────────────────────────────
+    "snackpack_pairs_v1":          ("prosperity.strategies.round_5.tibo.snackpack_pairs_v1", "SnackpackPairsV1"),
+    "pebbles_arb_v1":              ("prosperity.strategies.round_5.tibo.pebbles_arb_v1", "PebblesArbV1"),
+    "ar1_mean_rev_v1":             ("prosperity.strategies.round_5.tibo.ar1_mean_rev_v1", "AR1MeanRevV1"),
+    "trend_follow_v1": ("prosperity.strategies.round_5.tibo.trend_follow_v1", "TrendFollowV1"),
+    "trend_follow_v2": ("prosperity.strategies.round_5.tibo.trend_follow_v2", "TrendFollowV2"),
+    "coint_pairs_v1":  ("prosperity.strategies.round_5.tibo.coint_pairs_v1", "CointPairsV1"),
+    "coint_mm_v1":     ("prosperity.strategies.round_5.tibo.coint_mm_v1", "CointMMV1"),
+    "late_flatten_tight_mm_v1": ("prosperity.strategies.round_5.tibo.late_flatten_tight_mm_v1", "LateFlattenTightMMV1"),
 }
 
 
