@@ -17606,6 +17606,32 @@ MEMBER_OVERRIDES["tibo_r5_v7_2_best"] = {
 }
 
 
+# ── Round 5 — v8_a: restore 6 live-profitable products at halved position limit ──
+# Mitigation A: keep TRANSLATOR_SPACE_GRAY + PEBBLES_M at None (consistently bad),
+# restore the 6 wrongly-removed products with limit=5 to cap max inventory loss.
+# Tradeoff: backtest ~-20k vs v7_2_best, but ~+7k on live day compared to v7_2_best.
+def _v8_mm_conservative(sym: str) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=5,
+                         params=dict(maker_size=3, tighten_ticks=1,
+                                     log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+MEMBER_OVERRIDES["tibo_r5_v8_a"] = {
+    5: {
+        **MEMBER_OVERRIDES["tibo_r5_v7_2_best"][5],
+        # Restore 6 wrongly-removed products with position_limit=5 (half of standard 10)
+        # They were profitable in live day: PANEL_4X4 +5567, GRAPHITE_MIST +4191,
+        # SOLAR_FLAMES +2306, ROBOT_VACUUMING +979, UV_VISOR_MAGENTA +598, PEBBLES_L +337
+        "PANEL_4X4":                    _v8_mm_conservative("PANEL_4X4"),
+        "TRANSLATOR_GRAPHITE_MIST":     _v8_mm_conservative("TRANSLATOR_GRAPHITE_MIST"),
+        "GALAXY_SOUNDS_SOLAR_FLAMES":   _v8_mm_conservative("GALAXY_SOUNDS_SOLAR_FLAMES"),
+        "ROBOT_VACUUMING":              _v8_mm_conservative("ROBOT_VACUUMING"),
+        "UV_VISOR_MAGENTA":             _v8_mm_conservative("UV_VISOR_MAGENTA"),
+        "PEBBLES_L":                    _v8_mm_conservative("PEBBLES_L"),
+        # TRANSLATOR_SPACE_GRAY and PEBBLES_M stay None (lost in live too)
+    },
+}
+
+
 def get_round_config(round_num: int, member: str = "champion") -> Dict[str, ProductConfig]:
     """Build the product config for a given round + member."""
     base = dict(ROUNDS.get(round_num, {}))
