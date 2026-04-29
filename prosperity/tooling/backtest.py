@@ -194,7 +194,20 @@ class DaySummary:
 
 
 class BacktestEngine:
-    def __init__(self, data_dir: str | Path, strategy_module: str, round_num: int = 0):
+    def __init__(self, data_dir: str | Path, strategy_module: str, round_num: int = 0,
+                 products_filter: List[str] | None = None):
+        """
+        Args:
+            data_dir: Path to data root.
+            strategy_module: Strategy module/alias (champion, leo, theo, ...).
+            round_num: Round number.
+            products_filter: Optional list of product symbols. When provided, only these
+                products are simulated — `state.order_depths` is filtered before being
+                passed to `trader.run(state)`, so the strategy only "sees" those products.
+                Other products are excluded from PnL/fill computation entirely.
+                Useful for: per-product diagnostics, A/B testing single overlays,
+                isolating the contribution of one product to the strategy.
+        """
         self.loader = MarketDataLoader(data_dir)
         self.strategy_name = strategy_module
         resolved = STRATEGY_ALIASES.get(strategy_module)
@@ -202,6 +215,9 @@ class BacktestEngine:
             resolved = _resolve_strategy_alias(strategy_module)
         self.strategy_module = resolved
         self.round_num = round_num
+        self.products_filter: set[str] | None = (
+            set(products_filter) if products_filter else None
+        )
 
     def _load_trader(self):
         module = importlib.import_module(self.strategy_module)
@@ -1051,6 +1067,16 @@ class BacktestEngine:
         }
 
         products = sorted(prices_df["product"].unique())
+        if self.products_filter is not None:
+            unknown = self.products_filter - set(products)
+            if unknown:
+                print(f"[BacktestEngine] WARNING: --products contains unknown symbols: {sorted(unknown)}")
+            products = [p for p in products if p in self.products_filter]
+            if not products:
+                raise ValueError(
+                    f"--products filter {sorted(self.products_filter)} matched no symbols in day {day}"
+                )
+            print(f"[BacktestEngine] Filtered to {len(products)} product(s): {products}")
         listings = self.loader.build_listings(products)
         trader = self._load_trader()
 
@@ -1090,6 +1116,10 @@ class BacktestEngine:
         try:
             for timestamp in timestamps:
                 order_depths = order_history[timestamp]
+                if self.products_filter is not None:
+                    # Strategy only sees the filtered products — pretend others don't exist
+                    order_depths = {p: od for p, od in order_depths.items()
+                                    if p in self.products_filter}
                 current_market_trades_by_product = market_by_timestamp.get(timestamp, {})
                 observations = observation_history.get(timestamp, self.loader.empty_observation())
 
@@ -1607,6 +1637,19 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--display-product", default=None,
                         help="Only show this product's rows in the results table (e.g. ASH_COATED_OSMIUM)")
     parser.add_argument(
+        "--products",
+        nargs="*",
+        default=None,
+        help=(
+            "Filter products to simulate. Can be: "
+            "(1) one or more space-separated symbols (e.g. --products PEBBLES_S MICROCHIP_RECTANGLE), "
+            "(2) a single comma-separated string (--products PEBBLES_S,MICROCHIP_RECTANGLE), "
+            "(3) a single product (--products PEBBLES_S). "
+            "Other products are excluded from the trader's view AND from PnL — "
+            "useful for per-product diagnostics or isolating one overlay's contribution."
+        ),
+    )
+    parser.add_argument(
         "--execution-rule",
         "--match-trades",
         dest="execution_rule",
@@ -1623,8 +1666,22 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
+    # Normalize --products: accept "A,B,C" OR "A B C" OR ["A,B", "C"] etc.
+    products_filter: List[str] | None = None
+    if args.products:
+        products_filter = []
+        for chunk in args.products:
+            for sym in chunk.split(","):
+                s = sym.strip()
+                if s:
+                    products_filter.append(s)
+        # Dedupe while preserving order
+        seen = set()
+        products_filter = [p for p in products_filter if not (p in seen or seen.add(p))]
+
     mode = TradeMatchingMode(args.execution_rule)
-    engine = BacktestEngine(args.data_dir, args.strategy, round_num=args.round)
+    engine = BacktestEngine(args.data_dir, args.strategy, round_num=args.round,
+                            products_filter=products_filter)
     days = args.days or engine.loader.available_days(args.round)
     if not days:
         raise RuntimeError("No price files found in the selected data directory.")

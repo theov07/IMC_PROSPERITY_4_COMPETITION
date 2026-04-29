@@ -100,6 +100,7 @@ def run_grid_search(
     param_specs: List[str],
     member: str = "champion",
     mode: TradeMatchingMode = TradeMatchingMode.queue,
+    products_filter: List[str] | None = None,
 ) -> List[SweepResult]:
     """Run all parameter combinations and return ranked results."""
     parsed = [_parse_param_spec(spec) for spec in param_specs]
@@ -123,7 +124,8 @@ def run_grid_search(
         member_rounds[round_num] = patched
 
         try:
-            engine = BacktestEngine(data_dir, strategy, round_num=round_num)
+            engine = BacktestEngine(data_dir, strategy, round_num=round_num,
+                                    products_filter=products_filter)
             summaries = []
             day_pnls = []
             for day in days:
@@ -177,7 +179,25 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         help="Ranking metric for the sweep results.",
     )
     parser.add_argument("--json-out", help="Save full results to JSON")
+    parser.add_argument(
+        "--products",
+        nargs="*",
+        default=None,
+        help="Filter products to simulate (same semantics as backtest.py --products).",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    # Normalize --products
+    products_filter: List[str] | None = None
+    if args.products:
+        products_filter = []
+        for chunk in args.products:
+            for sym in chunk.split(","):
+                s = sym.strip()
+                if s:
+                    products_filter.append(s)
+        seen: set = set()
+        products_filter = [p for p in products_filter if not (p in seen or seen.add(p))]
 
     from prosperity.tooling.data import MarketDataLoader
 
@@ -193,6 +213,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         args.param,
         member=args.strategy,
         mode=TradeMatchingMode(args.execution_rule),
+        products_filter=products_filter,
     )
     results.sort(key=lambda result: _result_sort_key(result, args.rank_by))
     elapsed = time.time() - t0
