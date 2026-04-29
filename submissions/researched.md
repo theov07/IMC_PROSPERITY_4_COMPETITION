@@ -1350,6 +1350,18 @@ Expected backtest: ~913k (lower than v17's 933k due to MICROCHIP reverting, but 
 
 final integrated version: best_v18_A2, it works well in live and still enhanced the backtest pnl
 
+# ITERATION 8: A1 + A2 merge → best_v19 = 929,866 PnL
 
+No conflicts: A1 touches SNACKPACK_VANILLA only, A2 touches GALAXY_SOUNDS/MICROCHIP/PEBBLES_XS/OXYGEN_SHAKE_GARLIC/ROBOT_IRONING. Improvements are fully additive.
+
+| Config | PnL | Delta |
+|--------|-----|-------|
+| best_v12_A1_A3 (baseline) | 851,678 | — |
+| best_v18_A2 (A2 alone) | ~913,000 | +61,322 |
+| best_v12_snackpack_A1 (A1 alone) | 868,420 | +16,742 |
+| **best_v19 (merged)** | **929,866** | **+78,188** |
+
+Config: `MEMBER_OVERRIDES["best_v19"]` — self-contained, no inheritance.
+Wrapper: `submissions/best_v19.py`
 
 
