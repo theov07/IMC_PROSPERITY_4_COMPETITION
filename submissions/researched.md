@@ -1,4 +1,4 @@
-ITERATION 1:
+# ITERATION 1:
 
 Research from first analyst:
 
@@ -250,7 +250,7 @@ The ~25 remaining products (other Galaxy Sounds, other Oxygen Shakes, other Snac
 
 Research from 2nd analyst (continued from iteration 1):
 
-## Iteration 2 — v6: TrendFollowV2 where it beats v5 naive_mm
+# Iteration 2 — v6: TrendFollowV2 where it beats v5 naive_mm
 
 ### Context
 v5 (1st analyst) = **591,214 PnL** using naive_tight_mm for ~42 products, pebbles_arb_v1 for PEBBLES_XL/XS, ar1_mean_rev_v1 for ROBOT_DISHES, and None for SLEEP_POD_LAMB_WOOL.
@@ -347,3 +347,460 @@ Drawdown: 40,920 / 14.5% (significantly better than v5's 44,884 / 26.7%)
 - Backtest wrapper: `submissions/tibo_r5_v6.py`
 - IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v6_round5_submission.py`
 
+
+# Iteration 3 (v7):
+
+## Research from 1st analyst
+
+## Context
+Starting from tibo_r5_v6 (733,918 PnL). Three tasks: (A) tune naive_tight_mm maker_size per group, (B) test PEBBLES_L/M conservation taker-only, (C) cointegration analysis within groups.
+
+---
+
+## Task A — maker_size tuning
+
+**Method**: classified all naive_tight_mm products in v6 by 3-day PnL sign consistency.
+
+**All 3 days positive** (safe to increase — won't amplify losses):  
+PANEL_1X4, OXYGEN_SHAKE_CHOCOLATE, OXYGEN_SHAKE_EVENING_BREATH, TRANSLATOR_VOID_BLUE, PANEL_2X4, UV_VISOR_ORANGE, OXYGEN_SHAKE_MORNING_BREATH, MICROCHIP_OVAL, UV_VISOR_RED, GALAXY_SOUNDS_DARK_MATTER, PANEL_2X2  
+Plus SNACKPACK × 5 (all explicitly positive).
+
+**Key finding — saturation at maker_size=5**: the realistic backtest fill model limits fills to market trade sizes. Testing maker_size=3,5,7 showed that 5 and 7 give IDENTICAL results (market provides ≤5 units/tick at our price). Going from 3→5 captures more fills; going from 5→7 adds nothing.
+
+| Config | Total PnL | Delta vs v6 |
+|--------|-----------|-------------|
+| v6 baseline (size=3 all) | 733,918 | — |
+| SNACKPACK only → size=5 | 738,904 | +4,986 |
+| All 16 all-positive → size=5 | 741,720 | +7,802 |
+| size=7 (same 16 products) | 741,720 | identical to size=5 |
+
+**Verdict**: set maker_size=5 for all 16 consistently-positive products. Applied in best_v7.
+
+---
+
+## Task B — PEBBLES_L/M conservation taker-only
+
+**Hypothesis**: the pebbles_arb_v1 strategy fires 447 buy + 406 sell conservation takers per product. For downtrending L/M, removing the passive MM (passive_size=0) might isolate the genuine conservation edge without accumulating losing long positions.
+
+**Result** (pebbles_lm_taker_test config):
+- PEBBLES_L taker-only: **-23,862** vs naive_tight_mm **-11,500** → **WORSE by 12k**
+- PEBBLES_M taker-only: similar degradation
+- Total portfolio: 712,009 vs 733,918 → **-21,909 worse**
+
+**Why it failed**: the conservation taker fires BUY orders when a product temporarily underperforms others. For downtrending L/M, those "underperformance dips" are genuine trend accelerations — buying into them loses money because L/M continue falling. Without any passive component to offset, the taker-only strategy generates pure directional losses.
+
+**Verdict**: keep naive_tight_mm for PEBBLES_L/M. No improvement possible via conservation arb on the downtrending pebbles without a directional filter.
+
+---
+
+## Task C — Within-group cointegration analysis (report only, not implemented)
+
+Method: Engle-Granger cointegration test on all pairs within each group + each product vs group average, 3-day data.
+
+**SNACKPACK** — most cointegrated group, multiple significant pairs:
+- SNACKPACK_RASPBERRY ↔ SNACKPACK_VANILLA: **p=0.0068** (very strong)
+- SNACKPACK_RASPBERRY ↔ SNACKPACK_STRAWBERRY: p=0.0242
+- SNACKPACK_PISTACHIO ↔ SNACKPACK_STRAWBERRY: p=0.0313
+- SNACKPACK_CHOCOLATE ↔ SNACKPACK_STRAWBERRY: p=0.0356
+- SNACKPACK_CHOCOLATE ↔ SNACKPACK_PISTACHIO: p=0.0453
+- SNACKPACK_RASPBERRY vs GROUP_AVG: p=0.0251
+
+**MICROCHIP**: RECTANGLE ↔ SQUARE: p=0.0196 (significant pair)
+
+**Moderate (p<0.10)**: GALAXY_SOUNDS_SOLAR_FLAMES ↔ SOLAR_WINDS, MICROCHIP_OVAL ↔ TRIANGLE, UV_VISOR_AMBER ↔ MAGENTA, ROBOT_LAUNDRY ↔ VACUUMING, SLEEP_POD_LAMB_WOOL ↔ NYLON, OXYGEN_SHAKE_CHOCOLATE ↔ GARLIC
+
+**No cointegration**: PEBBLES, PANEL, TRANSLATOR groups.
+
+**Key caveat**: we already tested SNACKPACK spread trading (snackpack_pairs_v1 using CHOC+VANI sum conservation) and it underperformed naive_tight_mm by 44×. The Engle-Granger test confirms cointegration exists but cointegration alone doesn't guarantee profitability. The spread half-lives are 800–3000 ticks (8–30 minutes), which combined with the 16-tick bid-ask spread makes profitable round trips marginal. Would require very tight spread management, monitoring spread z-score and entering only at 1.5σ+ deviations.
+
+**Most promising for future exploration**: SNACKPACK_RASPBERRY ↔ SNACKPACK_VANILLA (p=0.0068) — the tightest cointegration. RASPBERRY has return corr=-0.924 with STRAWBERRY (same-tick) which might compound the cointegration signal.
+
+---
+
+## Final config: best_v7 = 741,720 PnL, 14.5% drawdown
+
+Changes from v6:
+- SNACKPACK × 5: maker_size 3 → **5** (+4,986)
+- PANEL_1X4, OXYGEN_SHAKE_CHOCOLATE/EVENING_BREATH/MORNING_BREATH, TRANSLATOR_VOID_BLUE, PANEL_2X4, UV_VISOR_ORANGE/RED, MICROCHIP_OVAL, GALAXY_SOUNDS_DARK_MATTER, PANEL_2X2: maker_size 3 → **5** (+2,816)
+- All other strategies unchanged from v6
+
+Config: `MEMBER_OVERRIDES["best_v7"]` in `prosperity/config.py`  
+Wrapper: `submissions/best_v7.py`
+
+
+
+# Iteration 4 (v8) — Cointegration Pairs Trading
+Reference: 1st analyst
+
+## Context
+Starting from best_v7 (741,720 PnL). Goal: exploit the cointegration relationships found in iteration 3 to build trading strategies.
+
+---
+
+## Key findings before building strategies
+
+**SNACKPACK cointegration is spurious**: ADF tests show RASPBERRY (p=0.0014) and VANILLA (p=0.0376) are individually near-stationary. Their "cointegration" is really just that each product mean-reverts on its own, not a genuine pair relationship. The naive_tight_mm already captures this. Not exploited.
+
+**Non-SNACKPACK pairs simulation** (normalized spread: A/mean_A - B/mean_B, 10 units, taker at bid/ask):
+
+| Pair | HL (ticks) | Best simulated PnL | Current v7 combined | Delta |
+|------|-----------|-------------------|--------------------|----|
+| MICROCHIP_OVAL ↔ TRIANGLE | 1059 | +75,210 | +22,889 | +52k |
+| ROBOT_LAUNDRY ↔ VACUUMING | 1015 | +45,935 | +6,371 | +40k |
+| SLEEP_POD_LAMB_WOOL ↔ NYLON | 1197 | +29,340 | +19,734 | +10k |
+| GALAXY_SOUNDS_FLAMES ↔ WINDS | 3762 | +3,645 | +1,090 | +3k |
+| MICROCHIP_RECTANGLE ↔ SQUARE | 6285 | -31,880 | +59,446 | ← don't touch |
+| UV_VISOR_AMBER ↔ MAGENTA | 7378 | -3,165 | +14,640 | ← skip |
+
+---
+
+## Two strategies built
+
+**`coint_pairs_v1`** (pure pairs, taker only):  
+- Normalized z-score of A/mA - B/mB  
+- Entry at ±entry_z, exit at 0
+
+**`coint_mm_v1`** (hybrid: coint z-score taker + passive naive_mm):  
+- Same z-score signal for taker orders  
+- ALSO posts passive bid/ask at best_bid+1 / best_ask-1 (passive_size units)  
+- Captures both spread and cointegration reversion
+
+---
+
+## Backtest progression (vs best_v7 = 741,720)
+
+| Config | Strategy | Delta vs v7 |
+|--------|----------|-------------|
+| v8a: OVAL+TRI (coint_pairs_v1) | pure pairs | +12,767 |
+| v8b: LAUNDRY+VACUUMING (coint_pairs_v1) | pure pairs | +13,038 |
+| v8c: LAMB_WOOL+NYLON (coint_pairs_v1) | pure pairs | -12,078 ← HURTS (NYLON trend_v2 disrupted) |
+| v8d: GALAXY pair | coint_pairs_v1 | +10k over v5, but -10k vs v8e |
+| v8ab combined | coint_pairs_v1 | +25,805 |
+| **v8e: OVAL=naive, TRI+LAUNDRY+VAC on coint_pairs_v1** | mixed | +29,124 |
+| **v8g: TRI+LAUNDRY+VAC on coint_mm_v1 (+ passive MM)** | hybrid | +60,626 |
+| **v8h: ALL 4 MICROCHIP+ROBOT on coint_mm_v1** | hybrid | +66,859 |
+| **v8j: + RECTANGLE reads from SQUARE** | hybrid | +73,184 |
+| **v8m: entry_z=1.2 for MICROCHIP (was 1.5)** | hybrid | +77,488 |
+
+Key insight: `coint_mm_v1` (hybrid) dramatically outperforms `coint_pairs_v1` (pure) because it combines spread capture (passive MM) with the cointegration signal. The MICROCHIP products especially benefit since they have tight spreads.
+
+---
+
+## Parameters for best_v8 cointegration products
+
+| Product | Strategy | Partner | z_win | entry_z | passive_size |
+|---------|----------|---------|-------|---------|--------------|
+| MICROCHIP_OVAL | coint_mm_v1 | TRIANGLE | 1000 | 1.2 | 5 |
+| MICROCHIP_TRIANGLE | coint_mm_v1 | OVAL | 1000 | 1.2 | 3 |
+| MICROCHIP_RECTANGLE | coint_mm_v1 | SQUARE | 1000 | 1.2 | 3 |
+| ROBOT_LAUNDRY | coint_mm_v1 | VACUUMING | 2000 | 1.5 | 3 |
+| ROBOT_VACUUMING | coint_mm_v1 | LAUNDRY | 2000 | 1.5 | 3 |
+
+MICROCHIP_SQUARE stays on trend_v2 (untouched, +54k). RECTANGLE reads SQUARE's price as cointegration signal.
+
+---
+
+## Rejected pairs (tested, worse than v7)
+
+- SLEEP_POD_LAMB_WOOL ↔ NYLON (v8c): -12k vs v7. NYLON trend_v2 is disrupted when both use coint.
+- GALAXY_SOUNDS_SOLAR_FLAMES ↔ WINDS (v8f): -10k vs v8e. Long HL=3762 means slow reversion.
+- OXYGEN_SHAKE_CHOCOLATE ↔ GARLIC (v8k): -4k vs v8h. Current strategies +42k >> pairs +12k.
+- UV_VISOR_AMBER ↔ MAGENTA: simulation -3k. AMBER trend_v2 irreplaceable.
+- MICROCHIP_RECTANGLE ↔ SQUARE pure pairs: simulation -32k. SQUARE uptrend too strong.
+
+---
+
+## First backtest of best_v8: 819,208 PnL, 26% drawdown
+
+Config at that point included MICROCHIP_OVAL/TRIANGLE on `coint_mm_v1`.
+
+---
+
+# ITERATION 5: Live diagnosis and best_v8 revision
+
+## Live test results (v8 vs v7)
+
+| Version | Live PnL | Notes |
+|---------|----------|-------|
+| best_v7 | 20,960 | Baseline |
+| best_v8 (original) | 16,009 | −4,951 vs v7 |
+| best_v8 (EWMA fix) | 16,001 | Memory overflow fixed, same result |
+
+## Root cause: traderData memory overflow (FIXED)
+
+`coint_mm_v1` originally stored a `zbuf` rolling list of 1000–2000 floats per product.  
+5 coint products × ~28,000 chars each ≈ **140,500 chars** total in traderData.  
+This silently overflowed IMC's traderData limit, corrupting the state of `trend_v2` strategies (SLEEP_POD_NYLON, ROBOT_MOPPING, PANEL_1X2 all showed position=0 in v8 vs ±10 in v7).
+
+**Fix**: replaced `zbuf` list with EWMA running mean + variance (Welford O(1) update). Memory reduced from ~140,500 to ~600 chars (234× reduction). Applied to `coint_mm_v1.py`.
+
+However, even after the fix, the live PnL gap remained (16,001 vs 20,960). The memory fix was necessary but not sufficient.
+
+## Root cause 2: MICROCHIP cointegration pair broke down in live
+
+Per-product live PnL comparison (best_v8_new vs best_v7):
+
+| Product | Strategy in v8 | v7 PnL | v8 PnL | Delta |
+|---------|---------------|--------|--------|-------|
+| MICROCHIP_OVAL | coint_mm_v1 | +2,619 | −1,371 | **−3,990** |
+| MICROCHIP_TRIANGLE | coint_mm_v1 | +3,036 | +2,113 | **−923** |
+| ROBOT_LAUNDRY | coint_mm_v1 | −2,368 | −2,368 | 0 |
+| ROBOT_VACUUMING | coint_mm_v1 | +979 | +952 | −27 |
+
+The **−4,913 delta is entirely explained by MICROCHIP_OVAL and TRIANGLE**.
+
+What happened on OVAL: at ts=58,000 and ts=63,200 the z-score fired taker BUY orders (OVAL looked cheap vs TRIANGLE). But OVAL kept falling from 7,401 → 7,239 → 7,128 — the spread widened from −1,900 to −2,237 over 14,000 ticks without reverting. Classic "catching a falling knife."
+
+The cointegration relationship exists in the historical data but the spread's **reversion timescale** is much longer than `z_win=1000` ticks assumes. With alpha=2/1001 and no warmup from the previous day, the EWMA statistics start fresh each live day, making the z-score unreliable in the first few thousand ticks. The ROBOT_LAUNDRY/VACUUMING pair worked because their cointegration relationship held (0 delta).
+
+## Fix applied: best_v8 updated
+
+MICROCHIP_OVAL and MICROCHIP_TRIANGLE reverted to `naive_tight_mm` (same as v7).  
+MICROCHIP_RECTANGLE kept on `coint_mm_v1` reading SQUARE (live delta was only −18).  
+ROBOT_LAUNDRY/VACUUMING kept on `coint_mm_v1` (worked fine in live, 0 delta).
+
+## Final config: best_v8 = 767,422 backtest PnL
+
+Config: `MEMBER_OVERRIDES["best_v8"]` in `prosperity/config.py`  
+Wrapper: `submissions/best_v8.py`  
+Strategy files: `coint_mm_v1.py` (O(1) EWMA memory), `coint_pairs_v1.py`
+
+| Product | Strategy | Change vs original v8 |
+|---------|----------|-----------------------|
+| MICROCHIP_OVAL | naive_tight_mm size=5 | ← reverted (coint broke live) |
+| MICROCHIP_TRIANGLE | naive_tight_mm size=3 | ← reverted |
+| MICROCHIP_RECTANGLE | coint_mm_v1 reads SQUARE | unchanged |
+| ROBOT_LAUNDRY | coint_mm_v1 z_win=2000 | unchanged (worked in live) |
+| ROBOT_VACUUMING | coint_mm_v1 z_win=2000 | unchanged |
+
+Backtest is lower than original v8 (767k vs 819k) because the historical data favors the MICROCHIP coint — but live results showed it doesn't hold. The v7 baseline in live was +20,960; this config should be close to that or better (ROBOT coint adds ~0 delta in live).
+
+# ITERATION 4: Live MM inventory carry fix
+
+Reference: 3rd analyst
+
+## Goal
+
+Analyze the live `best_v7` logs instead of blindly optimizing backtests, focusing first on the products still using `naive_tight_mm`.
+
+## What the live logs showed
+
+The main issue was not toxic fills. On the worst live MM names, short-horizon markouts were still positive, but the strategy repeatedly finished with leftover long inventory into a falling close.
+
+Clearest examples from live:
+
+| Product | Live PnL | Final pos | Mid move | Read |
+|---------|----------|-----------|----------|------|
+| TRANSLATOR_SPACE_GRAY | -6,777 | +7 | -669 | good fills, bad close carry |
+| GALAXY_SOUNDS_PLANETARY_RINGS | -7,335 | +7 | -778 | same pattern |
+| PANEL_2X2 | -2,806 | +7 | -386 | same pattern |
+| UV_VISOR_YELLOW | -422 | +7 | -65.5 | same pattern |
+
+So the live failure mode was: we got paid to accumulate inventory, then donated MTM by carrying it into the end of the session.
+
+## What I tested
+
+I created a sequence of additive-only live-MM variants:
+
+- first variant: broad inventory-aware MM overlay on 9 weak live names
+- second variant: softer version, keeping intraday MM but adding earlier late-session flattening
+- third variant: very narrow final-ticks flattening on 4 names
+- `best_v7_live_mmfix4`: final kept version, same close-only idea but only on 3 names:
+  - `TRANSLATOR_SPACE_GRAY`
+  - `PANEL_2X2`
+  - `UV_VISOR_YELLOW`
+
+Shared strategy kept: `late_flatten_tight_mm_v1`
+
+Rejected:
+
+- the first two broader variants were too intrusive and gave up too much historical PnL
+- the third narrow variant improved day 4 but still hurt the `2/3/4` historical chain too much
+- `GALAXY_SOUNDS_PLANETARY_RINGS` was removed from the final version because the close-only intervention helped the live replay thesis but worsened its day-4 backtest
+
+## Final keep: `best_v7_live_mmfix4`
+
+Files:
+
+- `submissions/best_v7_live_mmfix4.py`
+- `prosperity/config.py`
+- `prosperity/strategies/round_5/tibo/late_flatten_tight_mm_v1.py`
+
+Behaviour:
+
+- keep `naive_tight_mm` intraday
+- only intervene at the very end of the session
+- stop leaning into the same-side inventory late
+- use a tiny passive/taker flatten when position is still large near the close
+
+## Why this works better
+
+This fix matches the actual live failure mode much more closely than the earlier broad overlays. It does not try to redesign MM logic intraday. It only removes the specific end-of-session inventory leak that showed up in the logs.
+
+Results:
+
+| Config | Days | PnL | Max DD |
+|--------|------|-----|--------|
+| `best_v7` | 4 | 314,243 | 19,330 |
+| `best_v7_live_mmfix4` | 4 | 319,917 | 21,182 |
+| `best_v7` | 2/3/4 | 741,720 | 40,294 |
+| `best_v7_live_mmfix4` | 2/3/4 | 747,656 | 38,227 |
+
+Takeaway:
+
+`best_v7_live_mmfix4` is the first live-motivated MM fix from this line of research that improved both the live-replay day and the full historical sanity check. That is why it was kept and the earlier variants were discarded.
+---
+
+## Iteration 3 — v7_2: Fixing losers + UV_VISOR_YELLOW (2nd analyst)
+
+### Context
+v6 baseline = **733,918 PnL**. Goal: fix 4 user-flagged losers + investigate correlations.
+
+### Q1: Cross-asset correlation strategy
+
+The `research/correl.md` table shows 11 product pairs where product_A leads product_B by `|lag|` ticks.
+Key pairs and actionability:
+
+| A (leader) | B (follower) | lag | corr | Current strats | Edge? |
+|---|---|---|---|---|---|
+| UV_VISOR_AMBER | PEBBLES_XS | 692 | 0.9629 | Both trend_v2 | Low — both already capture same trend |
+| SLEEP_POD_NYLON | PANEL_1X2 | 1000 | 0.8412 | Both trend_v2 | Low — same |
+| PANEL_1X4 → ROBOT_IRONING | 1000 | 0.8750 | trend_v2 / trend_v2 | Could enter IRONING earlier |
+| TRANSLATOR_VOID_BLUE | SLEEP_POD_SUEDE | 1000 | 0.8444 | naive_mm / naive_mm | Potential: use VOID_BLUE trend to trade SUEDE |
+| UV_VISOR_MAGENTA | SLEEP_POD_SUEDE | 1000 | 0.8669 | None / naive_mm | — |
+
+**Conclusion**: Where both products already use trend_v2 independently (AMBER→XS, NYLON→1X2), the cross-asset signal adds minimal PnL (both enter on the same underlying move). The more interesting case would be TRANSLATOR_VOID_BLUE → SLEEP_POD_SUEDE: using Void_Blue's EMA momentum to enter Suede early. Implementation would require reading Void_Blue's order depth inside Suede's strategy. Estimated gain: ~3-5k (low priority vs simpler fixes).
+
+**Not implemented in v7_2** — the simpler "set losers to None" approach yielded +83k which dwarfs the ~5k potential from lead-lag signals.
+
+### Q2: Fixing the losers
+
+#### Full per-product PnL audit (v6)
+Running the v6 backtest with `--json-out` revealed the actual losers:
+
+| Product | v6 PnL | Fix |
+|---|---|---|
+| PEBBLES_M | -14,756 | None |
+| PEBBLES_L | -11,500 | None |
+| TRANSLATOR_SPACE_GRAY | -11,188 | None |
+| PANEL_4X4 | -10,672 | None |
+| UV_VISOR_MAGENTA | -7,314 | None |
+| GALAXY_SOUNDS_SOLAR_FLAMES | -6,034 | None |
+| TRANSLATOR_GRAPHITE_MIST | -4,418 | None |
+| ROBOT_VACUUMING | -2,700 | None |
+
+**PEBBLES_L and M** were bigger losers than the user-flagged products. 
+
+#### Investigation: PEBBLES_L/M — why naive_mm fails
+
+The pebbles conservation law (XL+XS+L+M+S=50,000) holds PERFECTLY at mid prices at every tick. This means for PEBBLES_L:
+- `fair_L = 50,000 - XL - XS - M - S ≈ market_mid_L` always
+- XL arb works because XL has the largest moves (+3877/−1167/+3931 per day)
+- L and M have smaller, noisier moves. The MM gets adversely selected on larger intraday swings (PEBBLES_L: day4 -1798; PEBBLES_M: day3 +1883). naive_mm accumulates on the wrong side.
+
+**Attempted fix**: pebbles_arb_v1 on L and M (same conservation arb as XL). Result: WORSE (-30k and -27k vs -11.5k and -14.8k).
+For XS/S, the issue is that XS and S have their own strong independent trends that oppose what the arb wants to do:
+XS arb: −13,701 vs baseline (arb buys XS "cheap" vs conservation while XS is in a −40% 3-day downtrend)
+S arb: −87,684 vs baseline (same problem, worse because S has more ticks where arb is fighting the trend)
+XL arb works because XL is the basket's biggest mover — it creates genuine temporary dislocations vs the other four. XS and S are themselves driven by XL's movement signal via the conservation, so arbing them just bets on XS/S's individual trend reverting, which they don't.
+
+**Why arb fails**: Because `fair_L ≈ market_mid_L` always, there's no price-level dislocation to exploit. The arb fires on bid/ask spread noise (1363 aggressive fills on L/day4 alone), paying spread 4072 times across 3 days. 
+
+**Resolution**: Set PEBBLES_L and PEBBLES_M to None. PEBBLES_S with naive_mm keeps making +38,672 (different market dynamics — consistent small downtrend with active market).
+
+#### UV_VISOR_YELLOW: NEW product discovered
+
+Not in previous analysis. Huge daily moves: day2=+1458, day3=+314, day4=-2005. trend_v2 results:
+
+| threshold | day2 | day3 | day4 | total |
+|---|---|---|---|---|
+| 500 | +8,985 | -7,805 | +12,580 | +13,760 |
+| 600 | +8,485 | -7,895 | +13,080 | +13,670 |
+| **700** | **+8,075** | **0** | **+11,210** | **+19,285** |
+| 800 | +6,875 | 0 | +10,600 | +17,475 |
+
+**Key finding**: Day 3 EMA signal reaches minimum −633. Threshold=500/600 triggers a false short (enters at t5700 price=10850, exits at t6863 price=11640 → −7,895 loss). Threshold=700 skips day3 entirely → 0 PnL day3.
+
+threshold=700 is optimal: **+19,285 vs naive_mm +4,592 = +14,693 gain**.
+
+### Final v7_2 config
+**tibo_r5_v7_2 = 817,194 PnL** (+83,276 over v6)
+
+Changes vs v6:
+- PEBBLES_L → None (+11,500)
+- PEBBLES_M → None (+14,756)
+- UV_VISOR_MAGENTA → None (+7,314)
+- TRANSLATOR_SPACE_GRAY → None (+11,188)
+- PANEL_4X4 → None (+10,672)
+- GALAXY_SOUNDS_SOLAR_FLAMES → None (+6,034)
+- TRANSLATOR_GRAPHITE_MIST → None (+4,418)
+- ROBOT_VACUUMING → None (+2,700)
+- UV_VISOR_YELLOW → trend_v2 th=700 (+14,693)
+
+Only remaining loser: OXYGEN_SHAKE_MINT at -36 (negligible).
+
+Files:
+- Config: `MEMBER_OVERRIDES["tibo_r5_v7_2"]` in `prosperity/config.py`
+- Backtest wrapper: `submissions/tibo_r5_v7_2.py`
+- IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v7_2_round5_submission.py` (54,800 bytes, all checks passed)
+
+The submission: tibo_r5_v7_2_best_round5_submission and config tibo_r5_v7_2_best integrates baseline v7 into v7_2, it is the best v7.
+
+
+---
+
+# Iteration 4 — v8_a: Live-backtest divergence diagnosis and fix (2nd analyst)
+
+## Context
+
+v7_2_best backtest = **824,996 PnL** but live simulation = **14,539 PnL** vs v7_best live = **20,960 PnL** — v7_2_best performed WORSE in live despite being +83k better in backtest. Investigated by comparing per-product final PnL from the official JSON logs.
+
+## Diagnosis: overfitting by removing products on 3-day history
+
+The 8 products set to `None` in v7_2_best were classified as losers based on backtest days 2/3/4. On the live day, **6 of them reversed and were profitable** under v7_best's naive_mm:
+
+| Product | Backtest 3-day (v6) | Live day PnL (v7_best) | v7_2_best action | Live cost |
+|---------|--------------------|-----------------------|------------------|-----------|
+| PANEL_4X4 | −10,672 | **+5,567** | Removed ✗ | −5,567 |
+| TRANSLATOR_GRAPHITE_MIST | −4,418 | **+4,191** | Removed ✗ | −4,191 |
+| GALAXY_SOUNDS_SOLAR_FLAMES | −6,034 | **+2,306** | Removed ✗ | −2,306 |
+| ROBOT_VACUUMING | −2,700 | **+979** | Removed ✗ | −979 |
+| UV_VISOR_MAGENTA | −7,314 | **+598** | Removed ✗ | −598 |
+| PEBBLES_L | −11,500 | **+337** | Removed ✗ | −337 |
+| TRANSLATOR_SPACE_GRAY | −11,188 | −6,777 | Removed ✓ | +6,777 |
+| PEBBLES_M | −14,756 | −357 | Removed ✓ | +357 |
+| UV_VISOR_YELLOW | (not in v7_best) | −422 | Added trend_v2 ✓ | +422 |
+
+**Net impact**: correctly removing TRANSLATOR_SPACE_GRAY + PEBBLES_M saved +7,134. But wrongly removing 6 profitable products cost −13,978. Net: **−6,421** (matches observed live gap exactly).
+
+**Root cause**: naive_mm is profitable when prices are flat or rising (spread capture + long inventory appreciates). It loses when prices trend DOWN and the strategy accumulates long inventory that keeps losing. Days 2/3/4 had specific adverse trends for these 6 products; the live day reversed. Setting them to None is **regime-overfitting** to a 3-day window.
+
+**Structural distinction** (correctly vs wrongly removed):
+- TRANSLATOR_SPACE_GRAY: down on days 2/4 in backtest AND down on live → consistently bad
+- PEBBLES_M: negative on 2/3 in backtest AND losing in live → consistently bad
+- The 6 wrongly-removed products: volatile, reversing direction across days (no consistent regime)
+
+## Fix: tibo_r5_v8_a — restore with halved position limit
+
+**Strategy**: restore the 6 wrongly-removed products using `position_limit=5` (half of standard 10). Same naive_tight_mm strategy, but maximum inventory capped at 5 units instead of 10.
+
+- When prices trend against us: max mark-to-market loss is halved (5 × move vs 10 × move)
+- When prices are favorable: captures half the gain, but still participates
+- TRANSLATOR_SPACE_GRAY and PEBBLES_M: stay at None (both lost in live too)
+
+**Backtest result** (days 2/3/4, realistic mode):
+
+| Config | Backtest 3-day | Live day |
+|--------|---------------|----------|
+| v7_2_best | 824,996 | 14,539 |
+| **v8_a** | **825,200 (+204)** | est. **~21,500** |
+
+Backtest is essentially identical (+204) because halving the limit roughly halves both the losses (when bad) and gains (when good), and the halved losses from the restored products cancel out. The live improvement is structural: instead of 0 PnL on 6 profitable products, we capture ~half of what v7_best would have made.
+
+Also explored v8_b (trend_v2 at limit=5 for volatile products instead of naive_mm): backtest 822,315 (−2,681 vs baseline), discarded.
+
+## Files
+
+- Config: `MEMBER_OVERRIDES["tibo_r5_v8_a"]` in `prosperity/config.py`
+- Backtest wrapper: `submissions/tibo_r5_v8_a.py`
+- IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v8_a_round5_submission.py` (56,687 bytes, all checks passed, 47 products)
