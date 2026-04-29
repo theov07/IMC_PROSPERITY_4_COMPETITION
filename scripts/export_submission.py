@@ -264,6 +264,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "late_flatten_tight_mm_v1": ("prosperity/strategies/round_5/tibo/late_flatten_tight_mm_v1.py", "LateFlattenTightMMV1"),
     # ── Round 5 ──
     "pair_skip_mm":           ("prosperity/strategies/round_5/pair_skip_mm.py", "PairSkipMMStrategy"),
+    "pair_skip_lag_mm":       ("prosperity/strategies/round_5/pair_skip_lag_mm.py", "PairSkipLagMMStrategy"),
     "pair_trader":            ("prosperity/strategies/round_5/pair_trader.py", "PairTraderStrategy"),
     "inventory_aware_mm":     ("prosperity/strategies/round_5/inventory_mm.py", "InventoryAwareMMStrategy"),
     "zscore_mm":              ("prosperity/strategies/round_5/zscore_mm.py", "ZScoreMMStrategy"),
@@ -273,6 +274,13 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "impulse_pause_mm":       ("prosperity/strategies/round_5/impulse_pause_mm.py", "ImpulsePauseMMStrategy"),
     "multi_pair_skip_mm":     ("prosperity/strategies/round_5/multi_pair_skip_mm.py", "MultiPairSkipMMStrategy"),
     "tick_reversal_skip_mm":  ("prosperity/strategies/round_5/tick_reversal_skip_mm.py", "TickReversalSkipMMStrategy"),
+    "adaptive_regime_mm":     ("prosperity/strategies/round_5/adaptive_regime_mm.py", "AdaptiveRegimeMMStrategy"),
+    "inventory_carry_mm":     ("prosperity/strategies/round_5/inventory_carry_mm.py", "InventoryCarryMMStrategy"),
+    "pca_residual_mr":        ("prosperity/strategies/round_5/pca_residual_mr.py", "PCAResidualMRStrategy"),
+    "zscore_mr_adaptive":     ("prosperity/strategies/round_5/zscore_mr_adaptive.py", "ZScoreMRAdaptiveStrategy"),
+    "top_down_filter_mm":     ("prosperity/strategies/round_5/top_down_filter_mm.py", "TopDownFilterMMStrategy"),
+    "real_mm":                ("prosperity/strategies/round_5/real_mm.py", "RealMMStrategy"),
+    "vol_adjusted_mm":        ("prosperity/strategies/round_5/vol_adjusted_mm.py", "VolAdjustedMMStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).

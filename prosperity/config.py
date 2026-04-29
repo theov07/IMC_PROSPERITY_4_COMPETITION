@@ -19566,3 +19566,1756 @@ MEMBER_OVERRIDES["best_v10"] = {
         "PEBBLES_L":                  _v8_mm_conservative("PEBBLES_L"),
     }
 }
+
+
+# ── v1000: SUPER-ALGO = best_v10 + adaptive_regime overlay on volatile products ──
+# Replaces "halved-limit naive_mm" on volatile products with adaptive_regime_mm.
+# Adaptive_regime detects bad regimes via rolling PnL and throttles dynamically.
+# Captures upside in good regime, throttles in bad regime → robust per definition.
+def _adaptive_regime(sym: str, size: int = 5) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym, strategy="adaptive_regime_mm", position_limit=10,
+        params=dict(
+            maker_size=size, tighten_ticks=1, hard_pause_at=9,
+            pnl_window=500, bad_pnl_threshold=-200.0,
+            trend_window=100, trend_carry_thresh=50.0,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+def _inventory_carry(sym: str, size: int = 5, trend_hl: int = 200) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym, strategy="inventory_carry_mm", position_limit=10,
+        params=dict(
+            maker_size=size, tighten_ticks=1, trend_hl=trend_hl,
+            carry_pause_min_pos=3, hard_pause_at=9,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+# v1000: replace v10's halved-limit naive_mm products with adaptive_regime_mm
+MEMBER_OVERRIDES["best_v1000_adaptive"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v10"][5],
+        "PANEL_4X4":                  _adaptive_regime("PANEL_4X4"),
+        "TRANSLATOR_GRAPHITE_MIST":   _adaptive_regime("TRANSLATOR_GRAPHITE_MIST"),
+        "GALAXY_SOUNDS_SOLAR_FLAMES": _adaptive_regime("GALAXY_SOUNDS_SOLAR_FLAMES"),
+        "UV_VISOR_MAGENTA":           _adaptive_regime("UV_VISOR_MAGENTA"),
+        "PEBBLES_L":                  _adaptive_regime("PEBBLES_L"),
+    }
+}
+
+
+# v1010: replace v10's halved-limit naive_mm + add inventory_carry_mm on key carry products
+MEMBER_OVERRIDES["best_v1010_carry"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v10"][5],
+        "PANEL_4X4":                  _inventory_carry("PANEL_4X4"),
+        "TRANSLATOR_GRAPHITE_MIST":   _inventory_carry("TRANSLATOR_GRAPHITE_MIST"),
+        "GALAXY_SOUNDS_SOLAR_FLAMES": _inventory_carry("GALAXY_SOUNDS_SOLAR_FLAMES"),
+        "UV_VISOR_MAGENTA":           _inventory_carry("UV_VISOR_MAGENTA"),
+        "PEBBLES_L":                  _inventory_carry("PEBBLES_L"),
+    }
+}
+
+
+# v1020: HYBRID — apply inventory_carry_mm to ALL naive_mm products in v10
+# Idea: every naive_mm product becomes carry-aware. If trend turns adverse, pause the same side.
+def _r5_v1020_full_carry():
+    """Apply inventory_carry_mm to all naive_mm products in best_v10."""
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    # Find all products using naive_tight_mm or late_flatten and replace with inventory_carry
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy in ("naive_tight_mm", "late_flatten_tight_mm_v1"):
+            out[sym] = _inventory_carry(sym, size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v1020_full_carry"] = _r5_v1020_full_carry()
+
+
+# v2000: best_v10 + carry MM on SNACKPACKs (which have known intraday swings)
+def _r5_v2000_carry_snackpacks():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    SNACKPACKS = ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_PISTACHIO",
+                  "SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY"]
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif sym in SNACKPACKS and pc.strategy == "naive_tight_mm":
+            out[sym] = _inventory_carry(sym, size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v2000_carry_snack"] = _r5_v2000_carry_snackpacks()
+
+
+# v3000: best_v10 + carry MM on the 7 worst-live products (the regime-flipped ones)
+def _r5_v3000_carry_flipped():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    # Products that lost in live with naive_mm (per Tibo's analysis + my live data)
+    # Products v8_a halved with limit=5; we use carry MM at full limit instead
+    FLIP_CARRY = ["PANEL_4X4", "TRANSLATOR_GRAPHITE_MIST", "GALAXY_SOUNDS_SOLAR_FLAMES",
+                  "UV_VISOR_MAGENTA", "PEBBLES_L"]
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif sym in FLIP_CARRY:
+            # Use carry MM with full limit (not halved)
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="inventory_carry_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=1, trend_hl=200,
+                    carry_pause_min_pos=3, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v3000_carry_flipped"] = _r5_v3000_carry_flipped()
+
+
+# v4000: best_v10 + adaptive_regime on the 5 currently-halved products
+def _r5_v4000_adaptive_flipped():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    FLIP_CARRY = ["PANEL_4X4", "TRANSLATOR_GRAPHITE_MIST", "GALAXY_SOUNDS_SOLAR_FLAMES",
+                  "UV_VISOR_MAGENTA", "PEBBLES_L"]
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif sym in FLIP_CARRY:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="adaptive_regime_mm", position_limit=10,
+                params=dict(
+                    maker_size=5, tighten_ticks=1, hard_pause_at=9,
+                    pnl_window=300, bad_pnl_threshold=-100.0,
+                    trend_window=100, trend_carry_thresh=30.0,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v4000_adaptive_flipped"] = _r5_v4000_adaptive_flipped()
+
+
+# v5000: SUPER-COMBO — carry_mm on 32 carry-aware-recommended products from audit
+# Products with max_intraday_swing / mean_day_move > 1.5 (high noise vs signal)
+_CARRY_RECOMMENDED = {
+    # From product_signal_audit.py "carry_aware_mm" recommendation
+    "UV_VISOR_YELLOW", "PEBBLES_L", "PEBBLES_M", "PEBBLES_S",
+    "TRANSLATOR_SPACE_GRAY", "TRANSLATOR_GRAPHITE_MIST", "PANEL_4X4",
+    "TRANSLATOR_ECLIPSE_CHARCOAL", "ROBOT_MOPPING", "TRANSLATOR_ASTRO_BLACK",
+    "SLEEP_POD_COTTON", "SLEEP_POD_LAMB_WOOL", "SLEEP_POD_NYLON",
+    "SNACKPACK_VANILLA", "ROBOT_LAUNDRY", "SNACKPACK_CHOCOLATE",
+    "SNACKPACK_RASPBERRY", "PANEL_1X4", "GALAXY_SOUNDS_DARK_MATTER",
+    "GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_SOLAR_FLAMES",
+    "GALAXY_SOUNDS_SOLAR_WINDS", "MICROCHIP_CIRCLE", "UV_VISOR_ORANGE",
+    "PANEL_2X2", "MICROCHIP_RECTANGLE", "OXYGEN_SHAKE_CHOCOLATE",
+    "OXYGEN_SHAKE_EVENING_BREATH", "OXYGEN_SHAKE_MINT",
+    "OXYGEN_SHAKE_MORNING_BREATH", "PANEL_1X2", "MICROCHIP_SQUARE",
+}
+
+
+def _r5_v5000_audit_carry():
+    """Apply inventory_carry_mm to all 32 audit-recommended products,
+    keep best_v10 strategies (trend_v2, ar1, coint, arb) where they are."""
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy in ("naive_tight_mm", "late_flatten_tight_mm_v1") and sym in _CARRY_RECOMMENDED:
+            out[sym] = _inventory_carry(sym, size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v5000_audit_carry"] = _r5_v5000_audit_carry()
+
+
+# v6000: research-driven SUPERALGO based on signal audit
+# Each product gets its OPTIMAL strategy class:
+#   - AR1 mean-rev: ROBOT_DISHES
+#   - PEBBLES conservation arb: PEBBLES_XL, PEBBLES_XS
+#   - Cointegration MM: ROBOT_LAUNDRY, ROBOT_VACUUMING
+#   - Trend follow v2: products from Tibo's research
+#   - Inventory carry MM: products with high intraday-noise/daily-signal ratio
+#   - Naive MM: stable products
+#   - None: persistent losers (TRANSLATOR_SPACE_GRAY, PEBBLES_M)
+def _r5_v6000_superalgo():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    # Apply inventory_carry to ALL audit-recommended products that are currently naive_mm
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy == "naive_tight_mm" and sym in _CARRY_RECOMMENDED:
+            out[sym] = _inventory_carry(sym, size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc  # keep Tibo's specialized strategies
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v6000_superalgo"] = _r5_v6000_superalgo()
+
+
+# v7000: same as v6000 but with longer trend_hl (300 instead of 200) — slower carry detect
+def _r5_v7000_superalgo_slow():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    def _carry_slow(sym, size):
+        return ProductConfig(
+            symbol=sym, strategy="inventory_carry_mm", position_limit=10,
+            params=dict(
+                maker_size=size, tighten_ticks=1, trend_hl=300,
+                carry_pause_min_pos=3, hard_pause_at=9,
+                log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ),
+        )
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy == "naive_tight_mm" and sym in _CARRY_RECOMMENDED:
+            out[sym] = _carry_slow(sym, size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v7000_superalgo_slow"] = _r5_v7000_superalgo_slow()
+
+
+# v8000: faster trend (hl=100) — more reactive
+def _r5_v8000_superalgo_fast():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    def _carry_fast(sym, size):
+        return ProductConfig(
+            symbol=sym, strategy="inventory_carry_mm", position_limit=10,
+            params=dict(
+                maker_size=size, tighten_ticks=1, trend_hl=100,
+                carry_pause_min_pos=3, hard_pause_at=9,
+                log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+            ),
+        )
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy == "naive_tight_mm" and sym in _CARRY_RECOMMENDED:
+            out[sym] = _carry_fast(sym, size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v8000_superalgo_fast"] = _r5_v8000_superalgo_fast()
+
+
+# v9000: best_v10 + top_down_filter on carry products
+# Uses GROUP-LEVEL PnL aggregate via SharedR5Context to throttle entire groups
+def _r5_v9000_topdown():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy == "naive_tight_mm" and sym in _CARRY_RECOMMENDED:
+            out[sym] = ProductConfig(
+                symbol=sym, strategy="top_down_filter_mm", position_limit=10,
+                params=dict(
+                    maker_size=pc.params.get("maker_size", 5),
+                    tighten_ticks=1,
+                    bad_group_pnl=-300.0,
+                    throttle_size=1,
+                    hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+                ),
+            )
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v9000_topdown"] = _r5_v9000_topdown()
+
+
+# v1100: SURGICAL — only carry on PANEL_4X4 (the one product that gained +3.9k in v1010)
+def _r5_v1100_panel_only():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    out = dict(base)
+    out["PANEL_4X4"] = _inventory_carry("PANEL_4X4", size=5)
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v1100_panel_only"] = _r5_v1100_panel_only()
+
+
+# v1110: carry on PANEL_4X4 + GALAXY_SOUNDS_SOLAR_FLAMES + GRAPHITE_MIST (3 winners from v1010)
+def _r5_v1110_targeted_3():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    out = dict(base)
+    for sym in ["PANEL_4X4", "GALAXY_SOUNDS_SOLAR_FLAMES", "TRANSLATOR_GRAPHITE_MIST"]:
+        out[sym] = _inventory_carry(sym, size=5)
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v1110_targeted_3"] = _r5_v1110_targeted_3()
+
+
+# v1120: carry on PANEL_4X4 + apply carry to OTHER products that lose late in live
+# (PLANETARY_RINGS, DARK_MATTER, MORNING_BREATH, PANEL_2X2, PANEL_1X4)
+# These were big live losers from carry pattern
+def _r5_v1120_live_carry():
+    base = dict(MEMBER_OVERRIDES["best_v10"][5])
+    out = dict(base)
+    # Tibo's halved-limit defaults for v10's flipped (keep them)
+    # Add carry on the 5 known live carry losers (currently naive_mm in v10)
+    LIVE_CARRY = ["GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_DARK_MATTER",
+                  "OXYGEN_SHAKE_MORNING_BREATH", "PANEL_2X2", "PANEL_1X4"]
+    for sym in LIVE_CARRY:
+        if sym in out and out[sym] is not None and out[sym].strategy == "naive_tight_mm":
+            sz = out[sym].params.get("maker_size", 5)
+            out[sym] = _inventory_carry(sym, size=sz)
+    # Plus carry on PANEL_4X4 (proven from v1010)
+    out["PANEL_4X4"] = _inventory_carry("PANEL_4X4", size=5)
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v1120_live_carry"] = _r5_v1120_live_carry()
+
+
+# v1130 = v1010 + carry on OXYGEN_SHAKE_MINT (bt -558)
+MEMBER_OVERRIDES["best_v1130_v1010_plus_mint"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v1010_carry"][5],
+        "OXYGEN_SHAKE_MINT": _inventory_carry("OXYGEN_SHAKE_MINT", size=3),
+    }
+}
+
+
+# v1200 = v1010 + carry on PEBBLES_L removed (it had -186 in v1010 vs naive)
+def _r5_v1200_v1010_minus_pebbles_l():
+    base = dict(MEMBER_OVERRIDES["best_v1010_carry"][5])
+    # Revert PEBBLES_L to v10's strategy (halved limit naive)
+    base["PEBBLES_L"] = MEMBER_OVERRIDES["best_v10"][5]["PEBBLES_L"]
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1200_minus_pebbles_l"] = _r5_v1200_v1010_minus_pebbles_l()
+
+
+# v1210 = v1010 - PEBBLES_L - UV_MAGENTA (the ones where carry didn't really help)
+def _r5_v1210_targeted_minus():
+    base = dict(MEMBER_OVERRIDES["best_v1010_carry"][5])
+    for sym in ["PEBBLES_L", "UV_VISOR_MAGENTA"]:
+        base[sym] = MEMBER_OVERRIDES["best_v10"][5][sym]
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1210_minimal_carry"] = _r5_v1210_targeted_minus()
+
+
+# v1500: v1010 + my pair_skip alphas on SNACKPACK pairs (validated on v14b: +706 cumulative)
+def _pair_skip(sym, partner, pair_thresh=1.5, size=5):
+    return ProductConfig(
+        symbol=sym, strategy="pair_skip_mm", position_limit=10,
+        params=dict(
+            partner=partner, partner_sign=-1.0, pair_thresh=pair_thresh,
+            maker_size=size, tighten_ticks=1, z_window=300, hard_pause_at=9,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_v1500_carry_plus_pairs():
+    """v1010 (Tibo's v10 + my carry on 5) + my pair_skip on SNACKPACK pairs."""
+    base = dict(MEMBER_OVERRIDES["best_v1010_carry"][5])
+    # Add pair_skip on SNACKPACK_VANILLA <-> CHOCOLATE (-0.92 corr, lambda=0)
+    base["SNACKPACK_VANILLA"] = _pair_skip("SNACKPACK_VANILLA", "SNACKPACK_CHOCOLATE", 1.25, 5)
+    # Add pair_skip on SNACKPACK_RASPBERRY <-> STRAWBERRY (-0.92 corr, lambda=0)
+    base["SNACKPACK_RASPBERRY"] = _pair_skip("SNACKPACK_RASPBERRY", "SNACKPACK_STRAWBERRY", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1500_carry_pairs"] = _r5_v1500_carry_plus_pairs()
+
+
+# v1600: v1500 + pair_skip on PEBBLES_S (PEBBLES_XL partner — XL on arb but partner data still available)
+def _r5_v1600_full_pairs():
+    base = dict(MEMBER_OVERRIDES["best_v1500_carry_pairs"][5])
+    base["PEBBLES_S"] = _pair_skip("PEBBLES_S", "PEBBLES_XL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1600_full_pairs"] = _r5_v1600_full_pairs()
+
+
+# v1700: also add pair_skip on PEBBLES_XL with PEBBLES_S as partner
+# But wait — PEBBLES_XL is on pebbles_arb_v1 (Tibo's conservation). Replacing would lose +89k. Skip.
+
+# v1800: zscore_mr_adaptive on UV_VISOR_AMBER (currently trend_v2 - rev_ratio=443)
+def _r5_v1800_zscore_amber():
+    base = dict(MEMBER_OVERRIDES["best_v1500_carry_pairs"][5])
+    # NOTE: this needs SharedR5Context, but zscore_mr_adaptive doesn't use it
+    base["UV_VISOR_AMBER"] = ProductConfig(
+        symbol="UV_VISOR_AMBER", strategy="zscore_mr_adaptive", position_limit=10,
+        params=dict(
+            maker_size=5, tighten_ticks=1, z_window=300, z_entry=2.0, z_skew=1,
+            pnl_window=500, bad_pnl_threshold=-300.0, hard_pause_at=9,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1800_zscore_amber"] = _r5_v1800_zscore_amber()
+
+
+# v2000_r: REAL MM on naive_mm products (replace naive_tight_mm with real_mm
+#          which has inventory skew + carry-aware + adaptive sizing)
+def _real_mm(sym: str, size: int = 5) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym, strategy="real_mm", position_limit=10,
+        params=dict(
+            maker_size=size, tighten_ticks=1,
+            inv_skew_thresh=5, inv_skew_offset=1, size_inv_factor=1.0,
+            trend_hl=200, carry_pause_min_pos=3, hard_pause_at=9,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+# v2000_r: v1500 base + replace ALL naive_mm with real_mm (full MM with inv skew + carry)
+def _r5_v2000r_real_mm():
+    base = dict(MEMBER_OVERRIDES["best_v1500_carry_pairs"][5])
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy == "naive_tight_mm":
+            out[sym] = _real_mm(sym, size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v2000r_real_mm"] = _r5_v2000r_real_mm()
+
+
+# v2100_r: v1500 + real_mm ONLY on the 5 carry products (replacing inventory_carry_mm)
+def _r5_v2100r_real_carry():
+    base = dict(MEMBER_OVERRIDES["best_v1500_carry_pairs"][5])
+    out = dict(base)
+    for sym in ["PANEL_4X4", "TRANSLATOR_GRAPHITE_MIST", "GALAXY_SOUNDS_SOLAR_FLAMES",
+                "UV_VISOR_MAGENTA", "PEBBLES_L"]:
+        out[sym] = _real_mm(sym, size=5)
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v2100r_real_carry"] = _r5_v2100r_real_carry()
+
+
+# v1700: v1500 + drop UV_VISOR_MAGENTA (the -3,479 perpetual loser)
+def _r5_v1700_drop_magenta():
+    base = dict(MEMBER_OVERRIDES["best_v1500_carry_pairs"][5])
+    base["UV_VISOR_MAGENTA"] = None
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1700_drop_magenta"] = _r5_v1700_drop_magenta()
+
+
+# v1900: v1500 + carry on the live-day-4 carry losers (PLANETARY/DARK_MATTER/MORNING)
+def _r5_v1900_extra_carry():
+    base = dict(MEMBER_OVERRIDES["best_v1500_carry_pairs"][5])
+    for sym in ["GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_DARK_MATTER",
+                "OXYGEN_SHAKE_MORNING_BREATH"]:
+        if sym in base and base[sym] is not None and base[sym].strategy == "naive_tight_mm":
+            sz = base[sym].params.get("maker_size", 5)
+            base[sym] = _inventory_carry(sym, size=sz)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1900_extra_carry"] = _r5_v1900_extra_carry()
+
+
+# v3000_super: v1500 + extra carry + drop magenta + zscore amber (everything combined)
+def _r5_v3000_super():
+    base = dict(MEMBER_OVERRIDES["best_v1500_carry_pairs"][5])
+    # Add carry on live carry losers
+    for sym in ["GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_DARK_MATTER",
+                "OXYGEN_SHAKE_MORNING_BREATH"]:
+        if sym in base and base[sym] is not None and base[sym].strategy == "naive_tight_mm":
+            sz = base[sym].params.get("maker_size", 5)
+            base[sym] = _inventory_carry(sym, size=sz)
+    # Drop UV_VISOR_MAGENTA
+    base["UV_VISOR_MAGENTA"] = None
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3000_super"] = _r5_v3000_super()
+
+
+# Now that v1600 wins by +23k via PEBBLES_S pair_skip, build variants ON TOP of v1600
+def _r5_v1610_v1600_drop_magenta():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    base["UV_VISOR_MAGENTA"] = None
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"] = _r5_v1610_v1600_drop_magenta()
+
+
+def _r5_v1620_v1600_carry_q4_losers():
+    """v1600 + carry on 3 q4 live losers"""
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    for sym in ["GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_DARK_MATTER",
+                "OXYGEN_SHAKE_MORNING_BREATH"]:
+        if sym in base and base[sym] is not None and base[sym].strategy == "naive_tight_mm":
+            sz = base[sym].params.get("maker_size", 5)
+            base[sym] = _inventory_carry(sym, size=sz)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1620_v1600_carry_q4"] = _r5_v1620_v1600_carry_q4_losers()
+
+
+def _r5_v1630_v1600_super():
+    """v1600 + drop magenta + carry on q4 losers"""
+    base = dict(MEMBER_OVERRIDES["best_v1620_v1600_carry_q4"][5])
+    base["UV_VISOR_MAGENTA"] = None
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1630_v1600_super"] = _r5_v1630_v1600_super()
+
+
+# v1640: also try pair_skip on PEBBLES_XS with PEBBLES_XL partner (XS currently on trend_v2)
+# But trend_v2 gave +25k for XS. pair_skip might be different. Let's NOT replace trend_v2.
+
+# v1650: v1600 with size=8 on pair_skip products (more aggressive)
+def _r5_v1650_v1600_size8():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    for sym in ["PEBBLES_S", "SNACKPACK_VANILLA", "SNACKPACK_RASPBERRY"]:
+        if base[sym] is not None and base[sym].strategy == "pair_skip_mm":
+            base[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params={**base[sym].params, "maker_size": 8},
+            )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1650_v1600_size8"] = _r5_v1650_v1600_size8()
+
+
+# v1660: v1600 + pair_thresh=1.0 on pair_skip products (tighter)
+def _r5_v1660_v1600_thresh10():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    for sym in ["PEBBLES_S", "SNACKPACK_VANILLA", "SNACKPACK_RASPBERRY"]:
+        if base[sym] is not None and base[sym].strategy == "pair_skip_mm":
+            base[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params={**base[sym].params, "pair_thresh": 1.0},
+            )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1660_v1600_thresh10"] = _r5_v1660_v1600_thresh10()
+
+
+# v1670: v1600 + pair_thresh=1.5 (looser)
+def _r5_v1670_v1600_thresh15():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    for sym in ["PEBBLES_S", "SNACKPACK_VANILLA", "SNACKPACK_RASPBERRY"]:
+        if base[sym] is not None and base[sym].strategy == "pair_skip_mm":
+            base[sym] = ProductConfig(
+                symbol=sym, strategy="pair_skip_mm", position_limit=10,
+                params={**base[sym].params, "pair_thresh": 1.5},
+            )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1670_v1600_thresh15"] = _r5_v1670_v1600_thresh15()
+
+
+# v1680: v1600 + pair_skip on SNACKPACK_PISTACHIO (RASPBERRY partner)
+def _r5_v1680_pist_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    base["SNACKPACK_PISTACHIO"] = _pair_skip("SNACKPACK_PISTACHIO", "SNACKPACK_RASPBERRY", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1680_pist_pair"] = _r5_v1680_pist_pair()
+
+
+# v1690: v1600 + pair_skip on SNACKPACK_CHOCOLATE (VANILLA partner) and STRAWBERRY (RASPBERRY partner)
+def _r5_v1690_all_snack_pairs():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    base["SNACKPACK_CHOCOLATE"] = _pair_skip("SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", 1.25, 5)
+    base["SNACKPACK_STRAWBERRY"] = _pair_skip("SNACKPACK_STRAWBERRY", "SNACKPACK_RASPBERRY", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1690_all_snack_pairs"] = _r5_v1690_all_snack_pairs()
+
+
+# v1700_FINAL: v1600 + EVERYTHING positive: drop magenta + carry q4 + all snack pairs
+def _r5_v1700_FINAL():
+    """Combine all proven gains: v1600 + drop magenta + carry q4 + extended snack pairs"""
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    base["UV_VISOR_MAGENTA"] = None
+    for sym in ["GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_DARK_MATTER",
+                "OXYGEN_SHAKE_MORNING_BREATH"]:
+        if sym in base and base[sym] is not None and base[sym].strategy == "naive_tight_mm":
+            sz = base[sym].params.get("maker_size", 5)
+            base[sym] = _inventory_carry(sym, size=sz)
+    base["SNACKPACK_PISTACHIO"] = _pair_skip("SNACKPACK_PISTACHIO", "SNACKPACK_RASPBERRY", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1700_FINAL"] = _r5_v1700_FINAL()
+
+
+# v1750: v1600 + replace PEBBLES_L carry with pair_skip (XL partner)
+def _r5_v1750_pebbles_l_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    base["PEBBLES_L"] = _pair_skip("PEBBLES_L", "PEBBLES_XL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1750_pebbles_l_pair"] = _r5_v1750_pebbles_l_pair()
+
+
+# v1760: v1600 + add pair_skip on PEBBLES_M (currently None)
+def _r5_v1760_pebbles_m_revive():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    base["PEBBLES_M"] = _pair_skip("PEBBLES_M", "PEBBLES_XL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1760_pebbles_m_revive"] = _r5_v1760_pebbles_m_revive()
+
+
+# v1770: SUPERAMP — v1600 + revive ALL dropped PEBBLES with pair_skip + drop magenta
+def _r5_v1770_super_pebbles():
+    base = dict(MEMBER_OVERRIDES["best_v1600_full_pairs"][5])
+    base["PEBBLES_M"] = _pair_skip("PEBBLES_M", "PEBBLES_XL", 1.25, 5)
+    base["PEBBLES_L"] = _pair_skip("PEBBLES_L", "PEBBLES_XL", 1.25, 5)
+    base["UV_VISOR_MAGENTA"] = None
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1770_super_pebbles"] = _r5_v1770_super_pebbles()
+
+
+# Vol-adjusted MM: size scales as vol_ref / product_std, clipped to [2, 8]
+_PRODUCT_STD = {
+    "SNACKPACK_RASPBERRY": 170, "SNACKPACK_VANILLA": 179, "SNACKPACK_PISTACHIO": 187,
+    "SNACKPACK_CHOCOLATE": 201, "GALAXY_SOUNDS_DARK_MATTER": 331,
+    "TRANSLATOR_ECLIPSE_CHARCOAL": 356, "SNACKPACK_STRAWBERRY": 364,
+    "OXYGEN_SHAKE_EVENING_BREATH": 400, "SLEEP_POD_LAMB_WOOL": 413,
+    "GALAXY_SOUNDS_SOLAR_FLAMES": 450, "PANEL_4X4": 457,
+    "TRANSLATOR_ASTRO_BLACK": 490, "TRANSLATOR_GRAPHITE_MIST": 500,
+    "TRANSLATOR_SPACE_GRAY": 503, "OXYGEN_SHAKE_MINT": 508, "SLEEP_POD_NYLON": 509,
+    "MICROCHIP_CIRCLE": 533, "ROBOT_VACUUMING": 535, "GALAXY_SOUNDS_SOLAR_WINDS": 541,
+    "UV_VISOR_ORANGE": 551, "ROBOT_DISHES": 557, "OXYGEN_SHAKE_CHOCOLATE": 561,
+    "TRANSLATOR_VOID_BLUE": 579, "UV_VISOR_RED": 588, "PANEL_1X2": 590,
+    "UV_VISOR_MAGENTA": 614, "ROBOT_LAUNDRY": 614, "PEBBLES_L": 622,
+    "PANEL_2X4": 627, "OXYGEN_SHAKE_MORNING_BREATH": 653, "PANEL_2X2": 675,
+    "UV_VISOR_YELLOW": 682, "PEBBLES_M": 688, "MICROCHIP_RECTANGLE": 752,
+    "GALAXY_SOUNDS_PLANETARY_RINGS": 766, "ROBOT_MOPPING": 767,
+    "ROBOT_IRONING": 771, "PEBBLES_S": 833, "MICROCHIP_TRIANGLE": 833,
+    "PANEL_1X4": 834, "SLEEP_POD_COTTON": 888, "SLEEP_POD_SUEDE": 900,
+    "OXYGEN_SHAKE_GARLIC": 953, "GALAXY_SOUNDS_BLACK_HOLES": 958,
+    "SLEEP_POD_POLYESTER": 978, "UV_VISOR_AMBER": 997, "PEBBLES_XS": 1450,
+    "MICROCHIP_OVAL": 1552, "PEBBLES_XL": 1777, "MICROCHIP_SQUARE": 1830,
+}
+
+
+def _vol_mm(sym: str, base_size: int = 5) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym, strategy="vol_adjusted_mm", position_limit=10,
+        params=dict(
+            maker_size=base_size, vol_ref=600.0,
+            vol_clip_min=2, vol_clip_max=8,
+            product_std=_PRODUCT_STD.get(sym, 600.0),
+            tighten_ticks=1, hard_pause_at=9,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+# v1611: v1610 + drop OXYGEN_SHAKE_MINT (was -558)
+def _r5_v1611_drop_mint():
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    base["OXYGEN_SHAKE_MINT"] = None
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1611_drop_mint"] = _r5_v1611_drop_mint()
+
+
+# v2200: v1610 + replace naive_mm with vol_adjusted_mm
+def _r5_v2200_vol_mm():
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy == "naive_tight_mm":
+            out[sym] = _vol_mm(sym, base_size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v2200_vol_mm"] = _r5_v2200_vol_mm()
+
+
+# v2210: vol_mm only on HIGH-vol products (std > 800) where reducing size matters most
+def _r5_v2210_vol_mm_highvol():
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    HIGH_VOL = {p for p, s in _PRODUCT_STD.items() if s > 800}
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy == "naive_tight_mm" and sym in HIGH_VOL:
+            out[sym] = _vol_mm(sym, base_size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v2210_vol_highvol"] = _r5_v2210_vol_mm_highvol()
+
+
+# v2220: vol_mm only on LOW-vol products (std < 400) where increasing size captures more
+def _r5_v2220_vol_mm_lowvol():
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    LOW_VOL = {p for p, s in _PRODUCT_STD.items() if s < 400}
+    out = {}
+    for sym, pc in base.items():
+        if pc is None:
+            out[sym] = None
+        elif pc.strategy == "naive_tight_mm" and sym in LOW_VOL:
+            out[sym] = _vol_mm(sym, base_size=pc.params.get("maker_size", 5))
+        else:
+            out[sym] = pc
+    return {5: out}
+
+
+MEMBER_OVERRIDES["best_v2220_vol_lowvol"] = _r5_v2220_vol_mm_lowvol()
+
+
+# v2300: multi_pair_skip basket — PEBBLES_S vs basket of (M, L, XS)
+def _multi_pair(sym: str, partners: list, partner_sign: float = -1.0,
+                pair_thresh: float = 1.25, size: int = 5) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym, strategy="multi_pair_skip_mm", position_limit=10,
+        params=dict(
+            partners=[(p, 1.0) for p in partners],
+            partner_sign=partner_sign, pair_thresh=pair_thresh,
+            maker_size=size, tighten_ticks=1, z_window=300, hard_pause_at=9,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_v2300_multi_pebbles_s():
+    """v1610 + replace PEBBLES_S pair_skip with multi_pair_skip (basket M+L+XS partners)."""
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    base["PEBBLES_S"] = _multi_pair("PEBBLES_S",
+                                    ["PEBBLES_M", "PEBBLES_L", "PEBBLES_XS"],
+                                    partner_sign=-1.0, pair_thresh=1.25, size=5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2300_multi_pebbles_s"] = _r5_v2300_multi_pebbles_s()
+
+
+# v2310: multi_pair on PEBBLES_S with PEBBLES_XL partner only (single, like v1610)
+# Wait — v1610 already has PEBBLES_S with single PEBBLES_XL partner. So v2300 is the test.
+
+# v2320: multi_pair with XL + S partners (basket of XL and S as inverse partners on M, L)
+# But M, L are not active in v1610 (M=None, L=carry). Skip.
+
+# v2330: BOTH single PEBBLES_S-XL pair AND multi_pair as backup signal
+# Actually let's just test v2300 and v2310
+
+# v2310: multi_pair on PEBBLES_S with [XL, M, L, XS] partners (everything but S)
+def _r5_v2310_multi_pebbles_s_full():
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    base["PEBBLES_S"] = _multi_pair("PEBBLES_S",
+                                    ["PEBBLES_XL", "PEBBLES_M", "PEBBLES_L", "PEBBLES_XS"],
+                                    partner_sign=-1.0, pair_thresh=1.25, size=5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2310_multi_pebbles_s_full"] = _r5_v2310_multi_pebbles_s_full()
+
+
+# v2320: multi_pair on PEBBLES_S with [XL, M, L] (no XS since it's also inverse)
+def _r5_v2320_multi_pebbles_s_xl_m_l():
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    base["PEBBLES_S"] = _multi_pair("PEBBLES_S",
+                                    ["PEBBLES_XL", "PEBBLES_M", "PEBBLES_L"],
+                                    partner_sign=-1.0, pair_thresh=1.25, size=5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2320_multi_pebbles_s_xl_m_l"] = _r5_v2320_multi_pebbles_s_xl_m_l()
+
+
+# v2400: Cross-asset hedge: SLEEP_POD ↔ ROBOT (level corr -0.84)
+# Apply pair_skip on SLEEP_POD members with ROBOT counterpart partner (or vice versa)
+# Top SLEEP_POD members: SLEEP_POD_NYLON (+19k), POLYESTER (+13k), SUEDE (+14k)
+# Top ROBOT members: ROBOT_IRONING (+17k naive), MOPPING (+11k trend), DISHES (+140k AR1)
+def _r5_v2400_cross_hedge():
+    """Apply pair_skip with ROBOT partner on top SLEEP_POD products."""
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    # SLEEP_POD_NYLON (+19k) — pair with ROBOT_IRONING (+17k)? both rising
+    # Actually for cross-asset HEDGE we want ANTI-correlated — group level is anti-corr
+    # But individual products: let's check if SLEEP_POD_NYLON ↔ ROBOT_VACUUMING work
+    base["SLEEP_POD_NYLON"] = _pair_skip("SLEEP_POD_NYLON", "ROBOT_VACUUMING", 1.5, 5)
+    base["SLEEP_POD_POLYESTER"] = _pair_skip("SLEEP_POD_POLYESTER", "ROBOT_LAUNDRY", 1.5, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2400_cross_hedge"] = _r5_v2400_cross_hedge()
+
+
+# v2410: SLEEP_POD products with MICROCHIP partners (both anti-corr at -0.82 level)
+def _r5_v2410_cross_hedge_microchip():
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    base["SLEEP_POD_NYLON"] = _pair_skip("SLEEP_POD_NYLON", "MICROCHIP_CIRCLE", 1.5, 5)
+    base["SLEEP_POD_POLYESTER"] = _pair_skip("SLEEP_POD_POLYESTER", "MICROCHIP_OVAL", 1.5, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2410_cross_microchip"] = _r5_v2410_cross_hedge_microchip()
+
+
+# v2500: PCA-residual MR on top mean-reverting residuals (PC1-removed)
+# Top candidates from pca_global_residuals.csv:
+#   OXYGEN_SHAKE_EVENING_BREATH (-0.118), OXYGEN_SHAKE_CHOCOLATE (-0.082)
+def _pca_resid_mr(sym: str, beta: float = 1.0, size: int = 5) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym, strategy="pca_residual_mr", position_limit=10,
+        params=dict(
+            maker_size=size, tighten_ticks=1, beta=beta,
+            z_window=200, resid_thresh=1.5, skew_offset=1, hard_pause_at=9,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_v2500_pca_mr():
+    """v1610 + pca_residual_mr on top 2 mean-reverting residuals."""
+    base = dict(MEMBER_OVERRIDES["best_v1610_v1600_drop_magenta"][5])
+    base["OXYGEN_SHAKE_EVENING_BREATH"] = _pca_resid_mr("OXYGEN_SHAKE_EVENING_BREATH", 1.0, 5)
+    base["OXYGEN_SHAKE_CHOCOLATE"] = _pca_resid_mr("OXYGEN_SHAKE_CHOCOLATE", 1.0, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2500_pca_mr"] = _r5_v2500_pca_mr()
+
+
+# v1612: v1611 + PEBBLES_XS pair_skip (replace trend_v2 with PEBBLES_XL partner)
+def _r5_v1612_pebbles_xs_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1611_drop_mint"][5])
+    base["PEBBLES_XS"] = _pair_skip("PEBBLES_XS", "PEBBLES_XL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1612_pebbles_xs_pair"] = _r5_v1612_pebbles_xs_pair()
+
+
+# v1613: v1611 + PEBBLES_XS pair_skip ADD (keep trend_v2 + add pair? Can't, single strategy per product)
+# Actually try: PEBBLES_M with pair_skip XL (revive M from None)
+def _r5_v1613_revive_pebbles_m():
+    base = dict(MEMBER_OVERRIDES["best_v1611_drop_mint"][5])
+    base["PEBBLES_M"] = _pair_skip("PEBBLES_M", "PEBBLES_XL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1613_revive_pebbles_m"] = _r5_v1613_revive_pebbles_m()
+
+
+# v1614: try MICROCHIP_RECTANGLE with pair_skip (currently coint_mm gives +10k, less than other)
+# RECTANGLE on coint_mm with SQUARE = +10k. SQUARE is on trend_v2 (+55k). Pair signal could exist.
+def _r5_v1614_rectangle_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1611_drop_mint"][5])
+    base["MICROCHIP_RECTANGLE"] = _pair_skip("MICROCHIP_RECTANGLE", "MICROCHIP_SQUARE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1614_rectangle_pair"] = _r5_v1614_rectangle_pair()
+
+
+# v1615: zscore_mr_adaptive on PEBBLES_S (rev_ratio=260, current pair_skip +23k)
+# Note: PEBBLES_S already has pair_skip in v1611 — this REPLACES with zscore
+def _r5_v1615_pebbles_s_zscore():
+    base = dict(MEMBER_OVERRIDES["best_v1611_drop_mint"][5])
+    base["PEBBLES_S"] = ProductConfig(
+        symbol="PEBBLES_S", strategy="zscore_mr_adaptive", position_limit=10,
+        params=dict(maker_size=5, tighten_ticks=1, z_window=300, z_entry=2.0, z_skew=1,
+                    pnl_window=500, bad_pnl_threshold=-300.0, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1615_pebbles_s_zscore"] = _r5_v1615_pebbles_s_zscore()
+
+
+# v1620 = v1614 + drop OXYGEN_SHAKE_MINT
+def _r5_v1620_v1614_drop_mint():
+    base = dict(MEMBER_OVERRIDES["best_v1614_rectangle_pair"][5])
+    base["OXYGEN_SHAKE_MINT"] = None
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1620_v1614_drop_mint"] = _r5_v1620_v1614_drop_mint()
+
+
+# v1630 = v1614 + replace ROBOT_LAUNDRY coint with pair_skip(VACUUMING)
+def _r5_v1630_laundry_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1614_rectangle_pair"][5])
+    base["ROBOT_LAUNDRY"] = _pair_skip("ROBOT_LAUNDRY", "ROBOT_VACUUMING", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1630_laundry_pair"] = _r5_v1630_laundry_pair()
+
+
+# v1640 = v1614 + replace ROBOT_VACUUMING coint with pair_skip(LAUNDRY)
+def _r5_v1640_vac_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1614_rectangle_pair"][5])
+    base["ROBOT_VACUUMING"] = _pair_skip("ROBOT_VACUUMING", "ROBOT_LAUNDRY", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1640_vac_pair"] = _r5_v1640_vac_pair()
+
+
+# v1650 = v1614 + replace BOTH ROBOT_LAUNDRY/VACUUMING with pair_skip
+def _r5_v1650_both_robot_pairs():
+    base = dict(MEMBER_OVERRIDES["best_v1614_rectangle_pair"][5])
+    base["ROBOT_LAUNDRY"] = _pair_skip("ROBOT_LAUNDRY", "ROBOT_VACUUMING", 1.25, 5)
+    base["ROBOT_VACUUMING"] = _pair_skip("ROBOT_VACUUMING", "ROBOT_LAUNDRY", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1650_both_robot_pairs"] = _r5_v1650_both_robot_pairs()
+
+
+# v1660 = v1620 + drop OXYGEN_SHAKE_MINT + replace robot coint with pair_skip
+def _r5_v1660_super():
+    base = dict(MEMBER_OVERRIDES["best_v1614_rectangle_pair"][5])
+    base["OXYGEN_SHAKE_MINT"] = None
+    base["ROBOT_LAUNDRY"] = _pair_skip("ROBOT_LAUNDRY", "ROBOT_VACUUMING", 1.25, 5)
+    base["ROBOT_VACUUMING"] = _pair_skip("ROBOT_VACUUMING", "ROBOT_LAUNDRY", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1660_super"] = _r5_v1660_super()
+
+
+# v1700: v1630 (LAUNDRY pair_skip champion) + add MICROCHIP_OVAL/TRIANGLE pair_skip
+def _r5_v1700_chip_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1630_laundry_pair"][5])
+    base["MICROCHIP_OVAL"] = _pair_skip("MICROCHIP_OVAL", "MICROCHIP_TRIANGLE", 1.25, 5)
+    base["MICROCHIP_TRIANGLE"] = _pair_skip("MICROCHIP_TRIANGLE", "MICROCHIP_OVAL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1700_chip_pair"] = _r5_v1700_chip_pair()
+
+
+# v1710: v1630 + MICROCHIP_CIRCLE pair_skip with TRIANGLE (alt)
+def _r5_v1710_circle_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1630_laundry_pair"][5])
+    base["MICROCHIP_CIRCLE"] = _pair_skip("MICROCHIP_CIRCLE", "MICROCHIP_TRIANGLE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1710_circle_pair"] = _r5_v1710_circle_pair()
+
+
+# v1720: v1630 + MICROCHIP_OVAL pair_skip with TRIANGLE only (single-side test)
+def _r5_v1720_oval_only():
+    base = dict(MEMBER_OVERRIDES["best_v1630_laundry_pair"][5])
+    base["MICROCHIP_OVAL"] = _pair_skip("MICROCHIP_OVAL", "MICROCHIP_TRIANGLE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1720_oval_only"] = _r5_v1720_oval_only()
+
+
+# v1730: v1710 (CIRCLE pair_skip) + v1720 (OVAL pair_skip) — combine two winners
+def _r5_v1730_circle_oval():
+    base = dict(MEMBER_OVERRIDES["best_v1710_circle_pair"][5])
+    base["MICROCHIP_OVAL"] = _pair_skip("MICROCHIP_OVAL", "MICROCHIP_TRIANGLE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1730_circle_oval"] = _r5_v1730_circle_oval()
+
+
+# v1740: v1710 + try CIRCLE pair_skip with OVAL partner instead of TRIANGLE
+def _r5_v1740_circle_oval_partner():
+    base = dict(MEMBER_OVERRIDES["best_v1630_laundry_pair"][5])
+    base["MICROCHIP_CIRCLE"] = _pair_skip("MICROCHIP_CIRCLE", "MICROCHIP_OVAL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1740_circle_oval_partner"] = _r5_v1740_circle_oval_partner()
+
+
+# v1750: v1740 + add OVAL pair_skip with CIRCLE partner (symmetric)
+def _r5_v1750_symmetric_circle_oval():
+    base = dict(MEMBER_OVERRIDES["best_v1740_circle_oval_partner"][5])
+    base["MICROCHIP_OVAL"] = _pair_skip("MICROCHIP_OVAL", "MICROCHIP_CIRCLE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1750_symmetric_circle_oval"] = _r5_v1750_symmetric_circle_oval()
+
+
+# v1760: v1740 + add OVAL pair_skip with TRIANGLE (different partner)
+def _r5_v1760_oval_triangle_added():
+    base = dict(MEMBER_OVERRIDES["best_v1740_circle_oval_partner"][5])
+    base["MICROCHIP_OVAL"] = _pair_skip("MICROCHIP_OVAL", "MICROCHIP_TRIANGLE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1760_oval_triangle_added"] = _r5_v1760_oval_triangle_added()
+
+
+# v1770: try other partner combinations - CIRCLE pair_skip with SQUARE
+def _r5_v1770_circle_square():
+    base = dict(MEMBER_OVERRIDES["best_v1630_laundry_pair"][5])
+    base["MICROCHIP_CIRCLE"] = _pair_skip("MICROCHIP_CIRCLE", "MICROCHIP_SQUARE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1770_circle_square"] = _r5_v1770_circle_square()
+
+
+# v1780: v1760 + PANEL_2X2 pair_skip with PANEL_1X4 (weakest panel, strongest panel as anchor)
+def _r5_v1780_panel_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1760_oval_triangle_added"][5])
+    base["PANEL_2X2"] = _pair_skip("PANEL_2X2", "PANEL_1X4", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1780_panel_pair"] = _r5_v1780_panel_pair()
+
+
+# v1790: v1760 + SNACKPACK_PISTACHIO pair_skip with VANILLA
+def _r5_v1790_pistachio_vanilla():
+    base = dict(MEMBER_OVERRIDES["best_v1760_oval_triangle_added"][5])
+    base["SNACKPACK_PISTACHIO"] = _pair_skip("SNACKPACK_PISTACHIO", "SNACKPACK_VANILLA", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1790_pistachio_vanilla"] = _r5_v1790_pistachio_vanilla()
+
+
+# v1800: v1760 + TRANSLATOR_ECLIPSE pair_skip with VOID_BLUE (ECLIPSE is +8k, VOID is +16k)
+def _r5_v1800_eclipse_void():
+    base = dict(MEMBER_OVERRIDES["best_v1760_oval_triangle_added"][5])
+    base["TRANSLATOR_ECLIPSE_CHARCOAL"] = _pair_skip("TRANSLATOR_ECLIPSE_CHARCOAL", "TRANSLATOR_VOID_BLUE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1800_eclipse_void"] = _r5_v1800_eclipse_void()
+
+
+# v1810: v1800 + TRANSLATOR_ASTRO_BLACK pair_skip with VOID_BLUE
+def _r5_v1810_astro_void():
+    base = dict(MEMBER_OVERRIDES["best_v1800_eclipse_void"][5])
+    base["TRANSLATOR_ASTRO_BLACK"] = _pair_skip("TRANSLATOR_ASTRO_BLACK", "TRANSLATOR_VOID_BLUE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1810_astro_void"] = _r5_v1810_astro_void()
+
+
+# v1820: v1800 + OXYGEN_SHAKE_MORNING_BREATH pair_skip with CHOCOLATE
+def _r5_v1820_morning_choco():
+    base = dict(MEMBER_OVERRIDES["best_v1800_eclipse_void"][5])
+    base["OXYGEN_SHAKE_MORNING_BREATH"] = _pair_skip("OXYGEN_SHAKE_MORNING_BREATH", "OXYGEN_SHAKE_CHOCOLATE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1820_morning_choco"] = _r5_v1820_morning_choco()
+
+
+# v1830: v1800 + UV_VISOR_RED pair_skip with AMBER (RED is weakest UV_VISOR)
+def _r5_v1830_red_amber():
+    base = dict(MEMBER_OVERRIDES["best_v1800_eclipse_void"][5])
+    base["UV_VISOR_RED"] = _pair_skip("UV_VISOR_RED", "UV_VISOR_AMBER", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1830_red_amber"] = _r5_v1830_red_amber()
+
+
+# v1840: v1800 + UV_VISOR_ORANGE pair_skip with YELLOW
+def _r5_v1840_orange_yellow():
+    base = dict(MEMBER_OVERRIDES["best_v1800_eclipse_void"][5])
+    base["UV_VISOR_ORANGE"] = _pair_skip("UV_VISOR_ORANGE", "UV_VISOR_YELLOW", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1840_orange_yellow"] = _r5_v1840_orange_yellow()
+
+
+# v1850 = v1800 + RED+AMBER + ORANGE+YELLOW (combine two UV winners)
+def _r5_v1850_uv_combo():
+    base = dict(MEMBER_OVERRIDES["best_v1800_eclipse_void"][5])
+    base["UV_VISOR_RED"] = _pair_skip("UV_VISOR_RED", "UV_VISOR_AMBER", 1.25, 5)
+    base["UV_VISOR_ORANGE"] = _pair_skip("UV_VISOR_ORANGE", "UV_VISOR_YELLOW", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1850_uv_combo"] = _r5_v1850_uv_combo()
+
+
+# v1860 = v1850 + ASTRO+VOID even though small (-1.8k alone)
+def _r5_v1860_with_astro():
+    base = dict(MEMBER_OVERRIDES["best_v1850_uv_combo"][5])
+    base["TRANSLATOR_ASTRO_BLACK"] = _pair_skip("TRANSLATOR_ASTRO_BLACK", "TRANSLATOR_VOID_BLUE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1860_with_astro"] = _r5_v1860_with_astro()
+
+
+# v1870: v1830 + try UV_VISOR_RED with YELLOW partner instead of AMBER
+def _r5_v1870_red_yellow():
+    base = dict(MEMBER_OVERRIDES["best_v1800_eclipse_void"][5])
+    base["UV_VISOR_RED"] = _pair_skip("UV_VISOR_RED", "UV_VISOR_YELLOW", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1870_red_yellow"] = _r5_v1870_red_yellow()
+
+
+# v1880: v1830 + GALAXY_SOUNDS_DARK_MATTER pair_skip with PLANETARY_RINGS (leader)
+def _r5_v1880_dark_planetary():
+    base = dict(MEMBER_OVERRIDES["best_v1830_red_amber"][5])
+    base["GALAXY_SOUNDS_DARK_MATTER"] = _pair_skip("GALAXY_SOUNDS_DARK_MATTER", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1880_dark_planetary"] = _r5_v1880_dark_planetary()
+
+
+# v1890: v1830 + GALAXY_SOUNDS_SOLAR_WINDS pair_skip with PLANETARY_RINGS
+def _r5_v1890_winds_planetary():
+    base = dict(MEMBER_OVERRIDES["best_v1830_red_amber"][5])
+    base["GALAXY_SOUNDS_SOLAR_WINDS"] = _pair_skip("GALAXY_SOUNDS_SOLAR_WINDS", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1890_winds_planetary"] = _r5_v1890_winds_planetary()
+
+
+# v1900: v1830 + BLACK_HOLES pair_skip with PLANETARY_RINGS
+def _r5_v1900_blackholes_planetary():
+    base = dict(MEMBER_OVERRIDES["best_v1830_red_amber"][5])
+    base["GALAXY_SOUNDS_BLACK_HOLES"] = _pair_skip("GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1900_blackholes_planetary"] = _r5_v1900_blackholes_planetary()
+
+
+# v1910: ALL winners combined - v1830 + ORANGE/YELLOW + DARK_MATTER/BH + others
+# This is the maximal-stack test
+def _r5_v1910_all_winners():
+    base = dict(MEMBER_OVERRIDES["best_v1830_red_amber"][5])
+    # Add v1840's ORANGE+YELLOW pair_skip
+    base["UV_VISOR_ORANGE"] = _pair_skip("UV_VISOR_ORANGE", "UV_VISOR_YELLOW", 1.25, 5)
+    # Add v1880's DARK_MATTER pair_skip
+    base["GALAXY_SOUNDS_DARK_MATTER"] = _pair_skip("GALAXY_SOUNDS_DARK_MATTER", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.25, 5)
+    # Add v1900's BLACK_HOLES pair_skip
+    base["GALAXY_SOUNDS_BLACK_HOLES"] = _pair_skip("GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1910_all_winners"] = _r5_v1910_all_winners()
+
+
+# v1920: v1910 + tighter pair_thresh=1.0 on all pair_skips
+def _r5_v1920_tighter_thresh():
+    base = dict(MEMBER_OVERRIDES["best_v1910_all_winners"][5])
+    # Re-apply with thresh=1.0
+    base["MICROCHIP_RECTANGLE"] = _pair_skip("MICROCHIP_RECTANGLE", "MICROCHIP_SQUARE", 1.0, 5)
+    base["ROBOT_LAUNDRY"] = _pair_skip("ROBOT_LAUNDRY", "ROBOT_VACUUMING", 1.0, 5)
+    base["MICROCHIP_CIRCLE"] = _pair_skip("MICROCHIP_CIRCLE", "MICROCHIP_OVAL", 1.0, 5)
+    base["MICROCHIP_OVAL"] = _pair_skip("MICROCHIP_OVAL", "MICROCHIP_TRIANGLE", 1.0, 5)
+    base["TRANSLATOR_ECLIPSE_CHARCOAL"] = _pair_skip("TRANSLATOR_ECLIPSE_CHARCOAL", "TRANSLATOR_VOID_BLUE", 1.0, 5)
+    base["UV_VISOR_RED"] = _pair_skip("UV_VISOR_RED", "UV_VISOR_AMBER", 1.0, 5)
+    base["UV_VISOR_ORANGE"] = _pair_skip("UV_VISOR_ORANGE", "UV_VISOR_YELLOW", 1.0, 5)
+    base["GALAXY_SOUNDS_DARK_MATTER"] = _pair_skip("GALAXY_SOUNDS_DARK_MATTER", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.0, 5)
+    base["GALAXY_SOUNDS_BLACK_HOLES"] = _pair_skip("GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.0, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1920_tighter_thresh"] = _r5_v1920_tighter_thresh()
+
+
+# v1930: v1910 + size=8 on all pair_skips
+def _r5_v1930_size8():
+    base = dict(MEMBER_OVERRIDES["best_v1910_all_winners"][5])
+    base["MICROCHIP_RECTANGLE"] = _pair_skip("MICROCHIP_RECTANGLE", "MICROCHIP_SQUARE", 1.25, 8)
+    base["ROBOT_LAUNDRY"] = _pair_skip("ROBOT_LAUNDRY", "ROBOT_VACUUMING", 1.25, 8)
+    base["MICROCHIP_CIRCLE"] = _pair_skip("MICROCHIP_CIRCLE", "MICROCHIP_OVAL", 1.25, 8)
+    base["MICROCHIP_OVAL"] = _pair_skip("MICROCHIP_OVAL", "MICROCHIP_TRIANGLE", 1.25, 8)
+    base["TRANSLATOR_ECLIPSE_CHARCOAL"] = _pair_skip("TRANSLATOR_ECLIPSE_CHARCOAL", "TRANSLATOR_VOID_BLUE", 1.25, 8)
+    base["UV_VISOR_RED"] = _pair_skip("UV_VISOR_RED", "UV_VISOR_AMBER", 1.25, 8)
+    base["UV_VISOR_ORANGE"] = _pair_skip("UV_VISOR_ORANGE", "UV_VISOR_YELLOW", 1.25, 8)
+    base["GALAXY_SOUNDS_DARK_MATTER"] = _pair_skip("GALAXY_SOUNDS_DARK_MATTER", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.25, 8)
+    base["GALAXY_SOUNDS_BLACK_HOLES"] = _pair_skip("GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.25, 8)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1930_size8"] = _r5_v1930_size8()
+
+
+# v1940: v1910 + MICROCHIP_TRIANGLE pair_skip with SQUARE (try the leader of leaders)
+def _r5_v1940_triangle_square():
+    base = dict(MEMBER_OVERRIDES["best_v1910_all_winners"][5])
+    base["MICROCHIP_TRIANGLE"] = _pair_skip("MICROCHIP_TRIANGLE", "MICROCHIP_SQUARE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1940_triangle_square"] = _r5_v1940_triangle_square()
+
+
+# v1950: v1910 + SLEEP_POD_SUEDE pair_skip with NYLON (NYLON is highest PnL trend)
+def _r5_v1950_suede_nylon():
+    base = dict(MEMBER_OVERRIDES["best_v1910_all_winners"][5])
+    base["SLEEP_POD_SUEDE"] = _pair_skip("SLEEP_POD_SUEDE", "SLEEP_POD_NYLON", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1950_suede_nylon"] = _r5_v1950_suede_nylon()
+
+
+# v1960: v1950 + try SUEDE with POLYESTER as partner (alt)
+def _r5_v1960_suede_poly():
+    base = dict(MEMBER_OVERRIDES["best_v1910_all_winners"][5])
+    base["SLEEP_POD_SUEDE"] = _pair_skip("SLEEP_POD_SUEDE", "SLEEP_POD_POLYESTER", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1960_suede_poly"] = _r5_v1960_suede_poly()
+
+
+# v1970: v1950 + add OXYGEN_SHAKE_MORNING_BREATH pair_skip with EVENING_BREATH (different partner)
+def _r5_v1970_morning_evening():
+    base = dict(MEMBER_OVERRIDES["best_v1950_suede_nylon"][5])
+    base["OXYGEN_SHAKE_MORNING_BREATH"] = _pair_skip("OXYGEN_SHAKE_MORNING_BREATH", "OXYGEN_SHAKE_EVENING_BREATH", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1970_morning_evening"] = _r5_v1970_morning_evening()
+
+
+# v1980: v1950 + PEBBLES_L pair_skip(XL) — currently in carry overlay
+def _r5_v1980_pebbles_l_pair():
+    base = dict(MEMBER_OVERRIDES["best_v1950_suede_nylon"][5])
+    base["PEBBLES_L"] = _pair_skip("PEBBLES_L", "PEBBLES_XL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1980_pebbles_l_pair"] = _r5_v1980_pebbles_l_pair()
+
+
+# v1990: v1950 + GARLIC pair_skip(CHOCOLATE) - try OXYGEN with leader=CHOCO
+def _r5_v1990_garlic_choco():
+    base = dict(MEMBER_OVERRIDES["best_v1950_suede_nylon"][5])
+    base["OXYGEN_SHAKE_GARLIC"] = _pair_skip("OXYGEN_SHAKE_GARLIC", "OXYGEN_SHAKE_CHOCOLATE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v1990_garlic_choco"] = _r5_v1990_garlic_choco()
+
+
+# v2000: v1950 + try VACUUMING with naive_tight_mm instead of coint_mm (test if coint better)
+def _r5_v2000_vac_naive():
+    base = dict(MEMBER_OVERRIDES["best_v1950_suede_nylon"][5])
+    base["ROBOT_VACUUMING"] = ProductConfig(
+        symbol="ROBOT_VACUUMING", strategy="naive_tight_mm", position_limit=10,
+        params=dict(maker_size=5, tighten_ticks=1, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2000_vac_naive"] = _r5_v2000_vac_naive()
+
+
+# v2010: v1950 + COTTON pair_skip(NYLON) — replace trend_follow with pair_skip on COTTON
+def _r5_v2010_cotton_nylon():
+    base = dict(MEMBER_OVERRIDES["best_v1950_suede_nylon"][5])
+    base["SLEEP_POD_COTTON"] = _pair_skip("SLEEP_POD_COTTON", "SLEEP_POD_NYLON", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2010_cotton_nylon"] = _r5_v2010_cotton_nylon()
+
+
+# v2020: v1950 + POLYESTER pair_skip(NYLON)
+def _r5_v2020_poly_nylon():
+    base = dict(MEMBER_OVERRIDES["best_v1950_suede_nylon"][5])
+    base["SLEEP_POD_POLYESTER"] = _pair_skip("SLEEP_POD_POLYESTER", "SLEEP_POD_NYLON", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2020_poly_nylon"] = _r5_v2020_poly_nylon()
+
+
+# v2030: v1950 + COTTON pair_skip(NYLON) — combine SUEDE + COTTON (both lagger to NYLON)
+def _r5_v2030_suede_cotton_nylon():
+    base = dict(MEMBER_OVERRIDES["best_v1950_suede_nylon"][5])
+    base["SLEEP_POD_COTTON"] = _pair_skip("SLEEP_POD_COTTON", "SLEEP_POD_NYLON", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2030_suede_cotton_nylon"] = _r5_v2030_suede_cotton_nylon()
+
+
+# v2040: v2030 + POLYESTER also (3 SLEEP_POD pair_skips)
+def _r5_v2040_three_sleep_pods():
+    base = dict(MEMBER_OVERRIDES["best_v2030_suede_cotton_nylon"][5])
+    base["SLEEP_POD_POLYESTER"] = _pair_skip("SLEEP_POD_POLYESTER", "SLEEP_POD_NYLON", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2040_three_sleep_pods"] = _r5_v2040_three_sleep_pods()
+
+
+# v2050: v2010 ONLY (COTTON pair_skip without SUEDE, in case SUEDE+COTTON conflict)
+# Already exists as v2010, but let's also test COTTON without SUEDE on top of v1910
+def _r5_v2050_cotton_only_v1910():
+    base = dict(MEMBER_OVERRIDES["best_v1910_all_winners"][5])
+    base["SLEEP_POD_COTTON"] = _pair_skip("SLEEP_POD_COTTON", "SLEEP_POD_NYLON", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2050_cotton_only_v1910"] = _r5_v2050_cotton_only_v1910()
+
+
+# v2060: v2010 + revive SLEEP_POD_LAMB_WOOL with pair_skip(NYLON) (was dropped)
+def _r5_v2060_revive_lamb():
+    base = dict(MEMBER_OVERRIDES["best_v2010_cotton_nylon"][5])
+    base["SLEEP_POD_LAMB_WOOL"] = _pair_skip("SLEEP_POD_LAMB_WOOL", "SLEEP_POD_NYLON", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2060_revive_lamb"] = _r5_v2060_revive_lamb()
+
+
+# v2070: v2010 + revive PEBBLES_M with pair_skip(PEBBLES_XL)
+def _r5_v2070_revive_pebbles_m():
+    base = dict(MEMBER_OVERRIDES["best_v2010_cotton_nylon"][5])
+    base["PEBBLES_M"] = _pair_skip("PEBBLES_M", "PEBBLES_XL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2070_revive_pebbles_m"] = _r5_v2070_revive_pebbles_m()
+
+
+# v2080: v2010 + revive UV_VISOR_MAGENTA with pair_skip(AMBER)
+def _r5_v2080_revive_magenta():
+    base = dict(MEMBER_OVERRIDES["best_v2010_cotton_nylon"][5])
+    base["UV_VISOR_MAGENTA"] = _pair_skip("UV_VISOR_MAGENTA", "UV_VISOR_AMBER", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2080_revive_magenta"] = _r5_v2080_revive_magenta()
+
+
+# v2090: v2010 + revive TRANSLATOR_SPACE_GRAY with pair_skip(VOID)
+def _r5_v2090_revive_space_gray():
+    base = dict(MEMBER_OVERRIDES["best_v2010_cotton_nylon"][5])
+    base["TRANSLATOR_SPACE_GRAY"] = _pair_skip("TRANSLATOR_SPACE_GRAY", "TRANSLATOR_VOID_BLUE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2090_revive_space_gray"] = _r5_v2090_revive_space_gray()
+
+
+# v2100: v2090 + ASTRO_BLACK pair_skip(VOID) — was -1.8k alone, maybe stacks now
+def _r5_v2100_with_astro():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["TRANSLATOR_ASTRO_BLACK"] = _pair_skip("TRANSLATOR_ASTRO_BLACK", "TRANSLATOR_VOID_BLUE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2100_with_astro"] = _r5_v2100_with_astro()
+
+
+# v2110: v2090 + try SPACE_GRAY with ECLIPSE_CHARCOAL partner instead of VOID
+def _r5_v2110_space_eclipse():
+    base = dict(MEMBER_OVERRIDES["best_v2010_cotton_nylon"][5])  # base from v2010 (no SPACE_GRAY revive)
+    base["TRANSLATOR_SPACE_GRAY"] = _pair_skip("TRANSLATOR_SPACE_GRAY", "TRANSLATOR_ECLIPSE_CHARCOAL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2110_space_eclipse"] = _r5_v2110_space_eclipse()
+
+
+# v2120: v2090 + GRAPHITE_MIST pair_skip(VOID) — currently in carry overlay
+def _r5_v2120_mist_void():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["TRANSLATOR_GRAPHITE_MIST"] = _pair_skip("TRANSLATOR_GRAPHITE_MIST", "TRANSLATOR_VOID_BLUE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2120_mist_void"] = _r5_v2120_mist_void()
+
+
+# v2130: v2090 + ROBOT_IRONING pair_skip(ROBOT_DISHES) - DISHES is +140k leader
+def _r5_v2130_ironing_dishes():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["ROBOT_IRONING"] = _pair_skip("ROBOT_IRONING", "ROBOT_DISHES", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2130_ironing_dishes"] = _r5_v2130_ironing_dishes()
+
+
+# v2140: v2090 + ROBOT_MOPPING pair_skip(ROBOT_DISHES)
+def _r5_v2140_mopping_dishes():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["ROBOT_MOPPING"] = _pair_skip("ROBOT_MOPPING", "ROBOT_DISHES", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2140_mopping_dishes"] = _r5_v2140_mopping_dishes()
+
+
+# v2150: v2090 + OXYGEN_SHAKE_EVENING pair_skip(CHOCOLATE) - EVENING is +20k, CHOCO is +23k leader
+def _r5_v2150_evening_choco():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["OXYGEN_SHAKE_EVENING_BREATH"] = _pair_skip("OXYGEN_SHAKE_EVENING_BREATH", "OXYGEN_SHAKE_CHOCOLATE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2150_evening_choco"] = _r5_v2150_evening_choco()
+
+
+# v2160: v2090 + ASTRO pair_skip with ECLIPSE (alt partner instead of VOID)
+def _r5_v2160_astro_eclipse():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["TRANSLATOR_ASTRO_BLACK"] = _pair_skip("TRANSLATOR_ASTRO_BLACK", "TRANSLATOR_ECLIPSE_CHARCOAL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2160_astro_eclipse"] = _r5_v2160_astro_eclipse()
+
+
+# v2200: basket_skip (tracking_error_skip_mm) on NAIVE products (replace naive_mm with basket-aware)
+def _basket_skip(sym: str, dev_thresh: float = 1.5, size: int = 5) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym, strategy="tracking_error_skip_mm", position_limit=10,
+        params=dict(maker_size=size, tighten_ticks=1, z_window=300,
+                    dev_thresh=dev_thresh, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+    )
+
+
+def _r5_v2200_basket_skip():
+    """Replace all naive_tight_mm with basket_skip — full basket strategy bet."""
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    naive_products = [
+        "TRANSLATOR_ASTRO_BLACK",
+        "OXYGEN_SHAKE_CHOCOLATE", "OXYGEN_SHAKE_EVENING_BREATH",
+        "OXYGEN_SHAKE_MORNING_BREATH",
+        "SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY", "SNACKPACK_CHOCOLATE",
+        "PANEL_1X4", "PANEL_2X2", "PANEL_2X4",
+        "MICROCHIP_TRIANGLE",
+        "GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_SOLAR_WINDS",
+        "TRANSLATOR_VOID_BLUE",
+    ]
+    for p in naive_products:
+        base[p] = _basket_skip(p, 1.5, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2200_basket_skip"] = _r5_v2200_basket_skip()
+
+
+# v2210: basket_skip on a single product to isolate effect (TRANSLATOR_ASTRO_BLACK)
+def _r5_v2210_astro_basket():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["TRANSLATOR_ASTRO_BLACK"] = _basket_skip("TRANSLATOR_ASTRO_BLACK", 1.5, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2210_astro_basket"] = _r5_v2210_astro_basket()
+
+
+# v2220: basket_skip on PANEL_2X2 (weakest panel)
+def _r5_v2220_panel2x2_basket():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["PANEL_2X2"] = _basket_skip("PANEL_2X2", 1.5, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2220_panel2x2_basket"] = _r5_v2220_panel2x2_basket()
+
+
+# v2230: basket_skip on SNACKPACK_PISTACHIO (only unpaired snackpack)
+def _r5_v2230_pistachio_basket():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["SNACKPACK_PISTACHIO"] = _basket_skip("SNACKPACK_PISTACHIO", 1.5, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2230_pistachio_basket"] = _r5_v2230_pistachio_basket()
+
+
+# v2240: basket_skip on multiple OXYGEN flavors (since OXYGEN pair_skip failed, basket might work)
+def _r5_v2240_oxygen_basket():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    for p in ["OXYGEN_SHAKE_CHOCOLATE", "OXYGEN_SHAKE_EVENING_BREATH",
+              "OXYGEN_SHAKE_MORNING_BREATH"]:
+        base[p] = _basket_skip(p, 1.5, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2240_oxygen_basket"] = _r5_v2240_oxygen_basket()
+
+
+# v2250: basket_skip on remaining SNACKPACK products (PISTACHIO + STRAWBERRY + CHOCO)
+def _r5_v2250_snackpack_basket():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    for p in ["SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY", "SNACKPACK_CHOCOLATE"]:
+        base[p] = _basket_skip(p, 1.5, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2250_snackpack_basket"] = _r5_v2250_snackpack_basket()
+
+
+# v2300: v2090 + GALAXY_SOUNDS_SOLAR_FLAMES pair_skip(PLANETARY) replace carry
+def _r5_v2300_solar_flames_pair():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["GALAXY_SOUNDS_SOLAR_FLAMES"] = _pair_skip("GALAXY_SOUNDS_SOLAR_FLAMES", "GALAXY_SOUNDS_PLANETARY_RINGS", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2300_solar_flames_pair"] = _r5_v2300_solar_flames_pair()
+
+
+# Lag-based pair_skip helper
+def _pair_skip_lag(sym, partner, lag, pair_thresh=1.25, size=5):
+    return ProductConfig(
+        symbol=sym, strategy="pair_skip_lag_mm", position_limit=10,
+        params=dict(
+            partner=partner, partner_sign=-1.0, pair_thresh=pair_thresh,
+            partner_lag=lag, maker_size=size, tighten_ticks=1, z_window=300,
+            hard_pause_at=9, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+# v2400: Try lag-based pair_skip on UV_VISOR_RED with partner_lag=100
+def _r5_v2400_red_lag100():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["UV_VISOR_RED"] = _pair_skip_lag("UV_VISOR_RED", "UV_VISOR_AMBER", 100, 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2400_red_lag100"] = _r5_v2400_red_lag100()
+
+
+# v2410: Try lag=300 on UV_VISOR_RED
+def _r5_v2410_red_lag300():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["UV_VISOR_RED"] = _pair_skip_lag("UV_VISOR_RED", "UV_VISOR_AMBER", 300, 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2410_red_lag300"] = _r5_v2410_red_lag300()
+
+
+# v2420: Try lag=50 (very short) on MICROCHIP_CIRCLE
+def _r5_v2420_circle_lag50():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["MICROCHIP_CIRCLE"] = _pair_skip_lag("MICROCHIP_CIRCLE", "MICROCHIP_OVAL", 50, 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2420_circle_lag50"] = _r5_v2420_circle_lag50()
+
+
+# v2500: v2090 with z_window=100 on all pair_skip (faster warmup for live)
+def _r5_v2500_zwin100():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "pair_skip_mm":
+            new_params = dict(cfg.params)
+            new_params["z_window"] = 100
+            new_base[sym] = ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                                           position_limit=cfg.position_limit, params=new_params)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v2500_zwin100"] = _r5_v2500_zwin100()
+
+
+# v2510: z_window=200
+def _r5_v2510_zwin200():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "pair_skip_mm":
+            new_params = dict(cfg.params)
+            new_params["z_window"] = 200
+            new_base[sym] = ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                                           position_limit=cfg.position_limit, params=new_params)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v2510_zwin200"] = _r5_v2510_zwin200()
+
+
+# v2520: z_window=500
+def _r5_v2520_zwin500():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "pair_skip_mm":
+            new_params = dict(cfg.params)
+            new_params["z_window"] = 500
+            new_base[sym] = ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                                           position_limit=cfg.position_limit, params=new_params)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v2520_zwin500"] = _r5_v2520_zwin500()
+
+
+# v2600: v2090 + carry on PLANETARY_RINGS (worst live performer: -7.3k)
+# Decision based on live behavior; needs validation in BT to ensure not overfit
+def _r5_v2600_carry_planetary():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["GALAXY_SOUNDS_PLANETARY_RINGS"] = _inventory_carry("GALAXY_SOUNDS_PLANETARY_RINGS")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2600_carry_planetary"] = _r5_v2600_carry_planetary()
+
+
+# v2610: v2090 + carry on PANEL_2X2 (live -2.8k)
+def _r5_v2610_carry_panel2x2():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["PANEL_2X2"] = _inventory_carry("PANEL_2X2")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2610_carry_panel2x2"] = _r5_v2610_carry_panel2x2()
+
+
+# v2620: v2090 + carry on multiple weak naive products
+def _r5_v2620_carry_naive_weak():
+    base = dict(MEMBER_OVERRIDES["best_v2090_revive_space_gray"][5])
+    base["GALAXY_SOUNDS_PLANETARY_RINGS"] = _inventory_carry("GALAXY_SOUNDS_PLANETARY_RINGS")
+    base["PANEL_2X2"] = _inventory_carry("PANEL_2X2")
+    base["PANEL_1X4"] = _inventory_carry("PANEL_1X4")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2620_carry_naive_weak"] = _r5_v2620_carry_naive_weak()
+
+
+# v2630: v2090 - SPACE_GRAY revive (= v2010, but explicit) + carry on weak naive
+def _r5_v2630_no_spacegray_plus_carry():
+    base = dict(MEMBER_OVERRIDES["best_v2010_cotton_nylon"][5])
+    base["GALAXY_SOUNDS_PLANETARY_RINGS"] = _inventory_carry("GALAXY_SOUNDS_PLANETARY_RINGS")
+    base["PANEL_2X2"] = _inventory_carry("PANEL_2X2")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2630_no_spacegray_plus_carry"] = _r5_v2630_no_spacegray_plus_carry()
+
+
+# v2640: v2630 + carry on more weak naive (PEBBLES_L is already carry, try MORNING_BREATH)
+def _r5_v2640_carry_morning():
+    base = dict(MEMBER_OVERRIDES["best_v2630_no_spacegray_plus_carry"][5])
+    base["OXYGEN_SHAKE_MORNING_BREATH"] = _inventory_carry("OXYGEN_SHAKE_MORNING_BREATH")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2640_carry_morning"] = _r5_v2640_carry_morning()
+
+
+# v2650: v2630 + remove the GALAXY DARK_MATTER pair (live -3.3k, BT day4 +5.9k mixed)
+# But this might be overfit — just test
+def _r5_v2650_no_dark_matter():
+    base = dict(MEMBER_OVERRIDES["best_v2630_no_spacegray_plus_carry"][5])
+    base["GALAXY_SOUNDS_DARK_MATTER"] = ProductConfig(
+        symbol="GALAXY_SOUNDS_DARK_MATTER", strategy="naive_tight_mm", position_limit=10,
+        params=dict(maker_size=5, tighten_ticks=1, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2650_no_dark_matter"] = _r5_v2650_no_dark_matter()
+
+
+# v2660: v2630 + revive ROBOT_IRONING with carry (live didn't fire trend +0)
+def _r5_v2660_carry_ironing():
+    base = dict(MEMBER_OVERRIDES["best_v2630_no_spacegray_plus_carry"][5])
+    base["ROBOT_IRONING"] = _inventory_carry("ROBOT_IRONING")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2660_carry_ironing"] = _r5_v2660_carry_ironing()
+
+
+# v2670: v2630 + carry on UV_VISOR_AMBER (live underperformed trend)
+def _r5_v2670_carry_amber():
+    base = dict(MEMBER_OVERRIDES["best_v2630_no_spacegray_plus_carry"][5])
+    base["UV_VISOR_AMBER"] = _inventory_carry("UV_VISOR_AMBER")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v2670_carry_amber"] = _r5_v2670_carry_amber()
+
