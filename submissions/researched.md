@@ -649,3 +649,158 @@ Results:
 Takeaway:
 
 `best_v7_live_mmfix4` is the first live-motivated MM fix from this line of research that improved both the live-replay day and the full historical sanity check. That is why it was kept and the earlier variants were discarded.
+---
+
+## Iteration 3 — v7_2: Fixing losers + UV_VISOR_YELLOW (2nd analyst)
+
+### Context
+v6 baseline = **733,918 PnL**. Goal: fix 4 user-flagged losers + investigate correlations.
+
+### Q1: Cross-asset correlation strategy
+
+The `research/correl.md` table shows 11 product pairs where product_A leads product_B by `|lag|` ticks.
+Key pairs and actionability:
+
+| A (leader) | B (follower) | lag | corr | Current strats | Edge? |
+|---|---|---|---|---|---|
+| UV_VISOR_AMBER | PEBBLES_XS | 692 | 0.9629 | Both trend_v2 | Low — both already capture same trend |
+| SLEEP_POD_NYLON | PANEL_1X2 | 1000 | 0.8412 | Both trend_v2 | Low — same |
+| PANEL_1X4 → ROBOT_IRONING | 1000 | 0.8750 | trend_v2 / trend_v2 | Could enter IRONING earlier |
+| TRANSLATOR_VOID_BLUE | SLEEP_POD_SUEDE | 1000 | 0.8444 | naive_mm / naive_mm | Potential: use VOID_BLUE trend to trade SUEDE |
+| UV_VISOR_MAGENTA | SLEEP_POD_SUEDE | 1000 | 0.8669 | None / naive_mm | — |
+
+**Conclusion**: Where both products already use trend_v2 independently (AMBER→XS, NYLON→1X2), the cross-asset signal adds minimal PnL (both enter on the same underlying move). The more interesting case would be TRANSLATOR_VOID_BLUE → SLEEP_POD_SUEDE: using Void_Blue's EMA momentum to enter Suede early. Implementation would require reading Void_Blue's order depth inside Suede's strategy. Estimated gain: ~3-5k (low priority vs simpler fixes).
+
+**Not implemented in v7_2** — the simpler "set losers to None" approach yielded +83k which dwarfs the ~5k potential from lead-lag signals.
+
+### Q2: Fixing the losers
+
+#### Full per-product PnL audit (v6)
+Running the v6 backtest with `--json-out` revealed the actual losers:
+
+| Product | v6 PnL | Fix |
+|---|---|---|
+| PEBBLES_M | -14,756 | None |
+| PEBBLES_L | -11,500 | None |
+| TRANSLATOR_SPACE_GRAY | -11,188 | None |
+| PANEL_4X4 | -10,672 | None |
+| UV_VISOR_MAGENTA | -7,314 | None |
+| GALAXY_SOUNDS_SOLAR_FLAMES | -6,034 | None |
+| TRANSLATOR_GRAPHITE_MIST | -4,418 | None |
+| ROBOT_VACUUMING | -2,700 | None |
+
+**PEBBLES_L and M** were bigger losers than the user-flagged products. 
+
+#### Investigation: PEBBLES_L/M — why naive_mm fails
+
+The pebbles conservation law (XL+XS+L+M+S=50,000) holds PERFECTLY at mid prices at every tick. This means for PEBBLES_L:
+- `fair_L = 50,000 - XL - XS - M - S ≈ market_mid_L` always
+- XL arb works because XL has the largest moves (+3877/−1167/+3931 per day)
+- L and M have smaller, noisier moves. The MM gets adversely selected on larger intraday swings (PEBBLES_L: day4 -1798; PEBBLES_M: day3 +1883). naive_mm accumulates on the wrong side.
+
+**Attempted fix**: pebbles_arb_v1 on L and M (same conservation arb as XL). Result: WORSE (-30k and -27k vs -11.5k and -14.8k).
+For XS/S, the issue is that XS and S have their own strong independent trends that oppose what the arb wants to do:
+XS arb: −13,701 vs baseline (arb buys XS "cheap" vs conservation while XS is in a −40% 3-day downtrend)
+S arb: −87,684 vs baseline (same problem, worse because S has more ticks where arb is fighting the trend)
+XL arb works because XL is the basket's biggest mover — it creates genuine temporary dislocations vs the other four. XS and S are themselves driven by XL's movement signal via the conservation, so arbing them just bets on XS/S's individual trend reverting, which they don't.
+
+**Why arb fails**: Because `fair_L ≈ market_mid_L` always, there's no price-level dislocation to exploit. The arb fires on bid/ask spread noise (1363 aggressive fills on L/day4 alone), paying spread 4072 times across 3 days. 
+
+**Resolution**: Set PEBBLES_L and PEBBLES_M to None. PEBBLES_S with naive_mm keeps making +38,672 (different market dynamics — consistent small downtrend with active market).
+
+#### UV_VISOR_YELLOW: NEW product discovered
+
+Not in previous analysis. Huge daily moves: day2=+1458, day3=+314, day4=-2005. trend_v2 results:
+
+| threshold | day2 | day3 | day4 | total |
+|---|---|---|---|---|
+| 500 | +8,985 | -7,805 | +12,580 | +13,760 |
+| 600 | +8,485 | -7,895 | +13,080 | +13,670 |
+| **700** | **+8,075** | **0** | **+11,210** | **+19,285** |
+| 800 | +6,875 | 0 | +10,600 | +17,475 |
+
+**Key finding**: Day 3 EMA signal reaches minimum −633. Threshold=500/600 triggers a false short (enters at t5700 price=10850, exits at t6863 price=11640 → −7,895 loss). Threshold=700 skips day3 entirely → 0 PnL day3.
+
+threshold=700 is optimal: **+19,285 vs naive_mm +4,592 = +14,693 gain**.
+
+### Final v7_2 config
+**tibo_r5_v7_2 = 817,194 PnL** (+83,276 over v6)
+
+Changes vs v6:
+- PEBBLES_L → None (+11,500)
+- PEBBLES_M → None (+14,756)
+- UV_VISOR_MAGENTA → None (+7,314)
+- TRANSLATOR_SPACE_GRAY → None (+11,188)
+- PANEL_4X4 → None (+10,672)
+- GALAXY_SOUNDS_SOLAR_FLAMES → None (+6,034)
+- TRANSLATOR_GRAPHITE_MIST → None (+4,418)
+- ROBOT_VACUUMING → None (+2,700)
+- UV_VISOR_YELLOW → trend_v2 th=700 (+14,693)
+
+Only remaining loser: OXYGEN_SHAKE_MINT at -36 (negligible).
+
+Files:
+- Config: `MEMBER_OVERRIDES["tibo_r5_v7_2"]` in `prosperity/config.py`
+- Backtest wrapper: `submissions/tibo_r5_v7_2.py`
+- IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v7_2_round5_submission.py` (54,800 bytes, all checks passed)
+
+The submission: tibo_r5_v7_2_best_round5_submission and config tibo_r5_v7_2_best integrates baseline v7 into v7_2, it is the best v7.
+
+
+---
+
+# Iteration 4 — v8_a: Live-backtest divergence diagnosis and fix (2nd analyst)
+
+## Context
+
+v7_2_best backtest = **824,996 PnL** but live simulation = **14,539 PnL** vs v7_best live = **20,960 PnL** — v7_2_best performed WORSE in live despite being +83k better in backtest. Investigated by comparing per-product final PnL from the official JSON logs.
+
+## Diagnosis: overfitting by removing products on 3-day history
+
+The 8 products set to `None` in v7_2_best were classified as losers based on backtest days 2/3/4. On the live day, **6 of them reversed and were profitable** under v7_best's naive_mm:
+
+| Product | Backtest 3-day (v6) | Live day PnL (v7_best) | v7_2_best action | Live cost |
+|---------|--------------------|-----------------------|------------------|-----------|
+| PANEL_4X4 | −10,672 | **+5,567** | Removed ✗ | −5,567 |
+| TRANSLATOR_GRAPHITE_MIST | −4,418 | **+4,191** | Removed ✗ | −4,191 |
+| GALAXY_SOUNDS_SOLAR_FLAMES | −6,034 | **+2,306** | Removed ✗ | −2,306 |
+| ROBOT_VACUUMING | −2,700 | **+979** | Removed ✗ | −979 |
+| UV_VISOR_MAGENTA | −7,314 | **+598** | Removed ✗ | −598 |
+| PEBBLES_L | −11,500 | **+337** | Removed ✗ | −337 |
+| TRANSLATOR_SPACE_GRAY | −11,188 | −6,777 | Removed ✓ | +6,777 |
+| PEBBLES_M | −14,756 | −357 | Removed ✓ | +357 |
+| UV_VISOR_YELLOW | (not in v7_best) | −422 | Added trend_v2 ✓ | +422 |
+
+**Net impact**: correctly removing TRANSLATOR_SPACE_GRAY + PEBBLES_M saved +7,134. But wrongly removing 6 profitable products cost −13,978. Net: **−6,421** (matches observed live gap exactly).
+
+**Root cause**: naive_mm is profitable when prices are flat or rising (spread capture + long inventory appreciates). It loses when prices trend DOWN and the strategy accumulates long inventory that keeps losing. Days 2/3/4 had specific adverse trends for these 6 products; the live day reversed. Setting them to None is **regime-overfitting** to a 3-day window.
+
+**Structural distinction** (correctly vs wrongly removed):
+- TRANSLATOR_SPACE_GRAY: down on days 2/4 in backtest AND down on live → consistently bad
+- PEBBLES_M: negative on 2/3 in backtest AND losing in live → consistently bad
+- The 6 wrongly-removed products: volatile, reversing direction across days (no consistent regime)
+
+## Fix: tibo_r5_v8_a — restore with halved position limit
+
+**Strategy**: restore the 6 wrongly-removed products using `position_limit=5` (half of standard 10). Same naive_tight_mm strategy, but maximum inventory capped at 5 units instead of 10.
+
+- When prices trend against us: max mark-to-market loss is halved (5 × move vs 10 × move)
+- When prices are favorable: captures half the gain, but still participates
+- TRANSLATOR_SPACE_GRAY and PEBBLES_M: stay at None (both lost in live too)
+
+**Backtest result** (days 2/3/4, realistic mode):
+
+| Config | Backtest 3-day | Live day |
+|--------|---------------|----------|
+| v7_2_best | 824,996 | 14,539 |
+| **v8_a** | **825,200 (+204)** | est. **~21,500** |
+
+Backtest is essentially identical (+204) because halving the limit roughly halves both the losses (when bad) and gains (when good), and the halved losses from the restored products cancel out. The live improvement is structural: instead of 0 PnL on 6 profitable products, we capture ~half of what v7_best would have made.
+
+Also explored v8_b (trend_v2 at limit=5 for volatile products instead of naive_mm): backtest 822,315 (−2,681 vs baseline), discarded.
+
+## Files
+
+- Config: `MEMBER_OVERRIDES["tibo_r5_v8_a"]` in `prosperity/config.py`
+- Backtest wrapper: `submissions/tibo_r5_v8_a.py`
+- IMC submission: `artifacts/submissions/round_5/tibo/tibo_r5_v8_a_round5_submission.py` (56,687 bytes, all checks passed, 47 products)

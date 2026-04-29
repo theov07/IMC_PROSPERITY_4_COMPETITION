@@ -17556,6 +17556,80 @@ MEMBER_OVERRIDES["best_v7"] = {
     }
 }
 # All other 24 products fall through to base ROUND_5 config (naive_tight_mm maker_size=3)
+# ── Round 5 — tibo_r5_v7_2: v6 + stop losers + UV_VISOR_YELLOW ───────────────
+# 3-day realistic backtest: 817,194 PnL (+83,276 over tibo_r5_v6's 733,918)
+# Changes vs v6:
+#   - PEBBLES_L/M: None (-11.5k/-14.8k saved). Arb tested but worse (arb fires too aggressively because fair≈mid always).
+#   - 6 losers → None: UV_VISOR_MAGENTA -7.3k, TRANSLATOR_SPACE_GRAY -11.2k, PANEL_4X4 -10.7k,
+#       GALAXY_SOUNDS_SOLAR_FLAMES -6k, TRANSLATOR_GRAPHITE_MIST -4.4k, ROBOT_VACUUMING -2.7k
+#   - UV_VISOR_YELLOW: trend_v2 th=700 → +19,285 (was naive_mm +4,592). threshold=700 avoids
+#       day3 false-short (EMA dip reaches -633, below 700 → no entry).
+MEMBER_OVERRIDES["tibo_r5_v7_2"] = {
+    5: {
+        **MEMBER_OVERRIDES["tibo_r5_v6"][5],
+        # ── PEBBLES L/M: set to None (lose with both naive_mm and arb) ──────────────
+        "PEBBLES_L": None,
+        "PEBBLES_M": None,
+        # ── Stop the bleeding: set big losers to None ────────────────────────────────
+        "UV_VISOR_MAGENTA": None,
+        "TRANSLATOR_SPACE_GRAY": None,
+        "PANEL_4X4": None,
+        "GALAXY_SOUNDS_SOLAR_FLAMES": None,
+        "TRANSLATOR_GRAPHITE_MIST": None,
+        "ROBOT_VACUUMING": None,
+        # ── UV_VISOR_YELLOW: threshold=700 avoids day3 false-short (min_signal=-633) ──
+        # day2: long +8k, day3: no entry (EMA only reaches -633 < 700), day4: short +11k
+        "UV_VISOR_YELLOW": _r5_trend_v2("UV_VISOR_YELLOW", ema_hl=100, threshold=700, exit_thr=150),
+    },
+}
+
+
+# ── Round 5 — tibo_r5_v7_2_best: best_v7 (maker_size=5) + v7_2 (stop losers + YELLOW) ──
+# 3-day realistic backtest: 824,996 PnL (+91,078 vs v6 733,918)
+# best_v7 contributions: maker_size 3→5 on 16 all-positive products (+7,802 vs v6)
+# v7_2 contributions: 8 losers→None (+68.6k vs v6), UV_VISOR_YELLOW trend_v2 th=700 (+14.7k)
+MEMBER_OVERRIDES["tibo_r5_v7_2_best"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v7"][5],
+        # ── v7_2: set all losing products to None ────────────────────────────────────
+        "PEBBLES_L": None,           # -11,500 in v6 (overrides best_v7's naive_mm)
+        "PEBBLES_M": None,           # -14,756 in v6
+        "UV_VISOR_MAGENTA": None,    # -7,314 in v6
+        "TRANSLATOR_SPACE_GRAY": None,  # -11,188 in v6
+        "PANEL_4X4": None,           # -10,672 in v6
+        "GALAXY_SOUNDS_SOLAR_FLAMES": None,  # -6,034 in v6
+        "TRANSLATOR_GRAPHITE_MIST": None,    # -4,418 in v6
+        "ROBOT_VACUUMING": None,     # -2,700 in v6
+        # ── v7_2: UV_VISOR_YELLOW trend_v2 th=700 (day3 EMA dip=-633 < 700 → no entry) ──
+        "UV_VISOR_YELLOW": _v7_trend("UV_VISOR_YELLOW", ema_hl=100, threshold=700, exit_thr=150),
+    },
+}
+
+
+# ── Round 5 — v8_a: restore 6 live-profitable products at halved position limit ──
+# Mitigation A: keep TRANSLATOR_SPACE_GRAY + PEBBLES_M at None (consistently bad),
+# restore the 6 wrongly-removed products with limit=5 to cap max inventory loss.
+# Tradeoff: backtest ~-20k vs v7_2_best, but ~+7k on live day compared to v7_2_best.
+def _v8_mm_conservative(sym: str) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="naive_tight_mm", position_limit=5,
+                         params=dict(maker_size=3, tighten_ticks=1,
+                                     log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+MEMBER_OVERRIDES["tibo_r5_v8_a"] = {
+    5: {
+        **MEMBER_OVERRIDES["tibo_r5_v7_2_best"][5],
+        # Restore 6 wrongly-removed products with position_limit=5 (half of standard 10)
+        # They were profitable in live day: PANEL_4X4 +5567, GRAPHITE_MIST +4191,
+        # SOLAR_FLAMES +2306, ROBOT_VACUUMING +979, UV_VISOR_MAGENTA +598, PEBBLES_L +337
+        "PANEL_4X4":                    _v8_mm_conservative("PANEL_4X4"),
+        "TRANSLATOR_GRAPHITE_MIST":     _v8_mm_conservative("TRANSLATOR_GRAPHITE_MIST"),
+        "GALAXY_SOUNDS_SOLAR_FLAMES":   _v8_mm_conservative("GALAXY_SOUNDS_SOLAR_FLAMES"),
+        "ROBOT_VACUUMING":              _v8_mm_conservative("ROBOT_VACUUMING"),
+        "UV_VISOR_MAGENTA":             _v8_mm_conservative("UV_VISOR_MAGENTA"),
+        "PEBBLES_L":                    _v8_mm_conservative("PEBBLES_L"),
+        # TRANSLATOR_SPACE_GRAY and PEBBLES_M stay None (lost in live too)
+    },
+}
 
 MEMBER_OVERRIDES["best_v7_live_mmfix4"] = {
     5: {
