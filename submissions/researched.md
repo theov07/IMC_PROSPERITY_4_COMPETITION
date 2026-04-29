@@ -1027,3 +1027,83 @@ A3's two genuine changes vs best_v10 (PANEL_2X2 size 5→3, ROBOT_LAUNDRY passiv
 
 Config: `MEMBER_OVERRIDES["best_v12_A1_A3"]` in `prosperity/config.py`
 Wrapper: `submissions/best_v12_A1_A3.py`
+
+
+# ITERATION 7 — A1 SNACKPACK Cross-Product MM Research (2026-04-29)
+
+## Goal
+Explore whether the strong pairwise correlations in SNACKPACK products can be exploited to improve on naive_tight_mm.
+
+## Key findings from data analysis
+
+### Pairwise same-tick (lag-0) correlations
+| Pair | Return corr | Notes |
+|------|------------|-------|
+| CHOCOLATE ↔ VANILLA | **-0.916** | Strongest negative pair |
+| STRAWBERRY ↔ RASPBERRY | **-0.924** | Even stronger negative |
+| PISTACHIO ↔ STRAWBERRY | **+0.913** | Positive, same direction |
+| PISTACHIO ↔ RASPBERRY | **-0.831** | Implied by above two |
+
+### No lag-1 predictive power
+All lag-1 cross-correlations ≈ 0.001–0.02. CHOCOLATE does NOT lead VANILLA by 1 tick. The relationship is purely simultaneous — no exploitable signal from one product predicting the other's next tick.
+
+### Sum mean-reversion (key finding)
+- **AR1(CHOC+VANI sum returns) = -0.34** — consistent across all 3 days
+- **AR1(STRAW+RASP sum returns) = -0.27**
+- Individual products: AR1 ≈ -0.03 (much weaker)
+- Interpretation: when CHOCOLATE goes up without VANILLA going down proportionally (sum deviates), the sum reverts by ~34% on the next tick
+
+### Strategy tested: SnackpackCrossMMV1_A1
+**File**: `prosperity/strategies/round_5/tibo/snackpack_cross_mm_A1.py`
+
+Tracks CHOC+VANI sum vs its EWMA (z_window-tick half-life). When z > 0 (sum high = products elevated), shifts VANILLA quotes DOWN by `shift_per_z × z` ticks. When z < 0, shifts UP.
+
+### Critical finding: asymmetric benefit
+- **VANILLA only** with partner=CHOCOLATE: **+16,742 improvement** (consistent across all z_window)
+- CHOCOLATE with partner=VANILLA: **-20,006** (hurts badly)
+- STRAWBERRY with partner=RASPBERRY: **-10,172** (hurts)
+- RASPBERRY with partner=STRAWBERRY: **-2,677** (hurts)
+
+**Why VANILLA benefits but others don't**:
+- VANILLA has a mixed-to-upward daily trend. The signal (when CHOC spikes, shift VANI quotes down) lets us buy VANI at temporarily depressed prices during CHOC spikes, then VANI recovers. Net: better average entry price.
+- CHOCOLATE trends DOWN. Shifting CHOC quotes down when sum is high reduces fill efficiency (bids below market) on a product where every fill should earn the spread. Net: missed fills dominate.
+- STRAWBERRY trends UP consistently. Shifting quotes DOWN misses uptrend fills.
+
+### Parameter sweep for VANILLA (z_window, shift_per_z=1.0)
+| z_window | VANI improvement | Total improvement | VANI std/day |
+|----------|-----------------|-------------------|--------------|
+| 100 | +4,308 | +4,307 | high |
+| 500 | +11,506 | +11,505 | moderate |
+| 1000 | +14,964 | +14,963 | 2,852 |
+| 1500 | +17,171 | +17,170 | 1,831 |
+| 1600 | +17,789 | +17,789 | 1,660 |
+| 1700 | +17,539 | +17,539 | 1,675 |
+| **1800** | **+17,360** | **+17,360** | **1,594** |
+| **1900** | **+16,742** | **+16,742** | **843** ← most stable |
+| 2000 | +16,225 | +16,225 | 902 |
+| 2500 | +13,592 | +13,592 | 239 |
+| 3000 | +13,305 | +13,305 | 814 |
+
+**Chosen: z_window=1900** — plateau stability over pure total maximization. Per-day VANI improvements: +4,403/+6,012/+6,328 (std=843, all 3 days positive, day3≈day4 which suggests no overfitting to day 4 trend).
+
+## Final config: best_v12_snackpack_A1
+
+| Config | Backtest PnL |
+|--------|-------------|
+| best_v12_A1_A3 (baseline) | 851,678 |
+| **best_v12_snackpack_A1** | **868,420** |
+
+Changes vs best_v12_A1_A3:
+- SNACKPACK_VANILLA: `snackpack_cross_mm_v1_A1` (partner=CHOCOLATE, z_window=1900, shift_per_z=1.0)
+- All other products: identical to best_v12_A1_A3
+
+Config: `MEMBER_OVERRIDES["best_v12_snackpack_A1"]` in `prosperity/config.py` — self-contained, no inheritance.
+Strategy file: `prosperity/strategies/round_5/tibo/snackpack_cross_mm_A1.py`
+Submission wrapper: `submissions/best_v12_snackpack_A1.py`
+
+## What didn't work
+- CHOC/STRAW/RASP/PISTA with cross_mm: all hurt (see above)
+- STRAW+RASP sum z-score on both products: -12,850 vs baseline
+- Momentum cross (VANI vs STRAW cumulative return crossover): 85% "momentum" on days 2/3 but only 59% on day 4 — not exploitable (it's just STRAW's daily trend, not a signal)
+- PISTACHIO-STRAWBERRY momentum: tick correlation +0.91 but they diverge directionally (STRAW up, PISTA down) — no arb, just a structural level divergence
+

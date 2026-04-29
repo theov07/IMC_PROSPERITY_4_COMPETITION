@@ -17826,3 +17826,78 @@ MEMBER_OVERRIDES["best_v12_A1_A3"] = {
     }
 }
 
+
+# ── A1 SNACKPACK cross-product MM tests ──────────────────────────────────────
+# Helper for snackpack_cross_mm_v1_A1 params
+def _snack_cross_A1(sym: str, partner: str, z_window: int = 300,
+                    shift_per_z: float = 1.0, z_clamp: float = 3.0) -> ProductConfig:
+    return ProductConfig(symbol=sym, strategy="snackpack_cross_mm_v1_A1",
+                         position_limit=10,
+                         params=dict(partner_product=partner, z_window=z_window,
+                                     shift_per_z=shift_per_z, z_clamp=z_clamp,
+                                     maker_size=5, tighten_ticks=1,
+                                     position_limit=10, log_flush_ts=1000,
+                                     ts_increment=100, last_ts_value=999900))
+
+
+# ── A1 FINAL: best_v12_snackpack_A1 — self-contained, VANILLA uses cross_mm z=1900 ──
+# VANILLA: snackpack_cross_mm_v1_A1 with z_window=1900, shift_per_z=1.0
+#   → +16,742 over best_v12_A1_A3 (851,678 → 868,420), all 3 days positive
+#   Signal: CHOC+VANI sum AR1=-0.34; when sum high→VANI quotes lower; when low→higher
+#   Per-day improvements: +4,403 / +6,012 / +6,328 (std=843, most stable in sweep)
+MEMBER_OVERRIDES["best_v12_snackpack_A1"] = {
+    5: {
+        # Products set to None (skip trading — known losers from v7_2 analysis)
+        "PEBBLES_M": None,
+        "SLEEP_POD_LAMB_WOOL": None,
+        "TRANSLATOR_SPACE_GRAY": None,
+        "GALAXY_SOUNDS_BLACK_HOLES": ProductConfig(symbol="GALAXY_SOUNDS_BLACK_HOLES", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "GALAXY_SOUNDS_DARK_MATTER": ProductConfig(symbol="GALAXY_SOUNDS_DARK_MATTER", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "GALAXY_SOUNDS_PLANETARY_RINGS": ProductConfig(symbol="GALAXY_SOUNDS_PLANETARY_RINGS", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "GALAXY_SOUNDS_SOLAR_FLAMES": ProductConfig(symbol="GALAXY_SOUNDS_SOLAR_FLAMES", strategy="naive_tight_mm", position_limit=5, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "GALAXY_SOUNDS_SOLAR_WINDS": ProductConfig(symbol="GALAXY_SOUNDS_SOLAR_WINDS", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "MICROCHIP_CIRCLE": ProductConfig(symbol="MICROCHIP_CIRCLE", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "MICROCHIP_OVAL": ProductConfig(symbol="MICROCHIP_OVAL", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "MICROCHIP_RECTANGLE": ProductConfig(symbol="MICROCHIP_RECTANGLE", strategy="coint_mm_v1", position_limit=10, params=dict(partner_product='MICROCHIP_SQUARE', mean_half_life=5000, z_window=1000, entry_z=1.2, exit_z=0.0, taker_size=10, passive_size=3, tighten_ticks=1, position_limit=10, last_ts_value=999900)),
+        "MICROCHIP_SQUARE": ProductConfig(symbol="MICROCHIP_SQUARE", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=100, threshold=250, exit_threshold=80, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "MICROCHIP_TRIANGLE": ProductConfig(symbol="MICROCHIP_TRIANGLE", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "OXYGEN_SHAKE_CHOCOLATE": ProductConfig(symbol="OXYGEN_SHAKE_CHOCOLATE", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "OXYGEN_SHAKE_EVENING_BREATH": ProductConfig(symbol="OXYGEN_SHAKE_EVENING_BREATH", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "OXYGEN_SHAKE_GARLIC": ProductConfig(symbol="OXYGEN_SHAKE_GARLIC", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=150, threshold=700, exit_threshold=150, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "OXYGEN_SHAKE_MINT": ProductConfig(symbol="OXYGEN_SHAKE_MINT", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "OXYGEN_SHAKE_MORNING_BREATH": ProductConfig(symbol="OXYGEN_SHAKE_MORNING_BREATH", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "PANEL_1X2": ProductConfig(symbol="PANEL_1X2", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=100, threshold=80, exit_threshold=30, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "PANEL_1X4": ProductConfig(symbol="PANEL_1X4", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "PANEL_2X2": ProductConfig(symbol="PANEL_2X2", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "PANEL_2X4": ProductConfig(symbol="PANEL_2X4", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "PANEL_4X4": ProductConfig(symbol="PANEL_4X4", strategy="naive_tight_mm", position_limit=5, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "PEBBLES_L": ProductConfig(symbol="PEBBLES_L", strategy="naive_tight_mm", position_limit=5, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "PEBBLES_S": ProductConfig(symbol="PEBBLES_S", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "PEBBLES_XL": ProductConfig(symbol="PEBBLES_XL", strategy="pebbles_arb_v1", position_limit=10, params=dict(partner_products=['PEBBLES_L', 'PEBBLES_M', 'PEBBLES_S', 'PEBBLES_XS'], sum_target=50000.0, edge_ticks=7.0, passive_half_spread=6.0, taker_size=10, passive_size=5, ewma_alpha=0.05, position_limit=10, last_ts_value=999900)),
+        "PEBBLES_XS": ProductConfig(symbol="PEBBLES_XS", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=150, threshold=250, exit_threshold=80, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "ROBOT_DISHES": ProductConfig(symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v1", position_limit=10, params=dict(entry_threshold=20.0, taker_size=10, passive_size=0, exit_ticks=0, position_limit=10, last_ts_value=999900)),
+        "ROBOT_IRONING": ProductConfig(symbol="ROBOT_IRONING", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=150, threshold=100, exit_threshold=40, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "ROBOT_LAUNDRY": ProductConfig(symbol="ROBOT_LAUNDRY", strategy="coint_mm_v1", position_limit=10, params=dict(partner_product='ROBOT_VACUUMING', mean_half_life=5000, z_window=2000, entry_z=1.5, exit_z=0.0, taker_size=10, passive_size=1, tighten_ticks=1, position_limit=10, last_ts_value=999900)),
+        "ROBOT_MOPPING": ProductConfig(symbol="ROBOT_MOPPING", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=150, threshold=100, exit_threshold=40, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "ROBOT_VACUUMING": ProductConfig(symbol="ROBOT_VACUUMING", strategy="coint_mm_v1", position_limit=10, params=dict(partner_product='ROBOT_LAUNDRY', mean_half_life=5000, z_window=2000, entry_z=1.5, exit_z=0.0, taker_size=10, passive_size=3, tighten_ticks=1, position_limit=10, last_ts_value=999900)),
+        "SLEEP_POD_COTTON": ProductConfig(symbol="SLEEP_POD_COTTON", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=100, threshold=80, exit_threshold=30, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "SLEEP_POD_NYLON": ProductConfig(symbol="SLEEP_POD_NYLON", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=100, threshold=80, exit_threshold=30, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "SLEEP_POD_POLYESTER": ProductConfig(symbol="SLEEP_POD_POLYESTER", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=150, threshold=600, exit_threshold=150, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "SLEEP_POD_SUEDE": ProductConfig(symbol="SLEEP_POD_SUEDE", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "SNACKPACK_CHOCOLATE": ProductConfig(symbol="SNACKPACK_CHOCOLATE", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "SNACKPACK_PISTACHIO": ProductConfig(symbol="SNACKPACK_PISTACHIO", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "SNACKPACK_RASPBERRY": ProductConfig(symbol="SNACKPACK_RASPBERRY", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "SNACKPACK_STRAWBERRY": ProductConfig(symbol="SNACKPACK_STRAWBERRY", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        # KEY CHANGE: VANILLA uses snackpack_cross_mm_v1_A1 (partner=CHOCOLATE, z=1900)
+        "SNACKPACK_VANILLA": ProductConfig(symbol="SNACKPACK_VANILLA", strategy="snackpack_cross_mm_v1_A1", position_limit=10, params=dict(partner_product='SNACKPACK_CHOCOLATE', z_window=1900, shift_per_z=1.0, z_clamp=3.0, maker_size=5, tighten_ticks=1, position_limit=10, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "TRANSLATOR_ASTRO_BLACK": ProductConfig(symbol="TRANSLATOR_ASTRO_BLACK", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "TRANSLATOR_ECLIPSE_CHARCOAL": ProductConfig(symbol="TRANSLATOR_ECLIPSE_CHARCOAL", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "TRANSLATOR_GRAPHITE_MIST": ProductConfig(symbol="TRANSLATOR_GRAPHITE_MIST", strategy="naive_tight_mm", position_limit=5, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "TRANSLATOR_VOID_BLUE": ProductConfig(symbol="TRANSLATOR_VOID_BLUE", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "UV_VISOR_AMBER": ProductConfig(symbol="UV_VISOR_AMBER", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=100, threshold=80, exit_threshold=30, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+        "UV_VISOR_MAGENTA": ProductConfig(symbol="UV_VISOR_MAGENTA", strategy="naive_tight_mm", position_limit=5, params=dict(maker_size=3, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "UV_VISOR_ORANGE": ProductConfig(symbol="UV_VISOR_ORANGE", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "UV_VISOR_RED": ProductConfig(symbol="UV_VISOR_RED", strategy="naive_tight_mm", position_limit=10, params=dict(maker_size=5, tighten_ticks=1, log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+        "UV_VISOR_YELLOW": ProductConfig(symbol="UV_VISOR_YELLOW", strategy="trend_follow_v2", position_limit=10, params=dict(ema_half_life=100, threshold=700, exit_threshold=150, warmup_ticks=0, position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+    }
+}
