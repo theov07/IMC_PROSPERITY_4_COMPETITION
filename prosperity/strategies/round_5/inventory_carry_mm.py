@@ -15,11 +15,14 @@ This is similar to Tibo's late_flatten but applied tick-by-tick when carry
 turns adversarial.
 
 Params:
-  maker_size           default 5
-  tighten_ticks        default 1
-  trend_hl             EMA half life (default 200)
-  carry_pause_min_pos  min position to activate (default 3)
-  hard_pause_at        default 9
+  maker_size              default 5
+  tighten_ticks           default 1
+  trend_hl                EMA half life (default 200)
+  carry_pause_min_pos     min position to activate (default 3)
+  hard_pause_at           default 9
+  carry_trend_min_abs     minimum |trend| to trigger pause (default 0 = any negative/positive).
+                          Raising this avoids spurious pauses from minor intraday oscillations
+                          while still catching large reversals.
 """
 from __future__ import annotations
 
@@ -49,6 +52,7 @@ class InventoryCarryMMStrategy(BaseStrategy):
         trend_hl = int(self.params.get("trend_hl", 200))
         carry_min_pos = int(self.params.get("carry_pause_min_pos", 3))
         hard_pause = int(self.params.get("hard_pause_at", 9))
+        carry_trend_min = float(self.params.get("carry_trend_min_abs", 0.0))
 
         spread = book.best_ask - book.best_bid
         bid_p = book.best_bid + tighten if spread >= 2 else book.best_bid
@@ -66,11 +70,11 @@ class InventoryCarryMMStrategy(BaseStrategy):
         post_bid = position < hard_pause
         post_ask = position > -hard_pause
 
-        # Carry pause
+        # Carry pause — only fire when |trend| exceeds carry_trend_min_abs
         if abs(position) >= carry_min_pos:
-            if position > 0 and trend < 0:
+            if position > 0 and trend < -carry_trend_min:
                 post_bid = False  # don't add to long when trending down
-            elif position < 0 and trend > 0:
+            elif position < 0 and trend > carry_trend_min:
                 post_ask = False  # don't add to short when trending up
 
         orders: List[Order] = []

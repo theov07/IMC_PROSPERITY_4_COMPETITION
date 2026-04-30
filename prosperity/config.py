@@ -19849,8 +19849,6 @@ _v14_dir = {
     "ROBOT_IRONING":       _sc_trend14("ROBOT_IRONING",       ema_hl=100, thr=50,  exit_thr=20),
     # PEBBLES_S: keep naive_mm (38k baseline >> Theo's 19k directional) — no change
 }
-MEMBER_OVERRIDES["test_v14_dir_A2"] = {5: _v14_dir}
-
 # ── best_v14_A2 (OLD — session_start mode) — kept for reference ───────────────
 _v14_best = {
     **_v14_base,
@@ -21937,3 +21935,70 @@ def _r5_v2730_revive_all_carry():
 
 
 MEMBER_OVERRIDES["best_v2730_revive_all_carry"] = _r5_v2730_revive_all_carry()
+
+
+# ── A1 post-merge product improvements ──────────────────────────────────────
+# Based on per-day price path analysis of flagged products from v2810 baseline.
+# Each fix targets the specific failure mode identified.
+
+def _cg_inverted_square(sym: str, thr: float = 300.0, exit_thr: float = 100.0,
+                         passive_size: int = 5) -> ProductConfig:
+    """cross_group_trend_A2 with MICROCHIP_SQUARE as anti-correlated signal.
+    SQUARE UP → target DOWN (invert_signal=True).
+    Days 2/3: SQUARE +2456/+3438 → target goes DOWN (CIRCLE/RECTANGLE short).
+    Day 4:    SQUARE −2278 → target goes UP (CIRCLE/RECTANGLE long).
+    """
+    return ProductConfig(symbol=sym, strategy="cross_group_trend_A2",
+                         position_limit=10,
+                         params=dict(
+                             signal_products=["MICROCHIP_SQUARE"],
+                             signal_ema_hl=100,
+                             signal_threshold=thr,
+                             signal_exit=exit_thr,
+                             invert_signal=True,
+                             taker_size=10,
+                             passive_size=passive_size,
+                             position_limit=10,
+                             last_ts_value=999900,
+                         ))
+
+def _carry_fast(sym: str, trend_hl: int = 50, carry_min_pos: int = 2,
+                size: int = 5) -> ProductConfig:
+    """inventory_carry_mm with faster EMA for quicker reversal detection."""
+    return ProductConfig(symbol=sym, strategy="inventory_carry_mm",
+                         position_limit=10,
+                         params=dict(
+                             maker_size=size, tighten_ticks=1,
+                             trend_hl=trend_hl,
+                             carry_pause_min_pos=carry_min_pos,
+                             hard_pause_at=9,
+                             log_flush_ts=1000, ts_increment=100,
+                             last_ts_value=999900,
+                         ))
+
+# FINAL combined: CIRCLE inverted SQUARE (thr=200) + SOLAR_WINDS carry_50 thr=100
+MEMBER_OVERRIDES["best_v2900_A1_improvements"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v2810_v2640_plus_v19_laundry_A3"][5],
+        # MICROCHIP_CIRCLE: anti-correlated with SQUARE → inverted cross_group signal
+        # SQUARE: D2+2456, D3+3438 → CIRCLE D2-1125, D3-346 (go short)
+        # SQUARE: D4-2278 → CIRCLE D4+1854 (go long)
+        "MICROCHIP_CIRCLE": ProductConfig(
+            symbol="MICROCHIP_CIRCLE", strategy="cross_group_trend_A2",
+            position_limit=10,
+            params=dict(signal_products=["MICROCHIP_SQUARE"], signal_ema_hl=100,
+                        signal_threshold=200.0, signal_exit=70.0,
+                        invert_signal=True, taker_size=10, passive_size=5,
+                        position_limit=10, last_ts_value=999900)),
+        # GALAXY_SOUNDS_SOLAR_WINDS: fast carry with carry_trend_min_abs=100
+        # Prevents spurious pauses on uptrend days (Day3 -4537 regression eliminated)
+        # Still catches sharp reversals (Day2 brief initial spike +388 improvement)
+        "GALAXY_SOUNDS_SOLAR_WINDS": ProductConfig(
+            symbol="GALAXY_SOUNDS_SOLAR_WINDS", strategy="inventory_carry_mm",
+            position_limit=10,
+            params=dict(maker_size=5, tighten_ticks=1, trend_hl=50,
+                        carry_pause_min_pos=2, hard_pause_at=9,
+                        carry_trend_min_abs=100.0,
+                        log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+    }
+}

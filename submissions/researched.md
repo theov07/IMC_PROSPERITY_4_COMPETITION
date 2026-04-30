@@ -1425,3 +1425,65 @@ Files created:
   - `submissions/best_v2810_v2640_plus_v19_laundry_A3.py`
 - Exported IMC submission wrapper:
   - `artifacts/submissions/round_5/best_v2810_v2640_plus_v19_laundry_A3_round5_submission.py`
+
+---
+
+# ITERATION 9: A1 per-day consistency research → best_v2900_A1_improvements
+
+**Baseline**: `best_v2810_v2640_plus_v19_laundry_A3` = 1,038,574 (D2: 290,997 / D3: 319,843 / D4: 427,734)
+
+## Products investigated (7 flagged for per-day inconsistency)
+
+### GALAXY_SOUNDS_DARK_MATTER — cross_group_trend_A2 (kept, no change)
+BT: D2 +6,239 / D3 +8,545 / D4 +2,120 = **+16,904**. Live: -421.
+Root cause: live day has weaker SP group trend. BT is already reasonably consistent (all 3 days positive). No better alternative found — pair_skip_mm alternative is 37% worse in BT. Accepted as is.
+
+### GALAXY_SOUNDS_PLANETARY_RINGS — inventory_carry_mm (kept, no change)
+BT: D2 +18,972 / D3 +2,319 / D4 +634 = **+21,925**. Live: -3,607.
+Day3/Day4 are weaker but still non-negative after carry. Faster carry (trend_hl=50) made Day2 worse. Accepted as is.
+
+### GALAXY_SOUNDS_SOLAR_FLAMES — inventory_carry_mm (kept, no change)
+BT: D2 -5,440 / D3 +7,043 / D4 -1,536 = **+67**. Live: +1,341.
+Faster carry (trend_hl=50) gave -2,083 total. No improvement found. Day2/Day4 losses are structural.
+
+### GALAXY_SOUNDS_SOLAR_WINDS — **IMPROVED** (+921 total)
+Was: `naive_tight_mm` (D2: -9,377 / D3: +8,446 / D4: +9,650 = +8,719)
+Now: `inventory_carry_mm` with `trend_hl=50`, `carry_trend_min_abs=100`
+Result: D2 -8,989 (+388) / D3 +8,664 (+218) / D4 +9,964 (+314) = **+9,640 (+921)**
+Key insight: `carry_trend_min_abs=100` prevents the carry from pausing bids on clean uptrend days (Day3 had -4,537 regression without threshold). With threshold=100, all 3 days improve slightly.
+
+### MICROCHIP_CIRCLE — **IMPROVED** (+9,845 total)
+Was: `pair_skip_mm` partner=MICROCHIP_OVAL (D2: +1,329 / D3: +2,530 / D4: +15,018 = +18,877)
+Now: `cross_group_trend_A2` signal=MICROCHIP_SQUARE, `invert_signal=True`, threshold=200
+Result: D2 +2,449 (+1,120) / D3 +8,662 (+6,132) / D4 +17,611 (+2,593) = **+28,722 (+9,845)**
+Key insight: CIRCLE has ~0.01 tick correlation with OVAL (pair_skip_mm sees noise). But daily anti-correlation with SQUARE is structural: when SQUARE trends up, CIRCLE trends down (and vice versa). Inverted signal correctly positions short on CIRCLE when SQUARE is in bull regime.
+
+### MICROCHIP_RECTANGLE — pair_skip_mm (kept, no change)
+Inverted SQUARE signal helps Day4 (+8,832) but hurts Day2 (-9,822). Net worse. pair_skip_mm current best.
+
+### OXYGEN_SHAKE_GARLIC — trend_follow_v2 thr=80 (kept, no change)
+Tried thresholds 150/200/250 — all reduce all 3 days. The false Day3 entry is unavoidable without a better warmup reference. thr=80 (current) is already optimal.
+
+### PANEL_2X2 — inventory_carry_mm (kept, no change)
+Faster carry (trend_hl=50) made all days worse. Current carry (trend_hl=200) already optimal.
+
+## Code changes
+
+1. **`prosperity/strategies/round_5/tibo/cross_group_trend_A2.py`**: Added `invert_signal` parameter — flips bull/bear regimes when True (for anti-correlated signal groups like SQUARE→CIRCLE).
+
+2. **`prosperity/strategies/round_5/inventory_carry_mm.py`**: Added `carry_trend_min_abs` parameter — minimum |trend| required before carry pause fires. Prevents spurious pauses from minor intraday oscillations.
+
+## Final result
+
+**`best_v2900_A1_improvements`** = **1,049,340 PnL** (+10,766 vs baseline)
+D2: +292,117 (+1,120) / D3: +326,505 (+6,662) / D4: +430,718 (+2,984)
+
+| Config | D2 | D3 | D4 | Total |
+|--------|---:|---:|---:|------:|
+| `best_v2810_v2640_plus_v19_laundry_A3` | 290,997 | 319,843 | 427,734 | 1,038,574 |
+| `best_v2900_A1_improvements` | 292,117 | 326,505 | 430,718 | **1,049,340** |
+
+Files created:
+- Config: `MEMBER_OVERRIDES["best_v2900_A1_improvements"]` in `prosperity/config.py`
+- Backtest wrapper: `submissions/best_v2900_A1_improvements.py`
+- IMC submission: `artifacts/submissions/round_5/best_v2900_A1_improvements_round5_submission.py`

@@ -33,6 +33,8 @@ Params:
     taker_size         : units to buy/sell aggressively on first entry (default 10)
     passive_size       : passive order size per side (default 3)
     position_limit     : max position (default 10)
+    invert_signal      : bool — when True, flip bull/bear (use for anti-correlated signal groups,
+                         e.g. MICROCHIP_SQUARE UP → target product DOWN)
 """
 
 from __future__ import annotations
@@ -122,6 +124,11 @@ class CrossGroupTrendA2(BaseStrategy):
         is_bear = sp_ema < -sp_thr and sp2_bear
         is_exit_bull = sp_ema < sp_exit
         is_exit_bear = sp_ema > -sp_exit
+
+        # Flip bull/bear when signal is anti-correlated with target product
+        if bool(p.get("invert_signal", False)):
+            is_bull, is_bear = is_bear, is_bull
+            is_exit_bull, is_exit_bear = is_exit_bear, is_exit_bull
 
         buy_room = limit - position
         sell_room = limit + position
