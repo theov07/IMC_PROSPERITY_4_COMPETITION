@@ -264,6 +264,7 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "late_flatten_tight_mm_v1": ("prosperity/strategies/round_5/tibo/late_flatten_tight_mm_v1.py", "LateFlattenTightMMV1"),
     "snackpack_cross_mm_v1_A1": ("prosperity/strategies/round_5/tibo/snackpack_cross_mm_A1.py", "SnackpackCrossMMV1_A1"),
     "cross_group_trend_A2": ("prosperity/strategies/round_5/tibo/cross_group_trend_A2.py", "CrossGroupTrendA2"),
+    "ar1_mean_rev_v2_A2":  ("prosperity/strategies/round_5/tibo/ar1_mean_rev_v2_A2.py", "AR1MeanRevV2A2"),
     # ── Round 5 ──
     "pair_skip_mm":           ("prosperity/strategies/round_5/pair_skip_mm.py", "PairSkipMMStrategy"),
     "pair_skip_lag_mm":       ("prosperity/strategies/round_5/pair_skip_lag_mm.py", "PairSkipLagMMStrategy"),
