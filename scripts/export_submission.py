@@ -267,6 +267,11 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     # ── Round 5 ──
     "pair_skip_mm":           ("prosperity/strategies/round_5/pair_skip_mm.py", "PairSkipMMStrategy"),
     "pair_skip_lag_mm":       ("prosperity/strategies/round_5/pair_skip_lag_mm.py", "PairSkipLagMMStrategy"),
+    "carry_pair_skip_mm":     ("prosperity/strategies/round_5/carry_pair_skip_mm.py", "CarryPairSkipMMStrategy"),
+    "micro_obi_mm":           ("prosperity/strategies/round_5/micro_obi_mm.py", "MicroOBIMMStrategy"),
+    "vol_adaptive_mm":        ("prosperity/strategies/round_5/vol_adaptive_mm.py", "VolAdaptiveMMStrategy"),
+    "aggressive_mm":          ("prosperity/strategies/round_5/aggressive_mm.py", "AggressiveMMStrategy"),
+    "aggressive_taker_mm":    ("prosperity/strategies/round_5/aggressive_taker_mm.py", "AggressiveTakerMMStrategy"),
     "pair_trader":            ("prosperity/strategies/round_5/pair_trader.py", "PairTraderStrategy"),
     "inventory_aware_mm":     ("prosperity/strategies/round_5/inventory_mm.py", "InventoryAwareMMStrategy"),
     "zscore_mm":              ("prosperity/strategies/round_5/zscore_mm.py", "ZScoreMMStrategy"),
@@ -283,6 +288,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "top_down_filter_mm":     ("prosperity/strategies/round_5/top_down_filter_mm.py", "TopDownFilterMMStrategy"),
     "real_mm":                ("prosperity/strategies/round_5/real_mm.py", "RealMMStrategy"),
     "vol_adjusted_mm":        ("prosperity/strategies/round_5/vol_adjusted_mm.py", "VolAdjustedMMStrategy"),
+    "zscore_taker_mr":        ("prosperity/strategies/round_5/zscore_taker_mr.py", "ZScoreTakerMRStrategy"),
+    "opportunistic_taker_mm": ("prosperity/strategies/round_5/opportunistic_taker_mm.py", "OpportunisticTakerMMStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).

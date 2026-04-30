@@ -20,6 +20,11 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "tracking_error_mm": ("prosperity.strategies.round_5.tracking_error_mm", "TrackingErrorMMStrategy"),
     "pair_skip_mm": ("prosperity.strategies.round_5.pair_skip_mm", "PairSkipMMStrategy"),
     "pair_skip_lag_mm": ("prosperity.strategies.round_5.pair_skip_lag_mm", "PairSkipLagMMStrategy"),
+    "carry_pair_skip_mm": ("prosperity.strategies.round_5.carry_pair_skip_mm", "CarryPairSkipMMStrategy"),
+    "micro_obi_mm": ("prosperity.strategies.round_5.micro_obi_mm", "MicroOBIMMStrategy"),
+    "vol_adaptive_mm": ("prosperity.strategies.round_5.vol_adaptive_mm", "VolAdaptiveMMStrategy"),
+    "aggressive_mm": ("prosperity.strategies.round_5.aggressive_mm", "AggressiveMMStrategy"),
+    "aggressive_taker_mm": ("prosperity.strategies.round_5.aggressive_taker_mm", "AggressiveTakerMMStrategy"),
     "impulse_pause_mm": ("prosperity.strategies.round_5.impulse_pause_mm", "ImpulsePauseMMStrategy"),
     "tracking_error_skip_mm": ("prosperity.strategies.round_5.tracking_error_skip_mm", "TrackingErrorSkipMMStrategy"),
     "multi_pair_skip_mm": ("prosperity.strategies.round_5.multi_pair_skip_mm", "MultiPairSkipMMStrategy"),
@@ -338,6 +343,8 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "late_flatten_tight_mm_v1": ("prosperity.strategies.round_5.tibo.late_flatten_tight_mm_v1", "LateFlattenTightMMV1"),
     "snackpack_cross_mm_v1_A1": ("prosperity.strategies.round_5.tibo.snackpack_cross_mm_A1", "SnackpackCrossMMV1_A1"),
     "cross_group_trend_A2": ("prosperity.strategies.round_5.tibo.cross_group_trend_A2", "CrossGroupTrendA2"),
+    "zscore_taker_mr": ("prosperity.strategies.round_5.zscore_taker_mr", "ZScoreTakerMRStrategy"),
+    "opportunistic_taker_mm": ("prosperity.strategies.round_5.opportunistic_taker_mm", "OpportunisticTakerMMStrategy"),
 }
 
 
