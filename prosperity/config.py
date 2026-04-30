@@ -22002,6 +22002,20 @@ MEMBER_OVERRIDES["best_v2900_A1_improvements"] = {
                         log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
     }
 }
+
+# ── best_v3000: best_v2900_A1_improvements + A2's MICROCHIP_SQUARE improvement ──
+MEMBER_OVERRIDES["best_v3000"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v2900_A1_improvements"][5],
+        # MICROCHIP_SQUARE: faster EMA (hl=30 vs hl=100) catches signal earlier in short sessions
+        # A2 research: D2 +21,197 / D3 +30,859 / D4 +4,642 vs baseline D2 +17,897 / D3 +28,705 / D4 +8,169
+        "MICROCHIP_SQUARE": ProductConfig(
+            symbol="MICROCHIP_SQUARE", strategy="trend_follow_v2", position_limit=10,
+            params=dict(ema_half_life=30, threshold=200, exit_threshold=150, direction=0,
+                        position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000)),
+    }
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # A2 — Analyst 2 research: improved momentum/mean-reversion strategies
 # Focus: ROBOT_DISHES (AR1 trend filter), PEBBLES_XS (ref_interval),
