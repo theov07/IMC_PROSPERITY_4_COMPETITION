@@ -22077,3 +22077,916 @@ def _r5_best_merged_v2_A2():
 
 
 MEMBER_OVERRIDES["best_merged_v2_A2"] = _r5_best_merged_v2_A2()
+
+# ==============================================================================
+# v3000: HYBRID v2640 + v19. Combines best of both analysts on a per-product basis.
+# Decision rule: for each product, pick the strategy with higher BT total +
+# better day-by-day consistency. Fallback to live performance for ties.
+# ==============================================================================
+def _r5_v3000_hybrid():
+    """Combine v2640 (Leo's pair_skip + carry) with v19 (Tibo's trend + cross_group)."""
+    # Start from v2640 base
+    base = dict(MEMBER_OVERRIDES["best_v2640_carry_morning"][5])
+    # Switch 7 products to v19's strategies (where v19 wins both BT and live)
+    v19_cfg = MEMBER_OVERRIDES["best_v19"][5]
+    products_from_v19 = [
+        "GALAXY_SOUNDS_BLACK_HOLES",       # v19 cross_group_trend_A2 wins +26k BT, +194 live
+        "GALAXY_SOUNDS_DARK_MATTER",       # v19 cross_group_trend_A2 wins +6k BT, +3266 live
+        "OXYGEN_SHAKE_GARLIC",             # v19 trend_v2+trail wins +17k BT, +2458 live
+        "PEBBLES_XS",                      # v19 trend_v2 dir=-1 wins +6.7k BT
+        "ROBOT_IRONING",                   # v19 trend_v2 thr=50 wins +1.8k BT, +4070 live
+        "ROBOT_LAUNDRY",                   # v19 coint_mm wins 2/3 days + live (mixed)
+        "SNACKPACK_VANILLA",               # v19 snackpack_cross_mm wins +15k BT
+    ]
+    for p in products_from_v19:
+        if p in v19_cfg and v19_cfg[p] is not None:
+            base[p] = v19_cfg[p]
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3000_hybrid"] = _r5_v3000_hybrid()
+
+
+# v3100: HYBRID starting from v19 base. Switch only products where v2640 clearly wins.
+def _r5_v3100_v19_plus_v2640_wins():
+    """Start from v19 base, swap products where v2640 wins both BT and live."""
+    base = dict(MEMBER_OVERRIDES["best_v19"][5])
+    v2640_cfg = MEMBER_OVERRIDES["best_v2640_carry_morning"][5]
+    products_from_v2640 = [
+        "PEBBLES_S",                         # v2640 pair_skip(XL) wins +23k BT, +589 live
+        "MICROCHIP_RECTANGLE",               # v2640 pair_skip(SQUARE) wins +15.6k BT
+        "MICROCHIP_CIRCLE",                  # v2640 pair_skip(OVAL) wins +8.5k BT
+        "MICROCHIP_OVAL",                    # v2640 pair_skip(TRIANGLE) wins +1.2k BT, slightly better live
+        "GALAXY_SOUNDS_PLANETARY_RINGS",     # v2640 carry wins +3.3k BT, +3.7k live
+        "PANEL_4X4",                          # v2640 carry wins +1.3k live (BT same)
+        "TRANSLATOR_GRAPHITE_MIST",          # v2640 carry wins +750 live (BT close)
+        "OXYGEN_SHAKE_MORNING_BREATH",       # v2640 carry wins +1.6k live
+        "OXYGEN_SHAKE_MINT",                  # v2640 drops it (saves -2.2k live)
+        "PEBBLES_L",                          # v2640 carry slightly better
+    ]
+    for p in products_from_v2640:
+        if p in v2640_cfg:
+            base[p] = v2640_cfg[p]
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3100_v19_plus_v2640_wins"] = _r5_v3100_v19_plus_v2640_wins()
+
+
+# ====================================================================================
+# Idea 1: Swap RED/ORANGE/SUEDE → v19 naive_mm (live wins these but BT loses)
+# ====================================================================================
+def _v19_get(sym):
+    return MEMBER_OVERRIDES["best_v19"][5].get(sym)
+
+
+def _r5_v3010_red_naive():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["UV_VISOR_RED"] = _v19_get("UV_VISOR_RED")
+    return {5: base}
+
+
+def _r5_v3020_orange_naive():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["UV_VISOR_ORANGE"] = _v19_get("UV_VISOR_ORANGE")
+    return {5: base}
+
+
+def _r5_v3030_suede_naive():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SLEEP_POD_SUEDE"] = _v19_get("SLEEP_POD_SUEDE")
+    return {5: base}
+
+
+def _r5_v3040_all_3_naive():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["UV_VISOR_RED"] = _v19_get("UV_VISOR_RED")
+    base["UV_VISOR_ORANGE"] = _v19_get("UV_VISOR_ORANGE")
+    base["SLEEP_POD_SUEDE"] = _v19_get("SLEEP_POD_SUEDE")
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3010_red_naive"] = _r5_v3010_red_naive()
+MEMBER_OVERRIDES["best_v3020_orange_naive"] = _r5_v3020_orange_naive()
+MEMBER_OVERRIDES["best_v3030_suede_naive"] = _r5_v3030_suede_naive()
+MEMBER_OVERRIDES["best_v3040_all_3_naive"] = _r5_v3040_all_3_naive()
+
+
+# ====================================================================================
+# Idea 2: MICROCHIP_RECTANGLE pair_skip with alt partners (CIRCLE / OVAL / TRIANGLE)
+# ====================================================================================
+def _r5_v3050_rect_circle():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["MICROCHIP_RECTANGLE"] = _pair_skip("MICROCHIP_RECTANGLE", "MICROCHIP_CIRCLE", 1.25, 5)
+    return {5: base}
+
+
+def _r5_v3060_rect_oval():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["MICROCHIP_RECTANGLE"] = _pair_skip("MICROCHIP_RECTANGLE", "MICROCHIP_OVAL", 1.25, 5)
+    return {5: base}
+
+
+def _r5_v3070_rect_triangle():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["MICROCHIP_RECTANGLE"] = _pair_skip("MICROCHIP_RECTANGLE", "MICROCHIP_TRIANGLE", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3050_rect_circle"] = _r5_v3050_rect_circle()
+MEMBER_OVERRIDES["best_v3060_rect_oval"] = _r5_v3060_rect_oval()
+MEMBER_OVERRIDES["best_v3070_rect_triangle"] = _r5_v3070_rect_triangle()
+
+
+# ====================================================================================
+# Idea 3: Hybrid carry+pair_skip on products where pair_skip wins BT but loses live
+# ====================================================================================
+def _carry_pair_skip(sym, partner, pair_thresh=1.25, size=5):
+    return ProductConfig(
+        symbol=sym, strategy="carry_pair_skip_mm", position_limit=10,
+        params=dict(
+            partner=partner, partner_sign=-1.0, pair_thresh=pair_thresh,
+            maker_size=size, tighten_ticks=1, z_window=300,
+            trend_hl=200, carry_pause_min_pos=3,
+            hard_pause_at=9, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+# v3080: hybrid on UV_VISOR_RED (pair_skip(AMBER) BT win +10k, live worse)
+def _r5_v3080_hybrid_red():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["UV_VISOR_RED"] = _carry_pair_skip("UV_VISOR_RED", "UV_VISOR_AMBER", 1.25, 5)
+    return {5: base}
+
+
+# v3081: hybrid on UV_VISOR_ORANGE
+def _r5_v3081_hybrid_orange():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["UV_VISOR_ORANGE"] = _carry_pair_skip("UV_VISOR_ORANGE", "UV_VISOR_YELLOW", 1.25, 5)
+    return {5: base}
+
+
+# v3082: hybrid on SLEEP_POD_SUEDE
+def _r5_v3082_hybrid_suede():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SLEEP_POD_SUEDE"] = _carry_pair_skip("SLEEP_POD_SUEDE", "SLEEP_POD_NYLON", 1.25, 5)
+    return {5: base}
+
+
+# v3083: hybrid on MICROCHIP_RECTANGLE (BT pair_skip(SQUARE) +15.6k, live still bad)
+def _r5_v3083_hybrid_rect():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["MICROCHIP_RECTANGLE"] = _carry_pair_skip("MICROCHIP_RECTANGLE", "MICROCHIP_SQUARE", 1.25, 5)
+    return {5: base}
+
+
+# v3084: hybrid on MICROCHIP_CIRCLE
+def _r5_v3084_hybrid_circle():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["MICROCHIP_CIRCLE"] = _carry_pair_skip("MICROCHIP_CIRCLE", "MICROCHIP_OVAL", 1.25, 5)
+    return {5: base}
+
+
+# v3085: hybrid on ALL 5 candidate products (max test)
+def _r5_v3085_hybrid_all():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["UV_VISOR_RED"] = _carry_pair_skip("UV_VISOR_RED", "UV_VISOR_AMBER", 1.25, 5)
+    base["UV_VISOR_ORANGE"] = _carry_pair_skip("UV_VISOR_ORANGE", "UV_VISOR_YELLOW", 1.25, 5)
+    base["SLEEP_POD_SUEDE"] = _carry_pair_skip("SLEEP_POD_SUEDE", "SLEEP_POD_NYLON", 1.25, 5)
+    base["MICROCHIP_RECTANGLE"] = _carry_pair_skip("MICROCHIP_RECTANGLE", "MICROCHIP_SQUARE", 1.25, 5)
+    base["MICROCHIP_CIRCLE"] = _carry_pair_skip("MICROCHIP_CIRCLE", "MICROCHIP_OVAL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3080_hybrid_red"] = _r5_v3080_hybrid_red()
+MEMBER_OVERRIDES["best_v3081_hybrid_orange"] = _r5_v3081_hybrid_orange()
+MEMBER_OVERRIDES["best_v3082_hybrid_suede"] = _r5_v3082_hybrid_suede()
+MEMBER_OVERRIDES["best_v3083_hybrid_rect"] = _r5_v3083_hybrid_rect()
+MEMBER_OVERRIDES["best_v3084_hybrid_circle"] = _r5_v3084_hybrid_circle()
+MEMBER_OVERRIDES["best_v3085_hybrid_all"] = _r5_v3085_hybrid_all()
+
+
+# ====================================================================================
+# Idea 4: SNACKPACK conservation arb (CHOCO+VANI sum ≈ 20000, std=40)
+# Use pebbles_arb_v1 strategy with adjusted params (edge=50 for std=40)
+# ====================================================================================
+def _r5_v3090_snack_choco_arb():
+    """SNACKPACK_CHOCOLATE arb with VANILLA as partner (sum target 20k)."""
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SNACKPACK_CHOCOLATE"] = ProductConfig(
+        symbol="SNACKPACK_CHOCOLATE", strategy="pebbles_arb_v1", position_limit=10,
+        params=dict(
+            partner_products=['SNACKPACK_VANILLA'], sum_target=20000.0,
+            edge_ticks=50.0, passive_half_spread=40.0,
+            taker_size=10, passive_size=5, ewma_alpha=0.05,
+            position_limit=10, last_ts_value=999900,
+        ),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3090_snack_choco_arb"] = _r5_v3090_snack_choco_arb()
+
+
+# ====================================================================================
+# SNACKPACK 5-product conservation arb with EWMA target (sum drifts daily)
+# ====================================================================================
+def _snackpack_arb_5(sym, edge=80, passive_half=70):
+    """SNACKPACK conservation arb on all 5 products. Uses EWMA-anchored sum."""
+    others = [p for p in ["SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA",
+                          "SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY",
+                          "SNACKPACK_RASPBERRY"] if p != sym]
+    return ProductConfig(
+        symbol=sym, strategy="pebbles_arb_v1", position_limit=10,
+        params=dict(
+            partner_products=others,
+            sum_target=50100.0,  # rough average; EWMA fallback corrects
+            edge_ticks=float(edge), passive_half_spread=float(passive_half),
+            taker_size=10, passive_size=3,
+            ewma_alpha=0.001,  # slow EWMA to track drift
+            position_limit=10, last_ts_value=999900,
+        ),
+    )
+
+
+# v3100 (note: rename earlier v3100 to v3110 to avoid clash)
+# v3110: SNACKPACK conservation arb on all 5 products
+def _r5_v3120_snack5_arb():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SNACKPACK_CHOCOLATE"] = _snackpack_arb_5("SNACKPACK_CHOCOLATE", 80, 70)
+    return {5: base}
+
+
+def _r5_v3121_snack5_arb_pist():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SNACKPACK_PISTACHIO"] = _snackpack_arb_5("SNACKPACK_PISTACHIO", 80, 70)
+    return {5: base}
+
+
+def _r5_v3122_snack5_arb_all():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    # Don't replace VANILLA (already snackpack_cross_mm wins)
+    base["SNACKPACK_CHOCOLATE"] = _snackpack_arb_5("SNACKPACK_CHOCOLATE", 80, 70)
+    base["SNACKPACK_PISTACHIO"] = _snackpack_arb_5("SNACKPACK_PISTACHIO", 80, 70)
+    base["SNACKPACK_STRAWBERRY"] = _snackpack_arb_5("SNACKPACK_STRAWBERRY", 80, 70)
+    return {5: base}
+
+
+# Wider edge variant
+def _r5_v3123_snack5_arb_wide():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SNACKPACK_CHOCOLATE"] = _snackpack_arb_5("SNACKPACK_CHOCOLATE", 150, 120)
+    base["SNACKPACK_PISTACHIO"] = _snackpack_arb_5("SNACKPACK_PISTACHIO", 150, 120)
+    base["SNACKPACK_STRAWBERRY"] = _snackpack_arb_5("SNACKPACK_STRAWBERRY", 150, 120)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3120_snack5_arb_choco"] = _r5_v3120_snack5_arb()
+MEMBER_OVERRIDES["best_v3121_snack5_arb_pist"] = _r5_v3121_snack5_arb_pist()
+MEMBER_OVERRIDES["best_v3122_snack5_arb_all"] = _r5_v3122_snack5_arb_all()
+MEMBER_OVERRIDES["best_v3123_snack5_arb_wide"] = _r5_v3123_snack5_arb_wide()
+
+
+# ====================================================================================
+# Microprice + OBI MM — replace naive_tight_mm with smarter MM
+# ====================================================================================
+def _micro_obi(sym, size=5, half_spread=1.0, obi_thresh=0.5, use_obi=True):
+    return ProductConfig(
+        symbol=sym, strategy="micro_obi_mm", position_limit=10,
+        params=dict(
+            maker_size=size, half_spread=half_spread,
+            obi_thresh=obi_thresh, use_obi_skip=use_obi,
+            hard_pause_at=9, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+# v3200: replace ALL naive_tight_mm products in v3000 with micro_obi_mm
+def _r5_v3200_micro_obi_full():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            size = cfg.params.get("maker_size", 5)
+            new_base[sym] = _micro_obi(sym, size=size, half_spread=1.0, obi_thresh=0.5)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+# v3210: micro_obi WITHOUT obi gate (just microprice skew)
+def _r5_v3210_micro_no_obi():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            size = cfg.params.get("maker_size", 5)
+            new_base[sym] = _micro_obi(sym, size=size, half_spread=1.0, use_obi=False)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+# v3220: just OBI gate (skip naive_mm side when OBI extreme)
+# Same as v3200 but tighter obi_thresh
+def _r5_v3220_micro_tight_obi():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            size = cfg.params.get("maker_size", 5)
+            new_base[sym] = _micro_obi(sym, size=size, half_spread=1.0, obi_thresh=0.7)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v3200_micro_obi_full"] = _r5_v3200_micro_obi_full()
+MEMBER_OVERRIDES["best_v3210_micro_no_obi"] = _r5_v3210_micro_no_obi()
+MEMBER_OVERRIDES["best_v3220_micro_tight_obi"] = _r5_v3220_micro_tight_obi()
+
+
+# ====================================================================================
+# Test cross-group pair_skip and AR1 on more products
+# ====================================================================================
+def _ar1(sym, thresh=20):
+    return ProductConfig(
+        symbol=sym, strategy="ar1_mean_rev_v1", position_limit=10,
+        params=dict(entry_threshold=thresh, taker_size=10, passive_size=0,
+                    exit_ticks=0, position_limit=10, last_ts_value=999900),
+    )
+
+
+# v3300: AR1 on OXYGEN_SHAKE_EVENING_BREATH (AR1=-0.115)
+def _r5_v3300_ar1_evening():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["OXYGEN_SHAKE_EVENING_BREATH"] = _ar1("OXYGEN_SHAKE_EVENING_BREATH", 20)
+    return {5: base}
+
+
+# v3310: AR1 on OXYGEN_SHAKE_CHOCOLATE
+def _r5_v3310_ar1_choco():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["OXYGEN_SHAKE_CHOCOLATE"] = _ar1("OXYGEN_SHAKE_CHOCOLATE", 20)
+    return {5: base}
+
+
+# v3320: SNACKPACK_PISTACHIO pair_skip with STRAWBERRY (diff std=124)
+def _r5_v3320_pist_straw():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SNACKPACK_PISTACHIO"] = _pair_skip("SNACKPACK_PISTACHIO", "SNACKPACK_STRAWBERRY", 1.25, 5)
+    return {5: base}
+
+
+# v3330: cross-group SNACKPACK_RASPBERRY pair_skip with TRANSLATOR_ECLIPSE (sum_std=170)
+def _r5_v3330_rasp_eclipse():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SNACKPACK_RASPBERRY"] = _pair_skip("SNACKPACK_RASPBERRY", "TRANSLATOR_ECLIPSE_CHARCOAL", 1.25, 5)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3300_ar1_evening"] = _r5_v3300_ar1_evening()
+MEMBER_OVERRIDES["best_v3310_ar1_choco"] = _r5_v3310_ar1_choco()
+MEMBER_OVERRIDES["best_v3320_pist_straw"] = _r5_v3320_pist_straw()
+MEMBER_OVERRIDES["best_v3330_rasp_eclipse"] = _r5_v3330_rasp_eclipse()
+
+
+# v3400: increase naive_mm size to 10 (more aggressive fill capture)
+def _r5_v3400_naive_size_10():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            new_params = dict(cfg.params)
+            new_params["maker_size"] = 10
+            new_base[sym] = ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                                           position_limit=cfg.position_limit, params=new_params)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v3400_naive_size_10"] = _r5_v3400_naive_size_10()
+
+
+# v3500: increase tighten_ticks to 2 on naive products with WIDE spreads (>5 ticks)
+def _r5_v3500_tighten_2():
+    """Wider tighten on wide-spread products to capture more fills inside spread."""
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            new_params = dict(cfg.params)
+            new_params["tighten_ticks"] = 2
+            new_base[sym] = ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                                           position_limit=cfg.position_limit, params=new_params)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+# v3510: tighten=3
+def _r5_v3510_tighten_3():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            new_params = dict(cfg.params)
+            new_params["tighten_ticks"] = 3
+            new_base[sym] = ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                                           position_limit=cfg.position_limit, params=new_params)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+# v3520: hard_pause_at=10 (no pause, use full position limit)
+def _r5_v3520_no_pause():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy in ("naive_tight_mm", "pair_skip_mm", "inventory_carry_mm"):
+            new_params = dict(cfg.params)
+            new_params["hard_pause_at"] = 10
+            new_base[sym] = ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                                           position_limit=cfg.position_limit, params=new_params)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v3500_tighten_2"] = _r5_v3500_tighten_2()
+MEMBER_OVERRIDES["best_v3510_tighten_3"] = _r5_v3510_tighten_3()
+MEMBER_OVERRIDES["best_v3520_no_pause"] = _r5_v3520_no_pause()
+
+
+# v3600: vol-adaptive MM on naive products (tighten=1 when calm, =3 when volatile)
+def _vol_adaptive(sym, size=5):
+    return ProductConfig(
+        symbol=sym, strategy="vol_adaptive_mm", position_limit=10,
+        params=dict(
+            maker_size=size, vol_window=100,
+            vol_low_thresh=0.5, vol_high_thresh=3.0,
+            tighten_low=1, tighten_high=3,
+            hard_pause_at=9, log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_v3600_vol_adaptive():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            size = cfg.params.get("maker_size", 5)
+            new_base[sym] = _vol_adaptive(sym, size)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v3600_vol_adaptive"] = _r5_v3600_vol_adaptive()
+
+
+# ====================================================================================
+# LIVE ALPHA EXPLORATION — 3 versions to test in IMC live
+# Hypothesis: live counterparties may not have backtest's adverse selection
+# So tighter quotes = more fills = more PnL
+# ====================================================================================
+
+# v3700: TIGHT mode — post 2 ticks inside spread on ALL MM products
+# Tests: do we get more fills in live vs BT? BT shows -13k loss but live could win
+def _r5_v3700_live_tight():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            size = cfg.params.get("maker_size", 5)
+            new_base[sym] = ProductConfig(
+                symbol=sym, strategy="aggressive_mm", position_limit=10,
+                params=dict(maker_size=size, mode="tight", tighten_ticks=2,
+                            hard_pause_at=9, log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+            )
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+# v3710: AT_MID mode — post AT mid-spread (super aggressive, almost taker-level)
+# Tests: ultra-tight quotes capture all fills if counterparties are dumb
+def _r5_v3710_live_at_mid():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            size = cfg.params.get("maker_size", 5)
+            new_base[sym] = ProductConfig(
+                symbol=sym, strategy="aggressive_mm", position_limit=10,
+                params=dict(maker_size=size, mode="at_mid", half_spread=0.5,
+                            hard_pause_at=9, log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+            )
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+# v3720: HYBRID — naive_mm but with size=10 + tighten=2 on naive products
+# Tests: ax full position + tighten = max fills + max alpha per fill
+def _r5_v3720_live_size10_tight():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            new_base[sym] = ProductConfig(
+                symbol=sym, strategy="aggressive_mm", position_limit=10,
+                params=dict(maker_size=10, mode="tight", tighten_ticks=2,
+                            hard_pause_at=9, log_flush_ts=1000, ts_increment=100, last_ts_value=999900),
+            )
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v3700_live_tight"] = _r5_v3700_live_tight()
+MEMBER_OVERRIDES["best_v3710_live_at_mid"] = _r5_v3710_live_at_mid()
+MEMBER_OVERRIDES["best_v3720_live_size10_tight"] = _r5_v3720_live_size10_tight()
+
+
+# v3730: TIGHT on ALL MM-style products (naive + pair_skip + carry + cross_group)
+# Most aggressive variant — tightens every quote we post
+def _r5_v3730_tight_all_mm():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is None:
+            new_base[sym] = None
+            continue
+        # Modify tighten_ticks if present in params
+        new_params = dict(cfg.params)
+        if "tighten_ticks" in new_params:
+            new_params["tighten_ticks"] = 2
+        new_base[sym] = ProductConfig(symbol=cfg.symbol, strategy=cfg.strategy,
+                                       position_limit=cfg.position_limit, params=new_params)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v3730_tight_all_mm"] = _r5_v3730_tight_all_mm()
+
+
+# ====================================================================================
+# v3800: AGGRESSIVE TAKER on naive_mm products
+# Fires takers when fast momentum >= 5 ticks AND aligned with slow trend (200-tick)
+# Hypothesis: top live teams take aggressively on momentum, capturing big moves
+# ====================================================================================
+def _aggressive_taker(sym, size=5, taker_size=10, fast_thresh=5.0):
+    return ProductConfig(
+        symbol=sym, strategy="aggressive_taker_mm", position_limit=10,
+        params=dict(
+            maker_size=size, taker_size=taker_size,
+            fast_window=50, slow_window=200,
+            fast_thresh=fast_thresh, trend_align=True,
+            tighten_ticks=1, hard_pause_at=9,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_v3800_aggressive_taker():
+    """Replace naive_tight_mm with aggressive_taker_mm on 9 products."""
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = {}
+    for sym, cfg in base.items():
+        if cfg is not None and cfg.strategy == "naive_tight_mm":
+            size = cfg.params.get("maker_size", 5)
+            new_base[sym] = _aggressive_taker(sym, size=size, taker_size=10, fast_thresh=5.0)
+        else:
+            new_base[sym] = cfg
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v3800_aggressive_taker"] = _r5_v3800_aggressive_taker()
+
+
+# ====================================================================================
+# v4000: ORIGINAL coloc-port hybrid.
+# v3000_hybrid base + coloc's z-score taker MR (with coloc's per-product params)
+# applied to coloc's full SOLO set, EXCEPT products already swapped to v19 trend
+# in v3000_hybrid (we don't double-replace).
+# This is the "use everything from coloc that we can" version (overfit-aware).
+# ====================================================================================
+COLOC_SOLO_PARAMS = {
+    "PEBBLES_XL":             {"window": 150, "min_hist": 150, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 24},
+    "PEBBLES_L":              {"window": 200, "min_hist": 200, "enter": 2.0, "exit": 0.5, "size": 10, "max_spread": 22},
+    "PEBBLES_XS":             {"window": 150, "min_hist": 150, "enter": 2.0, "exit": 0.5, "size": 10, "max_spread": 16},
+    "ROBOT_IRONING":          {"window": 25,  "min_hist": 25,  "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 8},
+    "ROBOT_MOPPING":          {"window": 300, "min_hist": 300, "enter": 1.5, "exit": 0.5, "size": 10, "max_spread": 12},
+    "MICROCHIP_RECTANGLE":    {"window": 200, "min_hist": 200, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 11},
+    "SLEEP_POD_NYLON":        {"window": 200, "min_hist": 200, "enter": 2.0, "exit": 1.0, "size": 10, "max_spread": 11},
+    "TRANSLATOR_ASTRO_BLACK": {"window": 300, "min_hist": 300, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 11},
+    "PEBBLES_M":              {"window": 100, "min_hist": 100, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 14},
+    "UV_VISOR_YELLOW":        {"window": 500, "min_hist": 500, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 18},
+    "SLEEP_POD_POLYESTER":    {"window": 300, "min_hist": 300, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 14},
+    "MICROCHIP_OVAL":         {"window": 100, "min_hist": 100, "enter": 3.0, "exit": 1.0, "size": 10, "max_spread": 11},
+    "MICROCHIP_SQUARE":       {"window": 75,  "min_hist": 75,  "enter": 2.5, "exit": 1.0, "size": 10, "max_spread": 16},
+    "GALAXY_SOUNDS_SOLAR_FLAMES":  {"window": 300, "min_hist": 300, "enter": 3.0, "exit": 0.5, "size": 10, "max_spread": 17},
+    "ROBOT_LAUNDRY":               {"window": 500, "min_hist": 500, "enter": 1.5, "exit": 0.5, "size": 10, "max_spread": 10},
+    "OXYGEN_SHAKE_EVENING_BREATH": {"window": 200, "min_hist": 200, "enter": 2.5, "exit": 1.0, "size": 10, "max_spread": 16},
+    "OXYGEN_SHAKE_MINT":           {"window": 200, "min_hist": 200, "enter": 1.5, "exit": 0.5, "size": 10, "max_spread": 15},
+    "ROBOT_VACUUMING":             {"window": 300, "min_hist": 300, "enter": 3.0, "exit": 0.5, "size": 10, "max_spread": 10},
+    "UV_VISOR_MAGENTA":  {"window": 500, "min_hist": 500, "enter": 1.5, "exit": 0.5, "size": 10, "max_spread": 17},
+    "SLEEP_POD_SUEDE":   {"window": 50,  "min_hist": 50,  "enter": 3.0, "exit": 0.5, "size": 10, "max_spread": 10},
+    "PANEL_1X2":         {"window": 300, "min_hist": 300, "enter": 2.5, "exit": 1.0, "size": 10, "max_spread": 15},
+    "PANEL_2X2":         {"window": 50,  "min_hist": 50,  "enter": 3.0, "exit": 0.5, "size": 10, "max_spread": 11},
+    "MICROCHIP_CIRCLE":  {"window": 200, "min_hist": 200, "enter": 3.0, "exit": 1.0, "size": 10, "max_spread": 8},
+    "PEBBLES_S":         {"window": 300, "min_hist": 300, "enter": 3.0, "exit": 0.5, "size": 10, "max_spread": 16},
+    "ROBOT_DISHES":      {"window": 150, "min_hist": 150, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 7},
+    "UV_VISOR_AMBER":    {"window": 300, "min_hist": 300, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 12},
+    "GALAXY_SOUNDS_BLACK_HOLES":   {"window": 200, "min_hist": 200, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 17},
+    "GALAXY_SOUNDS_DARK_MATTER":   {"window": 75,  "min_hist": 75,  "enter": 1.5, "exit": 0.5, "size": 10, "max_spread": 12},
+    "PANEL_2X4":                   {"window": 25,  "min_hist": 25,  "enter": 2.0, "exit": 0.5, "size": 10, "max_spread": 8},
+    "OXYGEN_SHAKE_MORNING_BREATH": {"window": 50,  "min_hist": 50,  "enter": 3.0, "exit": 0.5, "size": 10, "max_spread": 13},
+    "UV_VISOR_RED":         {"window": 500, "min_hist": 500, "enter": 3.0, "exit": 1.0, "size": 10, "max_spread": 17},
+    "SLEEP_POD_LAMB_WOOL":  {"window": 200, "min_hist": 200, "enter": 3.0, "exit": 0.5, "size": 10, "max_spread": 12},
+    "SNACKPACK_RASPBERRY":  {"window": 200, "min_hist": 200, "enter": 2.5, "exit": 0.5, "size": 10, "max_spread": 17},
+    "TRANSLATOR_SPACE_GRAY": {"window": 300, "min_hist": 300, "enter": 3.0, "exit": 0.5, "size": 10, "max_spread": 10},
+}
+
+
+def _zmr_coloc(sym, p):
+    return ProductConfig(
+        symbol=sym, strategy="zscore_taker_mr", position_limit=10,
+        params=dict(
+            window=p["window"], min_hist=p["min_hist"],
+            enter=p["enter"], exit=p["exit"],
+            size=p["size"], max_spread=p["max_spread"],
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_v4000_coloc_zmr():
+    """v3000_hybrid base + coloc z-score MR with coloc's per-product params on
+    SOLO products NOT already overridden by v19 trend strategies."""
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    # Skip products that v3000_hybrid already swapped to v19 trend strategies
+    # (these strategies were validated as wins for those specific products)
+    skip = {
+        "GALAXY_SOUNDS_BLACK_HOLES",
+        "GALAXY_SOUNDS_DARK_MATTER",
+        "OXYGEN_SHAKE_GARLIC",       # not in coloc.SOLO anyway
+        "PEBBLES_XS",
+        "ROBOT_IRONING",
+        "ROBOT_LAUNDRY",
+        "SNACKPACK_VANILLA",         # not in coloc.SOLO anyway
+    }
+    for sym, p in COLOC_SOLO_PARAMS.items():
+        if sym in skip:
+            continue
+        if sym in new_base:
+            new_base[sym] = _zmr_coloc(sym, p)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4000_coloc_zmr"] = _r5_v4000_coloc_zmr()
+
+
+# ====================================================================================
+# v4100: NON-OVERFIT version. Same z-score taker MR mechanism, but with ONE
+# universal parameter set applied to the SAME product set as v4000.
+# This separates the "selection" overfit from "parameter" overfit.
+# Universal: window=200, enter=2.5, exit=0.5, size=10, max_spread=15.
+# NO timestamps. NO per-product tuning. Pure mechanism.
+# ====================================================================================
+def _zmr_universal(sym):
+    return ProductConfig(
+        symbol=sym, strategy="zscore_taker_mr", position_limit=10,
+        params=dict(
+            window=200, min_hist=200,
+            enter=2.5, exit=0.5,
+            size=10, max_spread=15,
+            log_flush_ts=1000, ts_increment=100, last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_v4100_zmr_universal():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    skip = {
+        "GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_DARK_MATTER",
+        "OXYGEN_SHAKE_GARLIC", "PEBBLES_XS",
+        "ROBOT_IRONING", "ROBOT_LAUNDRY", "SNACKPACK_VANILLA",
+    }
+    for sym in COLOC_SOLO_PARAMS:
+        if sym in skip:
+            continue
+        if sym in new_base:
+            new_base[sym] = _zmr_universal(sym)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4100_zmr_universal"] = _r5_v4100_zmr_universal()
+
+
+# ====================================================================================
+# v4200: Non-overfit + conservative — only swap products where v3000_hybrid was
+# either not trading (None) or running naive_tight_mm (zero alpha). Keep all
+# tuned strategies (trend_v2, pair_skip, carry, ar1, etc.) intact.
+# Universal params: window=200, enter=2.5, exit=0.5, size=10, max_spread=15.
+# This isolates the "earn coloc-style alpha on idle/naive products" idea.
+# ====================================================================================
+def _r5_v4200_zmr_conservative():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    # Only swap products in coloc.SOLO that are currently None or naive_tight_mm
+    keep_strats = {"naive_tight_mm"}
+    for sym in COLOC_SOLO_PARAMS:
+        if sym not in new_base:
+            continue
+        cfg = new_base[sym]
+        if cfg is None or cfg.strategy in keep_strats:
+            new_base[sym] = _zmr_universal(sym)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4200_zmr_conservative"] = _r5_v4200_zmr_conservative()
+
+
+# v4300: Non-overfit + medium — swap products in coloc.SOLO that are
+# None / naive_tight_mm / inventory_carry_mm (low-confidence carry).
+# Keep proven trend_v2, pair_skip, ar1, pebbles_arb intact.
+def _r5_v4300_zmr_medium():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    keep_strats = {"naive_tight_mm", "inventory_carry_mm"}
+    for sym in COLOC_SOLO_PARAMS:
+        if sym not in new_base:
+            continue
+        cfg = new_base[sym]
+        if cfg is None or cfg.strategy in keep_strats:
+            new_base[sym] = _zmr_universal(sym)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4300_zmr_medium"] = _r5_v4300_zmr_medium()
+
+
+# ====================================================================================
+# v4400: PER-PRODUCT params from coloc (NOT timestamp-based) +
+#        v4200's safe selection (only swap None / naive_tight_mm).
+# This combines coloc's tuned per-product alpha (window/enter/exit/max_spread)
+# with our tuned strategies on products coloc didn't optimize.
+# Per-product tuning IS acceptable per user — only timestamps are overfit.
+# ====================================================================================
+def _r5_v4400_zmr_coloc_params_safe():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    keep_strats = {"naive_tight_mm"}
+    for sym, p in COLOC_SOLO_PARAMS.items():
+        if sym not in new_base:
+            continue
+        cfg = new_base[sym]
+        if cfg is None or cfg.strategy in keep_strats:
+            new_base[sym] = _zmr_coloc(sym, p)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4400_zmr_coloc_params_safe"] = _r5_v4400_zmr_coloc_params_safe()
+
+
+# v4500: PER-PRODUCT params from coloc + medium selection (None/naive/inv_carry)
+def _r5_v4500_zmr_coloc_params_medium():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    keep_strats = {"naive_tight_mm", "inventory_carry_mm"}
+    for sym, p in COLOC_SOLO_PARAMS.items():
+        if sym not in new_base:
+            continue
+        cfg = new_base[sym]
+        if cfg is None or cfg.strategy in keep_strats:
+            new_base[sym] = _zmr_coloc(sym, p)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4500_zmr_coloc_params_medium"] = _r5_v4500_zmr_coloc_params_medium()
+
+
+# ====================================================================================
+# v4600/v4700/v4800: PROGRESSIVE coloc-params ports.
+# Insight: v4400 vs v4200 (same 8 products) showed +37k from coloc per-product
+# params. Test if expanding to more strategy types still pays.
+# v4600: v3000 + coloc params on SOLO ∩ {None, naive_tight_mm, inventory_carry_mm, pair_skip_mm}
+# v4700: v4600 + also swap trend_follow_v2 products in SOLO (12 of them)
+# v4800: v4700 + also swap snackpack_cross / coint / ar1 / pebbles_arb products in SOLO
+# ====================================================================================
+def _r5_v4600_zmr_coloc_pair_skip():
+    """Add pair_skip_mm to swap list (pair_skip might be overfit too)."""
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    keep_strats = {"naive_tight_mm", "inventory_carry_mm", "pair_skip_mm"}
+    for sym, p in COLOC_SOLO_PARAMS.items():
+        if sym not in new_base:
+            continue
+        cfg = new_base[sym]
+        if cfg is None or cfg.strategy in keep_strats:
+            new_base[sym] = _zmr_coloc(sym, p)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4600_zmr_coloc_pair_skip"] = _r5_v4600_zmr_coloc_pair_skip()
+
+
+def _r5_v4700_zmr_coloc_plus_trend():
+    """Also swap trend_follow_v2 products in SOLO (these are time-based, so this also
+    REMOVES time-based signals)."""
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    keep_strats = {"naive_tight_mm", "inventory_carry_mm", "pair_skip_mm", "trend_follow_v2"}
+    for sym, p in COLOC_SOLO_PARAMS.items():
+        if sym not in new_base:
+            continue
+        cfg = new_base[sym]
+        if cfg is None or cfg.strategy in keep_strats:
+            new_base[sym] = _zmr_coloc(sym, p)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4700_zmr_coloc_plus_trend"] = _r5_v4700_zmr_coloc_plus_trend()
+
+
+def _r5_v4800_zmr_coloc_almost_all():
+    """Swap nearly all coloc.SOLO products. Only keep cross_group_trend_A2 (used for
+    GALAXY products that aren't really MR)."""
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    new_base = dict(base)
+    skip_strats = {"cross_group_trend_A2"}  # keep these (cross-asset, different alpha)
+    for sym, p in COLOC_SOLO_PARAMS.items():
+        if sym not in new_base:
+            continue
+        cfg = new_base[sym]
+        if cfg is None or cfg.strategy not in skip_strats:
+            new_base[sym] = _zmr_coloc(sym, p)
+    return {5: new_base}
+
+
+MEMBER_OVERRIDES["best_v4800_zmr_coloc_almost_all"] = _r5_v4800_zmr_coloc_almost_all()
+
+
+# ====================================================================================
+# v3500: v3000_hybrid + opportunistic_taker_mm sur SLEEP_POD_SUEDE
+# (idée non-overfit prise du submission équipier best_r5_mm_taker_v3)
+# - opportunistic_taker_mm = passive MM (pair mode) + taker overlay sur fair_anchor div
+# - taker_cooldown_ts = delta-based (PAS time-based overfit)
+# - per-product params (acceptable selon critère utilisateur)
+# - +2,576 BT 3-day, 3 jours positifs (pas overfit J4)
+# ====================================================================================
+def _suede_opportunistic_taker():
+    return ProductConfig(
+        symbol="SLEEP_POD_SUEDE",
+        strategy="opportunistic_taker_mm",
+        position_limit=10,
+        params=dict(
+            mode="pair",
+            partner="SLEEP_POD_NYLON",
+            partner_sign=-1.0,
+            pair_thresh=1.25,
+            z_window=300,
+            maker_size=5,
+            passive_size=5,
+            tighten_ticks=1,
+            hard_pause_at=9,
+            opportunity_taker_size=2,
+            taker_threshold=1.25,
+            min_opportunity_ticks=0.9,
+            taker_position_cap=7,
+            taker_cooldown_ts=300,
+            min_spread_for_taker=1,
+            microprice_weight=0.5,
+            microprice_clamp=1.0,
+            trend_weight=0.03,
+            trend_clamp=0.5,
+            trend_hl=150,
+            signal_shift_per_unit=0.9,
+            signal_shift_clamp=2.0,
+            inv_skew_thresh=6,
+            inv_skew_ticks=1,
+            size_inv_factor=0.35,
+            unwind_min_pos=5,
+            unwind_size=3,
+            unwind_edge=1.0,
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_v3500_v3000_plus_taker_suede():
+    base = dict(MEMBER_OVERRIDES["best_v3000_hybrid"][5])
+    base["SLEEP_POD_SUEDE"] = _suede_opportunistic_taker()
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3500_v3000_plus_taker_suede"] = _r5_v3500_v3000_plus_taker_suede()
