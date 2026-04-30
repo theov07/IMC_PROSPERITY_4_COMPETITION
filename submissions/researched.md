@@ -1427,6 +1427,129 @@ Files created:
   - `artifacts/submissions/round_5/best_v2810_v2640_plus_v19_laundry_A3_round5_submission.py`
 
 ---
+# Iteration 9 by A2: Research Notes — Round 5 Momentum/Mean-Reversion Strategy Improvements
+
+**Analyst**: A2  
+**Base config**: `best_v2810_v2640_plus_v19_laundry_A3` (1,038,574 BT)  
+**Result**: `best_merged_v1_A2` (1,043,420 BT, **+4,846**)
+
+---
+
+## Products Investigated
+
+### 1. ROBOT_DISHES — AR1 Mean Reversion
+
+**Strategy in use**: `ar1_mean_rev_v1` — tick-to-tick mean reversion. On big UP tick → short (expect reversion). On big DOWN tick → long (expect reversion). Entry threshold = 20 ticks.
+
+**Problem identified**: On down-trending days (2 and 3 in BT), the strategy repeatedly buys on each down-tick expecting reversion, accumulates max long position (10 units), but reversion never comes → marked-to-market losses. End position = 10 (long) on both days.
+
+Days 2/3/4 baseline: -2,688 / -16,332 / +158,794 = 139,774 total.
+
+**Approach 1 (failed): Trend-direction filter**  
+Created `ar1_mean_rev_v2_A2.py` with slow trend EMA. When market trending UP, suppress new SHORT entries. When trending DOWN, suppress new LONG entries. Allow closing existing positions unconditionally.
+
+Result: Made ALL days worse. Total 129,385–131,142 vs baseline 139,774.
+
+Root cause of failure: The AR1 short-term reversions DO happen even on trending days — the filter was suppressing profitable round-trip mean-reversion trades, not just the final bag-building. The AR1 is designed to exploit brief counter-moves; those happen even on trending days.
+
+**Approach 2 (winner): exit_ticks=50**  
+Force-close any held position after 50 ticks via taker order. This prevents accumulating a large directional bag when a trend persists longer than the reversal horizon.
+
+Results with exit_ticks=50: -6,193 / -16,058 / +165,633 = **143,382** (+3,608 vs baseline).
+- Day 3: slightly better (-16,058 vs -16,332)
+- Day 4: +6,839 boost (more frequent position recycling = more profitable round-trips on the up day)
+- Day 2: slightly worse (-6,193 vs -2,688)
+
+**Chosen**: `ar1_mean_rev_v2_A2` with `exit_ticks=50, trend_ema_hl=0, trend_threshold=0`.
+
+---
+
+### 2. PEBBLES_XS — Trend Following (Short-Only)
+
+**Strategy in use**: `trend_follow_v2`, direction=-1, ema_half_life=150, threshold=100, exit_threshold=30.
+
+**Problem identified**: In live (1000-tick session), the strategy entered short early but price went UP for 600 ticks before eventually coming down. With `reference_update_interval=0` (default), the session-start reference never resets — the EMA-vs-start signal was always calculated relative to the very first tick price.
+
+**Feature tested**: `reference_update_interval=N` — after N consecutive flat ticks (position=0 and EMA drift within exit_threshold), reset the session reference to current EMA. This allows catching a trend that starts mid-session after an initial counter-move.
+
+Results:
+| Config | Day 2 | Day 3 | Day 4 | Total |
+|---|---|---|---|---|
+| baseline (ref=0) | 17,425 | 9,425 | 5,310 | **32,160** |
+| ref_interval=500 | 18,105 | 9,845 | 6,400 | **34,350** |
+| ref_interval=800 | 19,325 | 10,625 | 6,490 | **36,440** ✓ |
+
+All variants fully consistent (positive all 3 days). ref_interval=800 best overall (+4,280).
+
+**Chosen**: `trend_follow_v2` with `reference_update_interval=800`.
+
+**Note on live relevance**: With position_limit=10 and only 1 trade per day in BT, the ref_interval rarely triggers in backtest (position is held all day). The improvement comes from better initial entry timing due to a slightly different EMA evolution path. In live where the session is shorter (1000 ticks), the ref_interval becomes more valuable.
+
+---
+
+### 3. MICROCHIP_SQUARE — Trend Following (Bidirectional)
+
+**Strategy in use**: `trend_follow_v2`, direction=0 (bidirectional), ema_half_life=100, threshold=250, exit_threshold=100.
+
+**Problem identified**: In live, EMA(100) signal only crossed -250 threshold at ticks 987-999 (last 13 ticks of a 1000-tick live session). The product has massive intraday oscillations that prevented the slow EMA from building signal. Strategy barely fired in live.
+
+**Feature tested**: Faster EMA (hl=30, hl=50) with adjusted thresholds.
+
+Results:
+| Config | Day 2 | Day 3 | Day 4 | Total |
+|---|---|---|---|---|
+| baseline (hl=100) | 17,897 | 28,705 | 8,169 | **54,771** |
+| hl=50, thr=220 | 20,167 | 31,650 | 797 | **52,614** |
+| hl=30, thr=200 | 21,197 | 30,859 | 4,642 | **56,698** ✓ |
+
+hl=30 wins days 2 and 3 by a significant margin (+3.3k and +2.2k) while day 4 regresses (-3.5k). Net +1.9k.
+
+Trade-off: hl=30 risks firing too many false signals on high-volatility days (day 4 = -3.5k vs baseline). But live benefit is substantial (fires early vs too-late baseline).
+
+**Chosen**: `trend_follow_v2` with `ema_half_life=30, threshold=200, exit_threshold=150`.
+
+---
+
+## Final Merged Config
+
+`best_merged_v1_A2` = baseline + the 3 improvements above.
+
+| Day | Merged | Baseline | Δ |
+|---|---|---|---|
+| Day 2 | 292,001 | 290,997 | +1,004 |
+| Day 3 | 323,967 | 319,843 | +4,124 |
+| Day 4 | 427,452 | 427,734 | -282 |
+| **Total** | **1,043,420** | **1,038,574** | **+4,846** |
+
+Clean improvement: days 2 and 3 meaningfully better, day 4 essentially unchanged.
+
+---
+
+## Key Lessons
+
+1. **AR1 trend filter is counterproductive**: Mean-reversion strategies exploit brief counter-moves that exist EVEN on trending days. Suppressing entries based on trend direction removes profitable trades.
+
+2. **exit_ticks is the right lever for AR1**: Force-closing stale positions prevents catastrophic bag accumulation while allowing fresh re-entry. The recycling effect actually IMPROVES day 4 performance by enabling more profitable round-trips.
+
+3. **reference_update_interval improves TF v2 entry timing**: Even when it rarely triggers explicitly, the different EMA evolution path leads to better entry prices across all days.
+
+4. **Faster EMA for products with high intraday oscillation**: Products like MICROCHIP_SQUARE need a faster EMA to build signal in the short live session. The BT day 4 regression is an acceptable trade-off given the live benefit.
+
+5. **Strategy improvements are additive but not perfectly cumulative**: Expected +9.8k individual sum, actual +4.8k merged — some interactions between products or non-linear effects. Always validate the full merged config, not just per-product deltas.
+
+---
+
+## Files Created
+
+- `prosperity/strategies/round_5/tibo/ar1_mean_rev_v2_A2.py` — AR1 V2 with trend filter + exit_ticks
+- `artifacts/submissions/round_5/best_merged_v1_A2_round5_submission.py` — final submission
+- `submissions/best_merged_v1_A2.py` — local BT wrapper
+
+At the end i created best_merged_v2_A2 which only includes my recent progress on MICROCHIP_SQUARE and not the other because that's better in live. 
+
+so artifacts/submissions/round_5/best_merged_v2_A2_round5_submission.py = best_v2810_v2640_plus_v19_laundry_A3_round5_submission + recent findings from best_merged_v1_A2, but only on MICROCHIP_SQUARE.
+
+
 
 # ITERATION 9: A1 per-day consistency research → best_v2900_A1_improvements
 
@@ -1487,3 +1610,146 @@ Files created:
 - Config: `MEMBER_OVERRIDES["best_v2900_A1_improvements"]` in `prosperity/config.py`
 - Backtest wrapper: `submissions/best_v2900_A1_improvements.py`
 - IMC submission: `artifacts/submissions/round_5/best_v2900_A1_improvements_round5_submission.py`
+
+Merge of best_v2900_A1_improvements and best_merged_v2_A2_round5_submission gave best_v3000 is is our strongest so far.
+
+
+# ITERATION 10: A3 targeted day-consistency / live-proxy work on `best_v3000`
+
+Reference: **3rd analyst**
+
+Goal: investigate the four weak names called out after the `best_v3000` merge:
+- `PEBBLES_L`
+- `SLEEP_POD_SUEDE`
+- `SLEEP_POD_COTTON`
+- `TRANSLATOR_GRAPHITE_MIST`
+
+Focus was not raw 3-day BT only. I optimized for a better shape across days, with special attention to day 4 because it is our best proxy for the live environment.
+
+## Baseline used
+
+`best_v3000`
+
+- `PEBBLES_L`: D2 `-713` / D3 `+12,337` / D4 `-10,493` = `+1,131`
+- `SLEEP_POD_SUEDE`: D2 `+12,656` / D3 `+7,092` / D4 `-654` = `+19,094`
+- `SLEEP_POD_COTTON`: D2 `-663` / D3 `+5,374` / D4 `+14,954` = `+19,665`
+- `TRANSLATOR_GRAPHITE_MIST`: D2 `-4,500` / D3 `+4,285` / D4 `+7,014` = `+6,798`
+
+## What was tested
+
+### `PEBBLES_L`
+
+Tested:
+- carry sensitivity tuning on `inventory_carry_mm`
+- reduced-size / reduced-limit carry
+- new `regime_carry_mm_A3`: small safer MM in mild regimes, larger carry-aware MM only in strong regimes
+
+Result:
+- plain carry retunes did not fix D4 enough
+- `regime_carry_mm_A3` was the only convincing improvement
+
+Best isolated result:
+- `PEBBLES_L` with `regime_carry_mm_A3`
+- D2 `-730` / D3 `+10,505` / D4 `-7,241` = `+2,534`
+
+Interpretation:
+- this keeps most of the current upside on the strong day while materially reducing the ugly day-4 giveback
+- it is not better than `best_v3000` on every day, but it is clearly a better compromise for live-facing robustness
+
+### `SLEEP_POD_SUEDE`
+
+Tested:
+- `best_v19` naive fallback
+- `carry_pair_skip_mm`
+- `opportunistic_taker_mm` (existing stronger version)
+- a milder A3 taker overlay
+- alternate partner (`POLYESTER`)
+
+Result:
+- the best behavior came from the already-existing stronger taker overlay, not from my milder variant
+
+Key comparisons:
+- `best_v3000`: D2 `+12,656` / D3 `+7,092` / D4 `-654`
+- `best_v19`: D2 `+13,834` / D3 `+3,597` / D4 `-4,196`
+- `best_v3500_v3000_plus_taker_suede`: D2 `+7,888` / D3 `+3,112` / D4 `+4,560`
+
+Interpretation:
+- this is a deliberate trade: we give up some day-2/day-3 BT to flip day 4 strongly positive
+- since SUEDE was explicitly one of the names with bad live behavior, this is the most defensible replacement
+
+### `SLEEP_POD_COTTON`
+
+Tested:
+- lagged pair-skip with `POLYESTER`
+- lagged pair-skip with `NYLON`
+- new A3 trend/pair hybrid variants:
+  - pair active only when pair z is strong
+  - trend first, then pair after warmup
+
+Result:
+- none of the hybrids recovered the v19 day-2 strength without damaging the current D3/D4 edge too much
+
+Best attempts:
+- `trend_then_pair60_A3`: D2 `-1,651` / D3 `+5,594` / D4 `+15,864` = `+19,807`
+- current `best_v3000`: D2 `-663` / D3 `+5,374` / D4 `+14,954` = `+19,665`
+- `best_v19`: D2 `+8,220` / D3 `+509` / D4 `-4,318` = `+4,411`
+
+Interpretation:
+- I could improve the “late pair” days a bit, but I could not actually transplant the v19 D2 alpha in a clean/generalizable way
+- current `best_v3000` remains the safer choice here for now
+
+### `TRANSLATOR_GRAPHITE_MIST`
+
+Tested:
+- carry sensitivity tuning
+- adaptive regime MM
+- pair-skip with `VOID_BLUE`
+- new `regime_carry_mm_A3`
+
+Result:
+- nothing clearly beat the current config on a full risk-adjusted basis
+
+Key comparisons:
+- `best_v3000`: D2 `-4,500` / D3 `+4,285` / D4 `+7,014` = `+6,798`
+- `best_v19`: D2 `-522` / D3 `+2,224` / D4 `+4,874` = `+6,576`
+- `regime_carry_mm_A3`: D2 `-2,612` / D3 `+765` / D4 `+6,298` = `+4,451`
+
+Interpretation:
+- the current carry version is still the best overall package
+- A3 variants improved D2 but gave back too much elsewhere
+
+## Final A3 config kept
+
+`best_v3010_targeted_A3`
+
+Changes vs `best_v3000`:
+- `PEBBLES_L` -> `regime_carry_mm_A3`
+- `SLEEP_POD_SUEDE` -> stronger `opportunistic_taker_mm` overlay
+- `SLEEP_POD_COTTON` unchanged
+- `TRANSLATOR_GRAPHITE_MIST` unchanged
+
+## Final results
+
+### Full 3-day BT
+
+- `best_v3000`: `1,049,340`
+- `best_v3010_targeted_A3`: `1,045,233`
+
+So A3 gives back about `4.1k` over the full 3-day BT.
+
+### Day-4 / live proxy
+
+- `best_v3000`: `427,114`
+- `best_v3010_targeted_A3`: `430,244`
+
+So A3 improves the live proxy by about `+3.1k`.
+
+## Conclusion
+
+I am **not** claiming `best_v3010_targeted_A3` is a new backtest champion. It is a **live-tilted refinement**:
+- worse on total 3-day BT
+- better on day 4 / live proxy
+- built from two product-level replacements that directly target the weak names we identified
+
+If we want maximum BT total, keep `best_v3000`.
+If we want the more live-facing version from this A3 pass, use `best_v3010_targeted_A3`.

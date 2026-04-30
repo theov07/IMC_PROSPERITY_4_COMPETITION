@@ -22,6 +22,9 @@ Params:
   tighten_ticks       : default 1
   hard_pause_at       : default 9
   z_window            : rolling window for mid z (default 300)
+  skip_size           : size to post on the "skipped" side instead of fully suppressing (default 0
+                        = hard skip). E.g. skip_size=1 posts 1 unit even when pair_z fires, giving
+                        partial exposure rather than a binary on/off. Useful for hybrid tuning.
 """
 from __future__ import annotations
 
@@ -70,6 +73,7 @@ class PairSkipMMStrategy(BaseStrategy):
         partner_sign = float(self.params.get("partner_sign", -1.0))  # -1 = inverse
         hard_pause = int(self.params.get("hard_pause_at", 9))
         z_window = int(self.params.get("z_window", 300))
+        skip_size = int(self.params.get("skip_size", 0))
 
         spread = book.best_ask - book.best_bid
         bid_p = book.best_bid + tighten if spread >= 2 else book.best_bid
@@ -98,18 +102,27 @@ class PairSkipMMStrategy(BaseStrategy):
 
         memory["_pair_z"] = pair_z
 
+        # Determine effective bid/ask sizes
+        bid_size = size
+        ask_size = size
         if pair_z > pair_thresh:
-            post_bid = False
+            if skip_size > 0:
+                bid_size = skip_size  # soft skip: reduced size
+            else:
+                post_bid = False      # hard skip
         elif pair_z < -pair_thresh:
-            post_ask = False
+            if skip_size > 0:
+                ask_size = skip_size  # soft skip: reduced size
+            else:
+                post_ask = False      # hard skip
 
         orders: List[Order] = []
         buy_cap = self.buy_capacity(position)
         sell_cap = self.sell_capacity(position)
         if post_bid and bid_p is not None and buy_cap > 0:
-            orders.append(Order(self.product, int(bid_p), min(size, buy_cap)))
+            orders.append(Order(self.product, int(bid_p), min(bid_size, buy_cap)))
         if post_ask and ask_p is not None and sell_cap > 0:
-            orders.append(Order(self.product, int(ask_p), -min(size, sell_cap)))
+            orders.append(Order(self.product, int(ask_p), -min(ask_size, sell_cap)))
         return orders, 0
 
     def feature_prices(self, memory: Dict[str, Any]) -> Dict[str, float]:

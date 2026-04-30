@@ -22016,6 +22016,83 @@ MEMBER_OVERRIDES["best_v3000"] = {
     }
 }
 
+# ── best_v10k: v3000 + pair_skip size=3 for TRANSLATOR_ECLIPSE_CHARCOAL ───────
+# Exploration result: pair_skip(thr=1.25, size=3) gives better per-day consistency:
+#   EC naive:           D2 +12,708 / D3  -6,889 / D4  +6,944 = +12,762
+#   EC pair_skip(s=5):  D2  +2,636 / D3  -1,420 / D4 +11,104 = +12,320
+#   EC pair_skip(s=3):  D2  +2,390 / D3    -488 / D4 +10,584 = +12,486 ← chosen
+# Trade-off: -276 total BT vs naive, but D3 improved by +6,401 and D4 by +3,640.
+# IMPORTANT: pair_skip_mm requires TRANSLATOR_VOID_BLUE in order_depths.
+#            Per-product backtests must include VB: --products TRANSLATOR_ECLIPSE_CHARCOAL TRANSLATOR_VOID_BLUE
+MEMBER_OVERRIDES["best_v10k"] = {
+    5: {
+        **MEMBER_OVERRIDES["best_v3000"][5],
+        "TRANSLATOR_ECLIPSE_CHARCOAL": ProductConfig(
+            symbol="TRANSLATOR_ECLIPSE_CHARCOAL", strategy="pair_skip_mm", position_limit=10,
+            params=dict(partner="TRANSLATOR_VOID_BLUE", partner_sign=-1.0, pair_thresh=1.25,
+                        maker_size=3, tighten_ticks=1, z_window=300, hard_pause_at=9,
+                        log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
+    }
+}
+
+# ── v10k exploration: hybrid EC strategy  ──────────────────────────────────
+# Baseline: naive_tight_mm D2 +12,708 / D3 -6,889 / D4 +6,944 (size=3)
+# Goal: reduce D3 bag accumulation without hurting D2/D4
+# Approach: inventory_carry_mm with various (trend_hl, carry_trend_min_abs) combos
+
+def _ec_carry(hl, min_abs, size=3):
+    return ProductConfig(
+        symbol="TRANSLATOR_ECLIPSE_CHARCOAL", strategy="inventory_carry_mm",
+        position_limit=10,
+        params=dict(maker_size=size, tighten_ticks=1, trend_hl=hl,
+                    carry_pause_min_pos=2, hard_pause_at=9,
+                    carry_trend_min_abs=float(min_abs),
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+MEMBER_OVERRIDES["test_ec_carry_hl100_m30"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_carry(100, 30)}}
+MEMBER_OVERRIDES["test_ec_carry_hl200_m50"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_carry(200, 50)}}
+MEMBER_OVERRIDES["test_ec_carry_hl500_m100"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_carry(500, 100)}}
+MEMBER_OVERRIDES["test_ec_carry_hl100_m50"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_carry(100, 50)}}
+MEMBER_OVERRIDES["test_ec_carry_hl200_m100"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_carry(200, 100)}}
+MEMBER_OVERRIDES["test_ec_carry_hl50_m20"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_carry(50, 20)}}
+
+# pair_skip threshold sweep — must test with BOTH EC and VB visible (--products EC VB)
+def _ec_ps(thr, z_window=300, size=5):
+    return ProductConfig(
+        symbol="TRANSLATOR_ECLIPSE_CHARCOAL", strategy="pair_skip_mm", position_limit=10,
+        params=dict(partner="TRANSLATOR_VOID_BLUE", partner_sign=-1.0, pair_thresh=float(thr),
+                    maker_size=size, tighten_ticks=1, z_window=z_window, hard_pause_at=9,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+# Baseline from v2640: pair_thresh=1.25 gives D2 +2,636 / D3 -1,420 / D4 +11,104 (= +12,320)
+# Naive v3000 baseline:                       D2 +12,708 / D3 -6,889 / D4 +6,944  (= +12,762)
+# Explore: can higher threshold recover D2 PnL while keeping D3/D4 gain?
+MEMBER_OVERRIDES["test_ec_ps_thr1_25"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(1.25)}}
+MEMBER_OVERRIDES["test_ec_ps_thr1_75"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(1.75)}}
+MEMBER_OVERRIDES["test_ec_ps_thr2_5"]  = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(2.5)}}
+MEMBER_OVERRIDES["test_ec_ps_thr3_0"]  = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(3.0)}}
+MEMBER_OVERRIDES["test_ec_ps_thr4_0"]  = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(4.0)}}
+# Also try larger z_window: with more history, z drifts more slowly → fires less on D2
+MEMBER_OVERRIDES["test_ec_ps_zw500"]   = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(1.25, z_window=500)}}
+MEMBER_OVERRIDES["test_ec_ps_zw1000"]  = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(1.25, z_window=1000)}}
+MEMBER_OVERRIDES["test_ec_ps_zw2000"]  = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(1.25, z_window=2000)}}
+
+# Soft-skip: post reduced size on "skipped" side instead of full suppression
+# Goal: recover D2 PnL while retaining D3/D4 protection
+def _ec_ps_soft(skip_sz, thr=1.25, z_window=300, size=5):
+    return ProductConfig(
+        symbol="TRANSLATOR_ECLIPSE_CHARCOAL", strategy="pair_skip_mm", position_limit=10,
+        params=dict(partner="TRANSLATOR_VOID_BLUE", partner_sign=-1.0, pair_thresh=float(thr),
+                    maker_size=size, tighten_ticks=1, z_window=z_window, hard_pause_at=9,
+                    skip_size=skip_sz,
+                    log_flush_ts=1000, ts_increment=100, last_ts_value=999900))
+
+MEMBER_OVERRIDES["test_ec_ps_soft1"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps_soft(1)}}
+MEMBER_OVERRIDES["test_ec_ps_soft2"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps_soft(2)}}
+MEMBER_OVERRIDES["test_ec_ps_soft3"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps_soft(3)}}
+# size=3 pair_skip (match naive size to reduce D2 magnitude cost)
+MEMBER_OVERRIDES["test_ec_ps_size3"] = {5: {**MEMBER_OVERRIDES["best_v3000"][5], "TRANSLATOR_ECLIPSE_CHARCOAL": _ec_ps(1.25, z_window=300, size=3)}}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # A2 — Analyst 2 research: improved momentum/mean-reversion strategies
 # Focus: ROBOT_DISHES (AR1 trend filter), PEBBLES_XS (ref_interval),
@@ -22990,3 +23067,149 @@ def _r5_v3500_v3000_plus_taker_suede():
 
 
 MEMBER_OVERRIDES["best_v3500_v3000_plus_taker_suede"] = _r5_v3500_v3000_plus_taker_suede()
+
+
+# ====================================================================================
+# A3 targeted research after best_v3000:
+# - Keep best_v3000 on COTTON / GRAPHITE (A3 probes were not convincing enough)
+# - Replace PEBBLES_L with a regime-aware carry/naive handoff
+# - Replace SUEDE with the stronger pair+taker overlay for better day-4/live proxy
+# ====================================================================================
+def _regime_carry_A3(
+    sym: str,
+    *,
+    trend_hl: int = 120,
+    regime_min_abs: float = 80.0,
+    size_mild: int = 3,
+    mild_limit: int = 5,
+    size_strong: int = 5,
+    limit: int = 10,
+    carry_min_pos: int = 3,
+    carry_min_abs: float = 0.0,
+    hard_pause: int = 9,
+) -> ProductConfig:
+    return ProductConfig(
+        symbol=sym,
+        strategy="regime_carry_mm_A3",
+        position_limit=limit,
+        params=dict(
+            size_mild=size_mild,
+            mild_limit=mild_limit,
+            size_strong=size_strong,
+            hard_pause_at=hard_pause,
+            tighten_ticks=1,
+            trend_hl=trend_hl,
+            regime_trend_min_abs=float(regime_min_abs),
+            carry_pause_min_pos=carry_min_pos,
+            carry_trend_min_abs=float(carry_min_abs),
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_best_v3010_targeted_A3():
+    base = dict(MEMBER_OVERRIDES["best_v3000"][5])
+    base["PEBBLES_L"] = _regime_carry_A3(
+        "PEBBLES_L",
+        trend_hl=100,
+        regime_min_abs=80.0,
+        size_mild=3,
+        mild_limit=5,
+        size_strong=5,
+        limit=10,
+        carry_min_pos=3,
+        carry_min_abs=0.0,
+        hard_pause=9,
+    )
+    base["SLEEP_POD_SUEDE"] = _suede_opportunistic_taker()
+    return {5: base}
+MEMBER_OVERRIDES["best_v3010_targeted_A3"] = _r5_best_v3010_targeted_A3()
+
+
+def _r5_best_v3020_A3():
+    base = dict(MEMBER_OVERRIDES["best_v3000"][5])
+    base["SLEEP_POD_SUEDE"] = _suede_opportunistic_taker()
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3020_A3"] = _r5_best_v3020_A3()
+
+
+def _msq_revguard_A3(*, reverse_threshold: int, cooldown_ticks: int, exit_threshold: int = 150) -> ProductConfig:
+    return ProductConfig(
+        symbol="MICROCHIP_SQUARE",
+        strategy="trend_follow_revguard_A3",
+        position_limit=10,
+        params=dict(
+            ema_half_life=30,
+            threshold=200,
+            exit_threshold=exit_threshold,
+            reverse_threshold=reverse_threshold,
+            reentry_cooldown_ticks=cooldown_ticks,
+            direction=0,
+            position_limit=10,
+            ts_increment=100,
+            last_ts_value=999900,
+            log_flush_ts=1000,
+        ),
+    )
+
+
+def _r5_best_v3033_msq_revguard_A3():
+    base = dict(MEMBER_OVERRIDES["best_v3020_A3"][5])
+    base["MICROCHIP_SQUARE"] = _msq_revguard_A3(reverse_threshold=300, cooldown_ticks=400, exit_threshold=150)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3033_msq_revguard_A3"] = _r5_best_v3033_msq_revguard_A3()
+
+
+def _planetary_carry_deadband_A3(*, trend_hl: int = 200, carry_min_abs: float = 0.0) -> ProductConfig:
+    return ProductConfig(
+        symbol="GALAXY_SOUNDS_PLANETARY_RINGS",
+        strategy="inventory_carry_mm",
+        position_limit=10,
+        params=dict(
+            maker_size=5,
+            tighten_ticks=1,
+            trend_hl=trend_hl,
+            carry_pause_min_pos=3,
+            hard_pause_at=9,
+            carry_trend_min_abs=float(carry_min_abs),
+            log_flush_ts=1000,
+            ts_increment=100,
+            last_ts_value=999900,
+        ),
+    )
+
+
+def _r5_best_v3040_pr_deadband50_A3():
+    base = dict(MEMBER_OVERRIDES["best_v3033_msq_revguard_A3"][5])
+    base["GALAXY_SOUNDS_PLANETARY_RINGS"] = _planetary_carry_deadband_A3(trend_hl=200, carry_min_abs=50.0)
+    return {5: base}
+
+
+def _r5_best_v3041_pr_deadband75_A3():
+    base = dict(MEMBER_OVERRIDES["best_v3033_msq_revguard_A3"][5])
+    base["GALAXY_SOUNDS_PLANETARY_RINGS"] = _planetary_carry_deadband_A3(trend_hl=200, carry_min_abs=75.0)
+    return {5: base}
+
+
+def _r5_best_v3042_pr_deadband100_A3():
+    base = dict(MEMBER_OVERRIDES["best_v3033_msq_revguard_A3"][5])
+    base["GALAXY_SOUNDS_PLANETARY_RINGS"] = _planetary_carry_deadband_A3(trend_hl=200, carry_min_abs=100.0)
+    return {5: base}
+
+
+def _r5_best_v3043_pr_hl100_deadband100_A3():
+    base = dict(MEMBER_OVERRIDES["best_v3033_msq_revguard_A3"][5])
+    base["GALAXY_SOUNDS_PLANETARY_RINGS"] = _planetary_carry_deadband_A3(trend_hl=100, carry_min_abs=100.0)
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_v3040_pr_deadband50_A3"] = _r5_best_v3040_pr_deadband50_A3()
+MEMBER_OVERRIDES["best_v3041_pr_deadband75_A3"] = _r5_best_v3041_pr_deadband75_A3()
+MEMBER_OVERRIDES["best_v3042_pr_deadband100_A3"] = _r5_best_v3042_pr_deadband100_A3()
+MEMBER_OVERRIDES["best_v3043_pr_hl100_deadband100_A3"] = _r5_best_v3043_pr_hl100_deadband100_A3()
