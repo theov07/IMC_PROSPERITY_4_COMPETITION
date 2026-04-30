@@ -22002,3 +22002,64 @@ MEMBER_OVERRIDES["best_v2900_A1_improvements"] = {
                         log_flush_ts=1000, ts_increment=100, last_ts_value=999900)),
     }
 }
+# ═══════════════════════════════════════════════════════════════════════════
+# A2 — Analyst 2 research: improved momentum/mean-reversion strategies
+# Focus: ROBOT_DISHES (AR1 trend filter), PEBBLES_XS (ref_interval),
+#        MICROCHIP_SQUARE (faster EMA), ROBOT_MOPPING (trail stop)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+
+
+# ── best_merged_v1_A2: combine all per-product improvements ────────────────
+# ROBOT_DISHES:     AR1V2 + exit_ticks=50           (+3.6k vs baseline)
+# PEBBLES_XS:       TFv2 + reference_update_interval=800 (+4.3k vs baseline)
+# MICROCHIP_SQUARE: TFv2 + ema_half_life=30         (+1.9k vs baseline)
+
+def _r5_best_merged_v1_A2():
+    base = dict(MEMBER_OVERRIDES["best_v2810_v2640_plus_v19_laundry_A3"][5])
+    # ROBOT_DISHES — exit_ticks=50, no trend filter
+    base["ROBOT_DISHES"] = ProductConfig(
+        symbol="ROBOT_DISHES", strategy="ar1_mean_rev_v2_A2", position_limit=10,
+        params=dict(
+            entry_threshold=20.0, taker_size=10, exit_ticks=50, passive_size=0,
+            trend_ema_hl=0, trend_threshold=0,
+            position_limit=10, last_ts_value=999900,
+        ),
+    )
+    # PEBBLES_XS — reference_update_interval=800 (re-anchor after 800 flat ticks)
+    base["PEBBLES_XS"] = ProductConfig(
+        symbol="PEBBLES_XS", strategy="trend_follow_v2", position_limit=10,
+        params=dict(
+            ema_half_life=150, threshold=100, exit_threshold=30, direction=-1,
+            reference_update_interval=800,
+            position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000,
+        ),
+    )
+    # MICROCHIP_SQUARE — faster EMA (hl=30) for live responsiveness
+    base["MICROCHIP_SQUARE"] = ProductConfig(
+        symbol="MICROCHIP_SQUARE", strategy="trend_follow_v2", position_limit=10,
+        params=dict(
+            ema_half_life=30, threshold=200, exit_threshold=150, direction=0,
+            position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000,
+        ),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_merged_v1_A2"] = _r5_best_merged_v1_A2()
+
+
+def _r5_best_merged_v2_A2():
+    base = dict(MEMBER_OVERRIDES["best_v2810_v2640_plus_v19_laundry_A3"][5])
+    base["MICROCHIP_SQUARE"] = ProductConfig(
+        symbol="MICROCHIP_SQUARE", strategy="trend_follow_v2", position_limit=10,
+        params=dict(
+            ema_half_life=30, threshold=200, exit_threshold=150, direction=0,
+            position_limit=10, ts_increment=100, last_ts_value=999900, log_flush_ts=1000,
+        ),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_merged_v2_A2"] = _r5_best_merged_v2_A2()
