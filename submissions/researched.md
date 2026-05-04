@@ -1425,3 +1425,537 @@ Files created:
   - `submissions/best_v2810_v2640_plus_v19_laundry_A3.py`
 - Exported IMC submission wrapper:
   - `artifacts/submissions/round_5/best_v2810_v2640_plus_v19_laundry_A3_round5_submission.py`
+
+---
+
+# Iteration 10 — Product-specific MM refinement on top of `best_v2810` (2026-04-30)
+
+## Goal
+
+Stop searching for new cross-asset signals and instead improve **how we exploit the existing MM signals** on the mixed / inventory-sensitive products.
+
+Focus only on products currently using MM-style strategies in `best_v2810_v2640_plus_v19_laundry_A3`, and only keep changes that look **more stable across all 3 backtest days**, not just higher on one day.
+
+## New strategy tested
+
+### `pair_shift_carry_mm`
+
+Built a new MM hybrid around the existing `pair_skip_mm` idea:
+
+- keep the same partner signal (`pair_z`)
+- add a **warmup gate** before trusting the pair signal
+- add **quote shifting** from the pair z-score (not only binary side skip)
+- add **carry-aware side pause**
+- add **inventory unwind skew / size damping**
+
+This was meant for the obvious open cases from the A3 merge note:
+
+- `SLEEP_POD_COTTON`
+- `SLEEP_POD_SUEDE`
+- `MICROCHIP_CIRCLE`
+
+Also built a `coint_shift_carry_mm` prototype for `ROBOT_LAUNDRY`, but it was rejected and removed after testing.
+
+## Product-by-product results
+
+### 1. `SLEEP_POD_COTTON`
+
+Baseline (`pair_skip_mm` with `NYLON` partner):
+
+- D2 / D3 / D4 = `-663 / +5,374 / +14,954`
+- Total = `+19,665`
+- Problem: clearly backtest-good, but highly concentrated in day 4 and the only negative day is exactly the kind of early-session miss that can overfit.
+
+New hybrid (`pair_shift_carry_mm`):
+
+- D2 / D3 / D4 = `+4,769 / +2,975 / +5,010`
+- Total = `+12,754`
+
+Interpretation:
+
+- lost `6.9k` total PnL
+- but transformed the profile from **one negative day + one huge day** into **3 positive days with tight dispersion**
+- this is exactly the type of tradeoff that looks less overfit
+
+Verdict:
+
+- **KEEP** in final
+
+### 2. `SLEEP_POD_SUEDE`
+
+Baseline (`pair_skip_mm` with `NYLON` partner):
+
+- D2 / D3 / D4 = `+12,656 / +7,092 / -654`
+- Total = `+19,094`
+
+New hybrid (`pair_shift_carry_mm`):
+
+- D2 / D3 / D4 = `+8,340 / +1,027 / +5,014`
+- Total = `+14,380`
+
+Interpretation:
+
+- much more balanced and all 3 days positive
+- but the total giveback (`-4.7k`) was too large relative to the original strategy, especially since the baseline was already only mildly unstable
+
+Verdict:
+
+- **REJECTED**
+- useful idea, but not good enough vs current `pair_skip_mm`
+
+### 3. `MICROCHIP_CIRCLE`
+
+Baseline (`pair_skip_mm` with `OVAL` partner):
+
+- D2 / D3 / D4 = `+1,329 / +2,530 / +15,018`
+- Total = `+18,878`
+
+New hybrid (`pair_shift_carry_mm`):
+
+- D2 / D3 / D4 = `+688 / -1,891 / +6,560`
+- Total = `+5,358`
+
+Interpretation:
+
+- the extra carry / shift logic destroyed too much of the existing pair edge
+- `MICROCHIP_CIRCLE` remains a case where the raw `pair_skip_mm` implementation is better than a smarter-looking execution layer
+
+Verdict:
+
+- **REJECTED**
+
+### 4. `ROBOT_LAUNDRY`
+
+Baseline (`coint_mm_v1`, passive size already reduced to 1):
+
+- D2 / D3 / D4 = `+8,850 / +4,100 / +1,608`
+- Total = `+14,558`
+
+Tested `coint_shift_carry_mm`:
+
+- D2 / D3 / D4 = `+3,576 / +760 / +3,084`
+- Total = `+7,420`
+
+Interpretation:
+
+- more balanced, but it gave away far too much of the valid coint edge
+- the existing `coint_mm_v1 passive_size=1` remains the best compromise
+
+Verdict:
+
+- **REJECTED**
+- prototype deleted from final codebase
+
+## Final keep
+
+Only one product change survived the robustness filter:
+
+- `SLEEP_POD_COTTON`: `pair_skip_mm` -> `pair_shift_carry_mm`
+
+All other tested product-specific MM upgrades were rejected and removed from the final config / wrappers.
+
+## Final config
+
+### `best_r5_mm_v7`
+
+This is a self-contained final config built from the `best_v2810` mix, with only one retained product-level MM refinement:
+
+- `SLEEP_POD_COTTON` uses `pair_shift_carry_mm`
+- everything else stays on the best previously validated strategy
+
+Exact day totals (by additive product delta from `best_v2810`):
+
+| Config | D2 | D3 | D4 | Total |
+|---|---:|---:|---:|---:|
+| `best_v2810_v2640_plus_v19_laundry_A3` | 290,997.0 | 319,843.0 | 427,734.5 | 1,038,574.5 |
+| `best_r5_mm_v7` | **296,429.0** | 317,444.0 | 417,790.5 | **1,031,663.5** |
+
+Delta vs `best_v2810`:
+
+- D2: `+5,432`
+- D3: `-2,399`
+- D4: `-9,944`
+- Total: `-6,911`
+
+Interpretation:
+
+- small total giveback
+- much better product-level stability on `COTTON`
+- no extra speculative changes on the other MM products
+
+## Files kept
+
+- Config:
+  - `MEMBER_OVERRIDES["best_r5_mm_v7"]` in `prosperity/config.py`
+- New strategy kept:
+  - `prosperity/strategies/round_5/pair_shift_carry_mm.py`
+- Backtest wrapper:
+  - `submissions/best_r5_mm_v7.py`
+- Exported IMC submission:
+  - `artifacts/submissions/round_5/best_r5_mm_v7_round5_submission.py`
+
+## Files rejected / cleaned
+
+- `coint_shift_carry_mm` prototype deleted
+- temporary probe config/wrapper deleted
+- no extra submission wrappers kept beyond the final one
+
+
+# Iteration 11 — restart from original `best_v2810`, try totally different MM families, reject all (2026-04-30)
+
+User feedback after Iteration 10 was explicit: the provisional `best_r5_mm_v7` was not satisfactory in backtest/live, so I restarted from the original `best_v2810_v2640_plus_v19_laundry_A3` and explored **genuinely different MM engines**, not more pair-skip/carry parameter tweaks.
+
+Goal of this pass:
+
+- keep `best_v2810` as the reference baseline
+- test new MM families one product at a time
+- reject anything that does not improve both robustness and absolute quality on `D2/D3/D4`
+- clean the repo afterward so only validated work remains
+
+## Baseline products targeted first
+
+I started with the products where a new MM engine had the highest chance of mattering:
+
+- pair/coint MM names with known live fragility:
+  - `SLEEP_POD_COTTON`
+  - `SLEEP_POD_SUEDE`
+  - `MICROCHIP_CIRCLE`
+  - `ROBOT_LAUNDRY`
+- pure passive MM names with strong microstructure signal:
+  - `OXYGEN_SHAKE_CHOCOLATE`
+  - `OXYGEN_SHAKE_EVENING_BREATH`
+
+## New family 1 — `micro_signal_mm`
+
+Built a new R5 MM prototype with:
+
+- quote recentering from `microprice - mid`
+- imbalance-based directional pressure
+- wide-spread tightening regime
+- recent one-sided fill cooldown
+- optional external bias:
+  - `pair_z` mode for pair-skip products
+  - `coint_z` mode for `ROBOT_LAUNDRY`
+
+### Pair/coint products
+
+Reference baselines from `best_v2810`:
+
+| Product | Baseline strategy | D2 | D3 | D4 | Total |
+|---|---|---:|---:|---:|---:|
+| `SLEEP_POD_COTTON` | `pair_skip_mm` | -663 | +5,374 | +14,954 | +19,665 |
+| `SLEEP_POD_SUEDE` | `pair_skip_mm` | +12,656 | +7,092 | -654 | +19,094 |
+| `MICROCHIP_CIRCLE` | `pair_skip_mm` | +1,329 | +2,530 | +15,018.5 | +18,877.5 |
+| `ROBOT_LAUNDRY` | `coint_mm_v1` | +8,850 | +4,100.5 | +1,607.5 | +14,558 |
+
+`micro_signal_mm` results:
+
+| Product | D2 | D3 | D4 | Total | Verdict |
+|---|---:|---:|---:|---:|---|
+| `SLEEP_POD_COTTON` | -114 | +3,946 | +892 | +4,724 | reject |
+| `SLEEP_POD_SUEDE` | +7,456 | -482 | -712 | +6,262 | reject |
+| `MICROCHIP_CIRCLE` | -328 | +606 | +6,399 | +6,677 | reject |
+| `ROBOT_LAUNDRY` | +1,121 | +1,079 | +2,018 | +4,218 | reject |
+
+Interpretation:
+
+- the engine looked “smarter”, but every tested product lost far too much of the validated edge
+- for pair-driven names, **price recentering was strictly worse than the existing binary pair skip**
+- for `ROBOT_LAUNDRY`, the passive+coint bias lost too much of the real coint overlay
+
+### Pure passive MM products
+
+Exact `best_v2810` baselines:
+
+| Product | Baseline strategy | D2 | D3 | D4 | Total |
+|---|---|---:|---:|---:|---:|
+| `OXYGEN_SHAKE_CHOCOLATE` | `naive_tight_mm` | +8,866 | +9,843 | +4,864 | +23,573 |
+| `OXYGEN_SHAKE_EVENING_BREATH` | `naive_tight_mm` | +1,669 | +7,291 | +11,905 | +20,865 |
+
+`micro_signal_mm` results:
+
+| Product | D2 | D3 | D4 | Total | Verdict |
+|---|---:|---:|---:|---:|---|
+| `OXYGEN_SHAKE_CHOCOLATE` | +7,847 | +2,169 | +2,604 | +12,620 | reject |
+| `OXYGEN_SHAKE_EVENING_BREATH` | +4,064 | -2,677 | +2,820 | +4,207 | reject |
+
+Interpretation:
+
+- even on products with strong `microprice` / `imbalance` predictive structure, **re-centering quotes too aggressively destroyed fill quality**
+- baseline `naive_tight_mm` still dominated by a large margin
+
+Verdict for family 1:
+
+- **REJECTED**
+- strategy file / probe configs / wrappers removed from final codebase
+
+## New family 2 — `real_mm` + OBI size tilt
+
+Second pass: much more conservative. No aggressive price recentering, just:
+
+- `real_mm` inventory-aware quoting
+- carry pause
+- OBI size tilt through the shared base overlay
+
+Results:
+
+| Product | D2 | D3 | D4 | Total | Baseline total | Verdict |
+|---|---:|---:|---:|---:|---:|---|
+| `OXYGEN_SHAKE_CHOCOLATE` | +3,560 | +8,145 | +5,862 | +17,567 | +23,573 | reject |
+| `OXYGEN_SHAKE_EVENING_BREATH` | +80 | +5,489 | +9,415 | +14,984 | +20,865 | reject |
+
+Interpretation:
+
+- safer than `micro_signal_mm`, but still clearly worse than plain `naive_tight_mm`
+- size-only microstructure adaptation was not enough to offset the lost passive edge
+
+Verdict for family 2:
+
+- **REJECTED**
+- probe configs / wrappers removed
+
+## New family 3 — passive `mm_first_v4_combo`
+
+Final pass: reuse the more sophisticated old combo engine, but in a passive-focused configuration:
+
+- takers effectively disabled
+- gap exploit disabled
+- keep only the useful passive pieces:
+  - z-score size adaptation
+  - microprice size tilt
+  - spread-zscore skew
+  - flow/fill toxicity filters
+
+Results:
+
+| Product | D2 | D3 | D4 | Total | Baseline total | Verdict |
+|---|---:|---:|---:|---:|---:|---|
+| `OXYGEN_SHAKE_CHOCOLATE` | +8,255 | +10,287 | +3,325 | +21,867 | +23,573 | reject |
+| `OXYGEN_SHAKE_EVENING_BREATH` | +1,162 | +4,209 | +10,479 | +15,850 | +20,865 | reject |
+
+Interpretation:
+
+- this was the closest of the new families
+- `CHOCOLATE` came reasonably near the baseline, but still lost `-1,706`
+- `EVENING_BREATH` still underperformed badly
+- not enough evidence to justify carrying a more complex engine into the final codebase
+
+Verdict for family 3:
+
+- **REJECTED**
+- probe configs / wrappers removed
+
+## Final conclusion of Iteration 11
+
+Main lesson:
+
+- on the products tested here, the missing edge is **not** recovered by simply making the passive MM engine more “intelligent”
+- the current validated R5 winners (`pair_skip_mm`, `coint_mm_v1`, `naive_tight_mm`) still beat:
+  - quote-recentering microstructure MM
+  - conservative `real_mm + OBI`
+  - passive `mm_first_v4_combo`
+
+Practical conclusion:
+
+- `best_r5_mm_v7` is no longer considered a retained candidate
+- all provisional MM strategy files / configs / wrappers from Iterations 10-11 were cleaned from the codebase
+- no new final config was kept from this research pass
+
+If we revisit this direction later, the next step should probably **not** be “a slightly better passive quote shifter”, but something more structural:
+
+- deeper live/backtest fill diagnostics per product
+- explicit adverse-selection modelling after fills
+- or more opportunistic/taker-assisted MM rather than pure passive refinement
+
+## Iteration 12 — live-log-driven MM overlays from `568808.log`
+
+User direction for this pass was explicit:
+
+- start from the original `best_v2810_v2640_plus_v19_laundry_A3`
+- first explore **opportunistic / taker-assisted MM**
+- then explore **fill diagnostics / adverse-selection defense**
+- only keep uploadable versions that also hold up in backtest, with attention to day-by-day stability
+
+### Live diagnostics from `logs/round_5/568808.log`
+
+I rebuilt per-product live PnL / fill edge / short-horizon markouts from the official log and split the MM names into two buckets.
+
+Names with **positive entry edge and mostly positive markouts**, but disappointing live realization:
+
+- `ROBOT_LAUNDRY`
+- `SLEEP_POD_SUEDE`
+- `SNACKPACK_RASPBERRY`
+- `PANEL_1X4`
+
+Interpretation:
+
+- these products did **not** look like classic toxic fills
+- they looked more like:
+  - too-passive behavior
+  - poor inventory exit
+  - missed obvious top-of-book dislocations
+
+Names with **clearly worse post-fill behavior / adverse selection**:
+
+- `MICROCHIP_RECTANGLE`
+- `OXYGEN_SHAKE_MORNING_BREATH`
+- `GALAXY_SOUNDS_SOLAR_FLAMES`
+
+Interpretation:
+
+- these were better candidates for a **post-fill diagnostic guard**
+- the goal here was not to “predict more”, but to stop leaning into fills that quickly went against us
+
+## New family A — `opportunistic_taker_mm`
+
+New self-contained MM engine built for this pass:
+
+- preserve the current passive family per product:
+  - `pair_skip` behavior for pair names
+  - `coint` behavior for `ROBOT_LAUNDRY`
+  - plain passive baseline for naive names
+- add a **separate taker overlay** only when the best bid/ask is far enough from an internal fair anchor
+- fair anchor combines:
+  - existing product signal (`pair_z` / `coint_z` / carry trend)
+  - microprice deviation
+  - small inventory-aware unwind logic
+
+### Rejected product trials
+
+`ROBOT_LAUNDRY` isolate:
+
+- baseline: `+8,850 / +4,100 / +1,608 = +14,558`
+- taker overlay: `+6,636 / +2,772 / +1,334 = +10,742`
+- verdict: reject
+
+`SNACKPACK_RASPBERRY` isolate:
+
+- baseline: `+12,572 / +11,208 / +4,575 = +28,355`
+- taker overlay: `+11,664 / +12,012 / +3,751 = +27,427`
+- verdict: reject
+
+`PANEL_1X4` isolate:
+
+- baseline: `+6,060 / +4,575 / +8,718 = +19,352`
+- taker overlay: `+3,235 / +3,646 / +2,409 = +9,290`
+- verdict: reject
+
+### Accepted product trial
+
+`SLEEP_POD_SUEDE` isolate:
+
+- baseline: `+10,260 / +1,885 / +3,915 = +16,060`
+- taker overlay: `+10,999 / +2,414 / +5,223 = +18,636`
+- delta vs baseline: `+739 / +529 / +1,308`
+- verdict: keep
+
+### Final opportunistic upload
+
+Retained candidate:
+
+- `best_r5_mm_taker_v3`
+
+Only product changed vs baseline:
+
+- `SLEEP_POD_SUEDE` → `opportunistic_taker_mm`
+
+Full-portfolio backtest:
+
+- baseline `best_v2810_v2640_plus_v19_laundry_A3`:
+  - total `1,149,314`
+  - max DD `32,483`
+- `best_r5_mm_taker_v3`:
+  - total `1,151,890`
+  - max DD `31,570`
+
+Interpretation:
+
+- improvement is modest in absolute size (`+2,576`)
+- but it is clean:
+  - driven by one product only
+  - improves **all three days** on that product
+  - slightly lowers portfolio max drawdown
+
+## New family B — `fill_guarded_mm`
+
+New self-contained defensive MM engine built for this pass:
+
+- preserve the current passive family per product
+- infer fills from position changes
+- record recent fill-side markout after a short horizon
+- when a side becomes toxic:
+  - pause it temporarily
+  - widen it
+  - optionally unwind inventory with small takers
+
+### Rejected product trial
+
+`OXYGEN_SHAKE_MORNING_BREATH` isolate:
+
+- baseline: `+6,732 / +885 / +1,628 = +9,245`
+- guarded: `+3,952 / +2,571 / +1,252 = +7,776`
+- verdict: reject
+
+### Accepted product trials
+
+`MICROCHIP_RECTANGLE` isolate:
+
+- baseline: `+11,115 / +14,235 / +710 = +26,060`
+- guarded: `+10,236 / +12,200 / +3,913 = +26,350`
+- delta vs baseline: `-879 / -2,035 / +3,203`
+- verdict: keep
+
+`GALAXY_SOUNDS_SOLAR_FLAMES` isolate:
+
+- baseline: `-6,618 / +14,130 / -600 = +6,912`
+- guarded: `-3,750 / +14,571 / -1,581 = +9,240`
+- delta vs baseline: `+2,868 / +441 / -981`
+- verdict: keep
+
+### Final defensive upload
+
+Retained candidate:
+
+- `best_r5_mm_guard_v2`
+
+Products changed vs baseline:
+
+- `MICROCHIP_RECTANGLE` → `fill_guarded_mm`
+- `GALAXY_SOUNDS_SOLAR_FLAMES` → `fill_guarded_mm`
+
+Full-portfolio backtest:
+
+- baseline `best_v2810_v2640_plus_v19_laundry_A3`:
+  - total `1,149,314`
+  - max DD `32,483`
+- `best_r5_mm_guard_v2`:
+  - total `1,151,931`
+  - max DD `33,089`
+
+Interpretation:
+
+- this is the best total of the pass (`+2,617` vs baseline)
+- but the shape is less clean than the taker version:
+  - changed-product delta is `+1,989 / -1,594 / +2,222`
+  - so it improves `D2` and `D4`, but gives back on `D3`
+- still acceptable as a distinct second upload because the overall lift is slightly higher than the taker version
+
+## Final retained uploads from this pass
+
+- `best_r5_mm_taker_v3`
+  - opportunistic / taker-assisted
+  - only `SLEEP_POD_SUEDE` changed
+  - cleaner day-by-day profile
+
+- `best_r5_mm_guard_v2`
+  - fill-diagnostic / adverse-selection defensive
+  - `MICROCHIP_RECTANGLE` + `GALAXY_SOUNDS_SOLAR_FLAMES`
+  - slightly higher total PnL, but less even day-to-day than the taker version
+
+Cleanup done after convergence:
+
+- removed temporary configs / wrappers / exports for:
+  - `best_r5_mm_taker_v1`
+  - `best_r5_mm_taker_v2`
+  - `best_r5_mm_guard_v1`
+- kept only the final strategy files and the two retained uploadable variants

@@ -21861,6 +21861,55 @@ def _r5_best_v2810_v2640_plus_v19_laundry_A3():
 MEMBER_OVERRIDES["best_v2810_v2640_plus_v19_laundry_A3"] = _r5_best_v2810_v2640_plus_v19_laundry_A3()
 
 
+def _r5_best_mm_taker_v3():
+    base = dict(MEMBER_OVERRIDES["best_v2810_v2640_plus_v19_laundry_A3"][5])
+    base["SLEEP_POD_SUEDE"] = ProductConfig(
+        symbol="SLEEP_POD_SUEDE", strategy="opportunistic_taker_mm", position_limit=10,
+        params=dict(
+            mode="pair", partner="SLEEP_POD_NYLON", partner_sign=-1.0, pair_thresh=1.25,
+            z_window=300, maker_size=5, passive_size=5, opportunity_taker_size=2,
+            taker_threshold=1.25, min_opportunity_ticks=0.9, taker_cooldown_ts=300,
+            taker_position_cap=7, unwind_min_pos=5, unwind_size=3, unwind_edge=1.0,
+            signal_shift_per_unit=0.9, signal_shift_clamp=2.0, microprice_weight=0.5,
+            microprice_clamp=1.0, trend_weight=0.03, trend_clamp=0.5, trend_hl=150,
+            inv_skew_thresh=6, inv_skew_ticks=1, size_inv_factor=0.35,
+            hard_pause_at=9, tighten_ticks=1, last_ts_value=999900,
+        ),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_r5_mm_taker_v3"] = _r5_best_mm_taker_v3()
+
+
+def _r5_best_mm_guard_v2():
+    base = dict(MEMBER_OVERRIDES["best_v2810_v2640_plus_v19_laundry_A3"][5])
+    base["MICROCHIP_RECTANGLE"] = ProductConfig(
+        symbol="MICROCHIP_RECTANGLE", strategy="fill_guarded_mm", position_limit=10,
+        params=dict(
+            mode="pair", partner="MICROCHIP_SQUARE", partner_sign=-1.0, pair_thresh=1.25,
+            z_window=300, maker_size=5, tighten_ticks=1, hard_pause_at=9,
+            trend_hl=120, markout_horizon_ts=500, adverse_ticks=1.0, favorable_ticks=1.5,
+            toxicity_threshold=3.0, toxicity_decay=0.96, pause_ticks=5, widen_ticks=1,
+            unwind_min_pos=5, unwind_size=3, last_ts_value=999900,
+        ),
+    )
+    base["GALAXY_SOUNDS_SOLAR_FLAMES"] = ProductConfig(
+        symbol="GALAXY_SOUNDS_SOLAR_FLAMES", strategy="fill_guarded_mm", position_limit=10,
+        params=dict(
+            mode="carry", maker_size=5, tighten_ticks=1, hard_pause_at=9,
+            trend_hl=180, carry_pause_min_pos=3, markout_horizon_ts=500,
+            adverse_ticks=1.0, favorable_ticks=1.5, toxicity_threshold=3.0,
+            toxicity_decay=0.96, pause_ticks=4, widen_ticks=1,
+            unwind_min_pos=5, unwind_size=3, last_ts_value=999900,
+        ),
+    )
+    return {5: base}
+
+
+MEMBER_OVERRIDES["best_r5_mm_guard_v2"] = _r5_best_mm_guard_v2()
+
+
 # v2650: v2630 + remove the GALAXY DARK_MATTER pair (live -3.3k, BT day4 +5.9k mixed)
 # But this might be overfit — just test
 def _r5_v2650_no_dark_matter():

@@ -283,6 +283,8 @@ STRATEGY_REGISTRY: dict[str, tuple[str, str]] = {
     "top_down_filter_mm":     ("prosperity/strategies/round_5/top_down_filter_mm.py", "TopDownFilterMMStrategy"),
     "real_mm":                ("prosperity/strategies/round_5/real_mm.py", "RealMMStrategy"),
     "vol_adjusted_mm":        ("prosperity/strategies/round_5/vol_adjusted_mm.py", "VolAdjustedMMStrategy"),
+    "opportunistic_taker_mm": ("prosperity/strategies/round_5/opportunistic_taker_mm.py", "OpportunisticTakerMMStrategy"),
+    "fill_guarded_mm":        ("prosperity/strategies/round_5/fill_guarded_mm.py", "FillGuardedMMStrategy"),
 }
 
 # Core modules always inlined (order matters — later modules depend on earlier ones).

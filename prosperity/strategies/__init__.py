@@ -31,6 +31,8 @@ _STRATEGY_SPECS: Dict[str, Tuple[str, str]] = {
     "top_down_filter_mm": ("prosperity.strategies.round_5.top_down_filter_mm", "TopDownFilterMMStrategy"),
     "real_mm": ("prosperity.strategies.round_5.real_mm", "RealMMStrategy"),
     "vol_adjusted_mm": ("prosperity.strategies.round_5.vol_adjusted_mm", "VolAdjustedMMStrategy"),
+    "opportunistic_taker_mm": ("prosperity.strategies.round_5.opportunistic_taker_mm", "OpportunisticTakerMMStrategy"),
+    "fill_guarded_mm": ("prosperity.strategies.round_5.fill_guarded_mm", "FillGuardedMMStrategy"),
     "naive_tight_mm": ("prosperity.strategies.round_1.naive_tight_mm", "NaiveTightMarketMakerStrategy"),
     "naive_tight_mm_v2": ("prosperity.strategies.naive_tight_mm_v2", "NaiveTightMarketMakerV2Strategy"),
     "naive_tight_mm_v3": ("prosperity.strategies.naive_tight_mm_v3", "NaiveTightMarketMakerV3Strategy"),
