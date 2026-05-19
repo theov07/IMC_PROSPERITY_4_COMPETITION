@@ -14,11 +14,11 @@ python research/visualizer/dashboard.py
 ```
 
 ```bash
-python scripts/analyze_backtest.py --log logs/round_1/tibo_mm/182179.json --day 2 --outdir artifacts/analysis/round_1/tibo
+python scripts/shared/analyze_backtest.py --log logs/round_1/tibo_mm/182179.json --day 2 --outdir artifacts/analysis/round_1/tibo
 ```
 
 ```bash
-python scripts/analyze_log.py --log logs/round_1/tibo_mm/182179.json --outdir artifacts/analysis/round_1/tibo --plotly     
+python scripts/shared/analyze_log.py --log logs/round_1/tibo_mm/182179.json --outdir artifacts/analysis/round_1/tibo --plotly     
 ```
 
 
@@ -73,7 +73,7 @@ python -m unittest tests.test_strategies -v
 ### `Export for IMC` & internal backtest
 ```bash
 # Generate single-file submission
-python scripts/export_submission.py --member tibo_AvSt --round 0
+python scripts/shared/export_submission.py --member tibo_AvSt --round 0
 
 # Compile-check the exported file
 python -m py_compile artifacts/submissions/champion_submission.py
@@ -145,7 +145,7 @@ Based on your exploration, decide which strategy to use per product, then tune p
 - Create prosperity/strategies/my_strategy.py — the canonical source
   - First, look at base.py to see what you need to implement
 - Register in `prosperity/strategies/__init__.py`
-- Add one line to STRATEGY_REGISTRY in `scripts/export_submission.py` (name → file + class name)
+- Add one line to STRATEGY_REGISTRY in `scripts/shared/export_submission.py` (name → file + class name)
 - Add to Configuration: edit `config.py`
 - Add Unit Tests (Recommended): Create/update `test_strategies.py`
 
@@ -373,7 +373,7 @@ CURRENT_MEMBER = "my_attempt_v1"  # ← Change this to your best variant
 #### Step 7b: Generate Single-File Submission
 
 ```bash
-python scripts/export_submission.py \
+python scripts/shared/export_submission.py \
   --member my_attempt_v1 --round 0 \
   --output artifacts/submissions/my_submission.py
 ```

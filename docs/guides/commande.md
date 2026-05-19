@@ -78,7 +78,7 @@ Ordre recommande:
 
 1. Creer le fichier dans `prosperity/strategies/`, par exemple `my_strategy.py`
 2. Enregistrer la classe dans `prosperity/strategies/__init__.py`
-3. Ajouter le nom de strategie dans `scripts/export_submission.py`
+3. Ajouter le nom de strategie dans `scripts/shared/export_submission.py`
 4. Ajouter une variante dans `prosperity/config.py`
 5. Creer un wrapper dans `submissions/mon_variant.py`
 6. Backtester
@@ -104,7 +104,7 @@ prosperity/strategies/__init__.py
 L'exporteur a aussi son propre registre:
 
 ```text
-scripts/export_submission.py
+scripts/shared/export_submission.py
 ```
 
 ### Configuration
@@ -327,5 +327,5 @@ python scripts\export_submission.py --member champion --round 0 --output artifac
   - `prosperity/config.py`
   - `submissions/<member>.py`
   - `prosperity/strategies/__init__.py`
-  - `scripts/export_submission.py`
+  - `scripts/shared/export_submission.py`
 - `artifacts/` et `logs/` sont surtout des sorties generees, pas la source metier.

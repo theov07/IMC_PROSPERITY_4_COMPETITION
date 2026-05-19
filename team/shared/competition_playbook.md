@@ -6,7 +6,7 @@
 - identify products, limits, conversions, and any special constraints
 - run the baseline backtests for `champion`, `leo`, `theo`, and `pietro`
 - produce a quick table with pnl, volume, max inventory, and strong or weak products
-- open at least one official log for review with `scripts/analyze_log.py`
+- open at least one official log for review with `scripts/shared/analyze_log.py`
 
 ## During the working window
 
@@ -17,7 +17,7 @@
 
 ## Before final submission
 
-- export the single-file submission with `scripts/export_submission.py`
+- export the single-file submission with `scripts/shared/export_submission.py`
 - compile-check the exported file
 - note the UUID or submission id
 - save the exact profile and parameters used

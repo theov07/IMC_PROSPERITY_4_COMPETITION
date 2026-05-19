@@ -71,7 +71,7 @@ Affected:
 
 - `Prosperity Trading Dashboard`
 - log-based quote overlays using `_parse_lambda_logs(...)`
-- `scripts/analyze_log.py` indirectly, since it uses the same log tooling
+- `scripts/shared/analyze_log.py` indirectly, since it uses the same log tooling
 
 Not affected:
 

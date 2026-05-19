@@ -703,7 +703,7 @@ __pycache__ dans le repo - Les .pyc sont tracked dans git malgré le .gitignore.
 
 .env dans le repo - Le fichier .env est tracked, potentiel leak de secrets.
 
-Fichier prosperity/tooling/logs.py référencé par scripts/analyze_log.py mais pas documenté - Comment l'utiliser n'est pas clair.
+Fichier prosperity/tooling/logs.py référencé par scripts/shared/analyze_log.py mais pas documenté - Comment l'utiliser n'est pas clair.
 
 NICE TO HAVE
 Pas de Makefile/scripts helper - Un Makefile ou justfile avec des commandes comme make backtest, make export, make benchmark, make analyze simplifierait le workflow.

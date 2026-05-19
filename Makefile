@@ -37,10 +37,10 @@ dashboard-static:  ## Export static HTML charts (LOG=path/to/log.json)
 	$(PYTHON) -m prosperity.tooling.dashboard --log $(LOG) --static
 
 benchmark:  ## Benchmark strategy latency (STRATEGY=champion)
-	$(PYTHON) scripts/benchmark_strategy.py --strategy $(STRATEGY)
+	$(PYTHON) scripts/shared/benchmark_strategy.py --strategy $(STRATEGY)
 
 export:  ## Export single-file submission (MEMBER=champion)
-	$(PYTHON) scripts/export_submission.py --member $(MEMBER)
+	$(PYTHON) scripts/shared/export_submission.py --member $(MEMBER)
 
 r3-scorecard:  ## Build Round 3 readiness scorecard
 	$(PYTHON) -m prosperity.tooling.r3_scorecard --strategy $(STRATEGY) $(ARGS)
