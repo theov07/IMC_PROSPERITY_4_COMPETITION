@@ -12,17 +12,20 @@ from prosperity.strategies import build_strategy
 from prosperity.strategies.base.base import BaseStrategy
 
 
-# ── Change these two constants before each round submission ──────────
+# ── Default local dispatcher target ──────────────────────────────────
+# Public repo default: stable round-0 champion baseline.
 CURRENT_ROUND = 0
-CURRENT_MEMBER = "leo_naive_v6"
+CURRENT_MEMBER = "champion"
 
 
 class Trader:
     """Universal dispatcher.  Reads CURRENT_ROUND / CURRENT_MEMBER to decide
     which strategy to run per product."""
 
-    def __init__(self):
-        config = get_round_config(CURRENT_ROUND, CURRENT_MEMBER)
+    def __init__(self, round_num: int | None = None, member: str | None = None):
+        self.round_num = CURRENT_ROUND if round_num is None else round_num
+        self.member = CURRENT_MEMBER if member is None else member
+        config = get_round_config(self.round_num, self.member)
         self.strategies: Dict[str, BaseStrategy] = {}
         for symbol, pc in config.items():
             merged_params = {"position_limit": pc.position_limit, **pc.params}

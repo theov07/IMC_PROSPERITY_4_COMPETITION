@@ -8,12 +8,18 @@ Hypotheses:
 """
 from __future__ import annotations
 
+import argparse
 import json
 from collections import defaultdict
 
 
 def main():
-    with open("C:/Users/LéoRENAULT/Downloads/result_round_3/486239.json", "r", encoding="utf-8") as f:
+    parser = argparse.ArgumentParser(description="Diagnose an R3 live options run from its JSON and .log files.")
+    parser.add_argument("--json", required=True, help="Path to the live result JSON file.")
+    parser.add_argument("--log", required=True, help="Path to the companion .log file.")
+    args = parser.parse_args()
+
+    with open(args.json, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     # Parse activities log
@@ -62,7 +68,7 @@ def main():
     print("=" * 110)
 
     # Need to parse tradeHistory from log file
-    with open("C:/Users/LéoRENAULT/Downloads/result_round_3/486239.log", "r", encoding="utf-8") as f:
+    with open(args.log, "r", encoding="utf-8") as f:
         raw = f.read()
     start_ix = raw.find('"tradeHistory":[')
     if start_ix < 0:

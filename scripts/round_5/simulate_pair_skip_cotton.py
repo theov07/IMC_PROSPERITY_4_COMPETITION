@@ -4,6 +4,7 @@ Tests whether our strategy decisions are deterministic given identical mids,
 which they should be.
 """
 
+import argparse
 import json
 import math
 from collections import defaultdict
@@ -82,31 +83,40 @@ def simulate(log_path: str, target_sym: str, partner_sym: str,
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Compare pair-skip decisions across two live logs.")
+    parser.add_argument("--log-a", required=True, help="First live log JSON path.")
+    parser.add_argument("--log-b", required=True, help="Second live log JSON path.")
+    parser.add_argument("--name-a", default="A", help="Label for the first run.")
+    parser.add_argument("--name-b", default="B", help="Label for the second run.")
+    parser.add_argument("--target", default="SLEEP_POD_COTTON", help="Target product symbol.")
+    parser.add_argument("--partner", default="SLEEP_POD_NYLON", help="Partner product symbol.")
+    args = parser.parse_args()
+
     paths = {
-        "v2090": "C:/Users/LéoRENAULT/Downloads/log_v2090/563187.log",
-        "v2640": "C:/Users/LéoRENAULT/Downloads/best_log/564793.log",
+        args.name_a: args.log_a,
+        args.name_b: args.log_b,
     }
 
     decisions = {}
     for name, p in paths.items():
-        decisions[name] = simulate(p, "SLEEP_POD_COTTON", "SLEEP_POD_NYLON")
+        decisions[name] = simulate(p, args.target, args.partner)
 
-    print(f"v2090 decisions: {len(decisions['v2090'])}")
-    print(f"v2640 decisions: {len(decisions['v2640'])}")
+    print(f"{args.name_a} decisions: {len(decisions[args.name_a])}")
+    print(f"{args.name_b} decisions: {len(decisions[args.name_b])}")
 
     # Compare decisions
     diff_count = 0
-    for d90, d64 in zip(decisions["v2090"], decisions["v2640"]):
+    for d90, d64 in zip(decisions[args.name_a], decisions[args.name_b]):
         if d90 != d64:
             diff_count += 1
             if diff_count <= 5:
-                print(f"DIFF at ts={d90[0]}: v2090={d90[1:]}, v2640={d64[1:]}")
+                print(f"DIFF at ts={d90[0]}: {args.name_a}={d90[1:]}, {args.name_b}={d64[1:]}")
     print(f"Total decision differences: {diff_count}")
 
     # Did pair_skip skip BID at ts=32400?
-    for d in decisions["v2090"]:
+    for d in decisions[args.name_a]:
         if d[0] == 32400:
-            print(f"\nv2090 @ ts=32400: post_bid={d[1]}, pair_z={d[3]:.3f}")
-    for d in decisions["v2640"]:
+            print(f"\n{args.name_a} @ ts=32400: post_bid={d[1]}, pair_z={d[3]:.3f}")
+    for d in decisions[args.name_b]:
         if d[0] == 32400:
-            print(f"v2640 @ ts=32400: post_bid={d[1]}, pair_z={d[3]:.3f}")
+            print(f"{args.name_b} @ ts=32400: post_bid={d[1]}, pair_z={d[3]:.3f}")

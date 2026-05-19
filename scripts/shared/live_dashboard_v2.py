@@ -8,7 +8,7 @@ Plots PER PRODUCT:
 
 Usage:
   python scripts/shared/live_dashboard_v2.py \\
-      --log "C:/Users/LeoRENAULT/Downloads/log_v9/517024.json" \\
+      --log logs/round_4/live_v9.json \\
       --out artifacts/analysis/round_4/live_v9_dashboard.html
 """
 from __future__ import annotations

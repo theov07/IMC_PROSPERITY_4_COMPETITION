@@ -9,14 +9,13 @@ Enhancements over v1:
 """
 from __future__ import annotations
 
+import argparse
 import json
 from collections import defaultdict
 from pathlib import Path
 
-LOG_DIR = Path("C:/Users/LéoRENAULT/Downloads/result_round_3")
-LOG_FILE = LOG_DIR / "486239.log"
-JSON_FILE = LOG_DIR / "486239.json"
-OUT_HTML = Path("C:/Users/LéoRENAULT/Documents/projet/prosperity/IMC_PROSPERITY_4_COMPETITION/artifacts/analysis/round_3/r3_live_dashboard_v2.html")
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_OUT_HTML = ROOT / "artifacts" / "analysis" / "round_3" / "r3_live_dashboard_v2.html"
 
 
 def parse_trade_history(log_path: Path):
@@ -82,14 +81,24 @@ def parse_graph_log(graph_log_str):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Build the v2 HTML dashboard for an R3 live result.")
+    parser.add_argument("--json", required=True, help="Path to the live result JSON file.")
+    parser.add_argument("--log", required=True, help="Path to the companion .log file.")
+    parser.add_argument("--out", default=str(DEFAULT_OUT_HTML), help="HTML output path.")
+    args = parser.parse_args()
+
+    json_file = Path(args.json)
+    log_file = Path(args.log)
+    out_html = Path(args.out)
+
     print("Loading R3 result files...")
-    with open(JSON_FILE, "r", encoding="utf-8") as f:
+    with open(json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
     print(f"  Profit: {data['profit']:.0f}")
 
     activities = parse_activities_log(data["activitiesLog"])
     graph = parse_graph_log(data["graphLog"])
-    trades = parse_trade_history(LOG_FILE)
+    trades = parse_trade_history(log_file)
     print(f"  Activities rows: {len(activities)}")
     print(f"  Trades: {len(trades)}")
 
@@ -357,9 +366,9 @@ Object.keys(pp_data).forEach(p => {{
 """)
 
     final_html = "".join(html_parts)
-    with open(OUT_HTML, "w", encoding="utf-8") as f:
+    with open(out_html, "w", encoding="utf-8") as f:
         f.write(final_html)
-    print(f"Wrote {OUT_HTML.stat().st_size:,} bytes to {OUT_HTML}")
+    print(f"Wrote {out_html.stat().st_size:,} bytes to {out_html}")
 
 
 if __name__ == "__main__":

@@ -80,7 +80,7 @@ Ordre recommande:
 2. Enregistrer la classe dans `prosperity/strategies/__init__.py`
 3. Ajouter le nom de strategie dans `scripts/shared/export_submission.py`
 4. Ajouter une variante dans `prosperity/config.py`
-5. Creer un wrapper dans `submissions/mon_variant.py`
+5. Optionnel: creer un wrapper dans `submissions/mon_variant.py`
 6. Backtester
 
 ### Fichier strategie
@@ -119,13 +119,14 @@ Si tu veux backtester `mon_variant`, il faut une entree dans `MEMBER_OVERRIDES`.
 
 ### Wrapper de soumission / backtest
 
-Creer un fichier de ce style:
+Optionnellement, creer un fichier de ce style:
 
 ```text
 submissions/mon_variant.py
 ```
 
-Le plus simple est de copier `submissions/leo.py` ou `submissions/theo.py` et remplacer le membre.
+Le plus simple est de copier `submissions/champion.py` et remplacer le membre / round.
+Sinon, le backtester moderne peut charger directement un membre defini dans `prosperity/config.py` sans wrapper dedie.
 
 ## 5. Backtester une strategie
 
@@ -232,7 +233,7 @@ python -m py_compile artifacts\submissions\champion_submission.py
 L'exporteur:
 
 - genere le fichier monolithique pour IMC dans `artifacts/submissions/`
-- peut aussi ecrire ou mettre a jour le wrapper `submissions/<member>.py`
+- peut aussi ecrire ou mettre a jour un wrapper local `submissions/<member>.py`
 
 ## 11. Ordre recommande de travail
 
@@ -243,7 +244,7 @@ Ordre simple et sain:
 3. creer la strategie dans `prosperity/strategies/`
 4. l'enregistrer dans le registre
 5. l'ajouter dans `config.py`
-6. creer le wrapper dans `submissions/`
+6. optionnel: creer le wrapper dans `submissions/`
 7. lancer un backtest
 8. visualiser le backtest dans le dashboard
 9. comparer avec les autres variantes
@@ -256,7 +257,7 @@ Ordre simple et sain:
 Version courte:
 
 ```text
-data -> strategy -> config -> submissions -> backtest -> dashboard -> compare -> export -> official log -> review
+data -> strategy -> config -> backtest -> dashboard -> compare -> export -> official log -> review
 ```
 
 ## 12. Fichiers racine: a quoi ils servent
@@ -325,7 +326,7 @@ python scripts\export_submission.py --member champion --round 0 --output artifac
 - `WORKFLOW.md` contient des bonnes idees, mais certaines commandes sont plus anciennes que le code actuel.
 - Si une strategie n'apparait pas au backtest, verifier:
   - `prosperity/config.py`
-  - `submissions/<member>.py`
+  - `submissions/<member>.py` si tu utilises un wrapper local
   - `prosperity/strategies/__init__.py`
   - `scripts/shared/export_submission.py`
 - `artifacts/` et `logs/` sont surtout des sorties generees, pas la source metier.

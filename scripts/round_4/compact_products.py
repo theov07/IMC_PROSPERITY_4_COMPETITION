@@ -1,13 +1,20 @@
 """Compact PRODUCTS dict by extracting common base + overrides."""
+import argparse
 import re
 import ast
 from pathlib import Path
 
-SRC = Path("C:/Users/LéoRENAULT/Documents/projet/prosperity/IMC_PROSPERITY_4_COMPETITION/prosperity/strategies/round_4/leo/r4_champion_FINAL.py")
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SRC = ROOT / "prosperity" / "strategies" / "round_4" / "leo" / "r4_champion_FINAL.py"
 
 
 def main():
-    text = SRC.read_text(encoding="utf-8")
+    parser = argparse.ArgumentParser(description="Factor common params out of the round-4 PRODUCTS dict.")
+    parser.add_argument("--src", default=str(DEFAULT_SRC), help="Path to the strategy source file to rewrite.")
+    args = parser.parse_args()
+    src = Path(args.src)
+
+    text = src.read_text(encoding="utf-8")
     before = len(text.encode())
 
     m = re.search(r"PRODUCTS\s*=\s*(\{[^\n]+\})", text, re.DOTALL)
@@ -55,7 +62,7 @@ def main():
     new_text = text.replace("PRODUCTS = " + m.group(1), new_products_block)
     # Validate
     ast.parse(new_text)
-    SRC.write_text(new_text, encoding="utf-8")
+    src.write_text(new_text, encoding="utf-8")
 
     after = len(new_text.encode())
     print(f"Before: {before:,} bytes")

@@ -13,13 +13,14 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
 LOGS = {
-    "EXTREME": "C:/Users/LéoRENAULT/Downloads/extrem_log/510640.log",
-    "SIZE":    "C:/Users/LéoRENAULT/Downloads/size_log/510749.log",
-    "SHADOW":  "C:/Users/LéoRENAULT/Downloads/shadow_log/510782.log",
-    "ON_OFF":  "C:/Users/LéoRENAULT/Downloads/onoff_log/510847.log",
+    "EXTREME": ROOT / "logs" / "round_4" / "probe_extreme.log",
+    "SIZE":    ROOT / "logs" / "round_4" / "probe_size.log",
+    "SHADOW":  ROOT / "logs" / "round_4" / "probe_shadow.log",
+    "ON_OFF":  ROOT / "logs" / "round_4" / "probe_on_off.log",
 }
-JSONS = {k: v.replace(".log", ".json") for k, v in LOGS.items()}
+JSONS = {k: path.with_suffix(".json") for k, path in LOGS.items()}
 
 
 def parse_trades(log_path):

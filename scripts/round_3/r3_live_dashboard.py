@@ -1,6 +1,6 @@
 """HTML dashboard for R3 live result analysis.
 
-Input: C:\\Users\\LéoRENAULT\\Downloads\\result_round_3\\486239.{json,log}
+Input: pair of live files passed with `--json` and `--log`
 Output: artifacts/analysis/round_3/r3_live_dashboard.html
 
 Includes:
@@ -13,15 +13,14 @@ Includes:
 """
 from __future__ import annotations
 
+import argparse
 import json
 import re
 from collections import defaultdict
 from pathlib import Path
 
-LOG_DIR = Path("C:/Users/LéoRENAULT/Downloads/result_round_3")
-LOG_FILE = LOG_DIR / "486239.log"
-JSON_FILE = LOG_DIR / "486239.json"
-OUT_HTML = Path("C:/Users/LéoRENAULT/Documents/projet/prosperity/IMC_PROSPERITY_4_COMPETITION/artifacts/analysis/round_3/r3_live_dashboard.html")
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_OUT_HTML = ROOT / "artifacts" / "analysis" / "round_3" / "r3_live_dashboard.html"
 
 
 def parse_trade_history(log_path: Path):
@@ -91,15 +90,25 @@ def parse_graph_log(graph_log_str):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Build an HTML dashboard for an R3 live result.")
+    parser.add_argument("--json", required=True, help="Path to the live result JSON file.")
+    parser.add_argument("--log", required=True, help="Path to the companion .log file.")
+    parser.add_argument("--out", default=str(DEFAULT_OUT_HTML), help="HTML output path.")
+    args = parser.parse_args()
+
+    json_file = Path(args.json)
+    log_file = Path(args.log)
+    out_html = Path(args.out)
+
     print("Loading R3 result files...")
-    with open(JSON_FILE, "r", encoding="utf-8") as f:
+    with open(json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
     print(f"  Profit: {data['profit']:.0f}")
     print(f"  Status: {data['status']}, Round: {data['round']}")
 
     activities = parse_activities_log(data["activitiesLog"])
     graph = parse_graph_log(data["graphLog"])
-    trades = parse_trade_history(LOG_FILE)
+    trades = parse_trade_history(log_file)
     print(f"  Activities rows: {len(activities)}")
     print(f"  Graph points: {len(graph)}")
     print(f"  Trades: {len(trades)}")
@@ -142,8 +151,8 @@ def main():
             mark_matrix[(t["buyer"], t["seller"])] += t["quantity"]
 
     # Build HTML
-    print(f"\nWriting dashboard to {OUT_HTML}...")
-    OUT_HTML.parent.mkdir(parents=True, exist_ok=True)
+    print(f"\nWriting dashboard to {out_html}...")
+    out_html.parent.mkdir(parents=True, exist_ok=True)
 
     # Plotly via CDN, no install needed
     plot_data = {}
@@ -277,9 +286,9 @@ Plotly.newPlot('per_prod_mid_chart', mid_traces, {{
 </html>
 """
 
-    with open(OUT_HTML, "w", encoding="utf-8") as f:
+    with open(out_html, "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"Wrote {OUT_HTML.stat().st_size:,} bytes to {OUT_HTML}")
+    print(f"Wrote {out_html.stat().st_size:,} bytes to {out_html}")
 
 
 if __name__ == "__main__":

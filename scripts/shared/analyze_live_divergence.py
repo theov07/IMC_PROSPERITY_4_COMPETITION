@@ -4,6 +4,7 @@ Looks at fills from tradeHistory in .log files and identifies WHERE and WHY
 two runs diverge despite (supposedly) identical strategy logic.
 """
 
+import argparse
 import json
 import sys
 from collections import defaultdict
@@ -120,17 +121,25 @@ def get_mids_at_ts(path: str, target_ts: int) -> dict:
 
 
 if __name__ == "__main__":
-    a = "C:/Users/LéoRENAULT/Downloads/log_v2090/563187.log"
-    b = "C:/Users/LéoRENAULT/Downloads/best_log/564793.log"
+    parser = argparse.ArgumentParser(description="Compare two live logs and summarize fill divergence.")
+    parser.add_argument("--a", required=True, help="Path to the first live log JSON.")
+    parser.add_argument("--b", required=True, help="Path to the second live log JSON.")
+    parser.add_argument("--name-a", default="A", help="Label for the first run.")
+    parser.add_argument("--name-b", default="B", help="Label for the second run.")
+    parser.add_argument("--mark-ts", type=int, default=99900, help="Timestamp used for mark-to-market mids.")
+    args = parser.parse_args()
 
-    fa, fb = diverge_analysis(a, b, "v2090", "v2640")
+    a = args.a
+    b = args.b
+
+    fa, fb = diverge_analysis(a, b, args.name_a, args.name_b)
 
     # Compare PnL per symbol
-    mids = get_mids_at_ts(a, 99900)
+    mids = get_mids_at_ts(a, args.mark_ts)
     pnl_a = per_symbol_pnl(a, mids)
     pnl_b = per_symbol_pnl(b, mids)
 
-    print(f"\n=== Per-symbol PnL diff (v2640 - v2090) ===")
+    print(f"\n=== Per-symbol PnL diff ({args.name_b} - {args.name_a}) ===")
     diffs = []
     for s in sorted(set(pnl_a) | set(pnl_b)):
         d = pnl_b.get(s, 0) - pnl_a.get(s, 0)
@@ -138,4 +147,4 @@ if __name__ == "__main__":
             diffs.append((s, pnl_a.get(s, 0), pnl_b.get(s, 0), d))
     diffs.sort(key=lambda x: -abs(x[3]))
     for s, a_p, b_p, d in diffs[:25]:
-        print(f"{s:<35} v2090={a_p:>+8.0f}  v2640={b_p:>+8.0f}  Δ={d:>+8.0f}")
+        print(f"{s:<35} {args.name_a}={a_p:>+8.0f}  {args.name_b}={b_p:>+8.0f}  Δ={d:>+8.0f}")

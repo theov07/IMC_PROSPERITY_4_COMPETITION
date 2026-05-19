@@ -960,8 +960,9 @@ def main() -> int:
 
     _validate(output_path, products)
 
-    # Write the submissions/ wrapper so the backtester can import it directly.
+    # Write an optional local wrapper for users who still want submissions/<member>.py.
     wrapper_path = ROOT / "submissions" / f"{args.member}.py"
+    wrapper_path.parent.mkdir(parents=True, exist_ok=True)
     wrapper = dedent(f'''\
         """Backtester entrypoint — {args.member}."""
 

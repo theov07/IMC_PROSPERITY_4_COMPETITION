@@ -8,15 +8,15 @@ Identifies:
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import re
 from collections import defaultdict
 from pathlib import Path
 
-LIVE_PROBE = Path("C:/Users/LéoRENAULT/Downloads/log_alpha_live/509314.log")
-LIVE_V5 = Path("C:/Users/LéoRENAULT/Downloads/log_v5/509225.log")
-BACKTEST_D3_TRADES = Path("C:/Users/LéoRENAULT/Documents/projet/prosperity/IMC_PROSPERITY_4_COMPETITION/data/round_4/trades_round_4_day_3.csv")
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_BACKTEST_D3_TRADES = ROOT / "data" / "round_4" / "trades_round_4_day_3.csv"
 
 
 def parse_live_trade_history(log_path: Path):
@@ -39,10 +39,10 @@ def parse_live_trade_history(log_path: Path):
     return []
 
 
-def load_backtest_d3_trades_first10pct():
+def load_backtest_d3_trades_first10pct(backtest_path: Path):
     """Load D3 historical trades for ts 0 → 99900 (first 10%)."""
     out = []
-    with open(BACKTEST_D3_TRADES, "r", encoding="utf-8") as f:
+    with open(backtest_path, "r", encoding="utf-8") as f:
         for row in csv.DictReader(f, delimiter=";"):
             try:
                 ts = int(row["timestamp"])
@@ -77,20 +77,30 @@ def summarize_trades(trades, label):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Compare two live R4 logs against D3 backtest trades.")
+    parser.add_argument("--live-probe", required=True, help="Path to the probe live .log file.")
+    parser.add_argument("--live-v5", required=True, help="Path to the comparison live .log file.")
+    parser.add_argument(
+        "--backtest-trades",
+        default=str(DEFAULT_BACKTEST_D3_TRADES),
+        help="Path to trades_round_4_day_3.csv.",
+    )
+    args = parser.parse_args()
+
     print("=" * 110)
     print("LIVE vs BACKTEST FIRST 10% D3 — counterparty + flow comparison")
     print("=" * 110)
 
     print("\nLoading backtest D3 first 10% trades (no SUBMISSION)...")
-    bt = load_backtest_d3_trades_first10pct()
+    bt = load_backtest_d3_trades_first10pct(Path(args.backtest_trades))
     print(f"  {len(bt)} trades")
 
     print("\nLoading live ALPHA PROBE trades...")
-    probe = parse_live_trade_history(LIVE_PROBE)
+    probe = parse_live_trade_history(Path(args.live_probe))
     print(f"  {len(probe)} trades")
 
     print("\nLoading live v5 trades...")
-    v5 = parse_live_trade_history(LIVE_V5)
+    v5 = parse_live_trade_history(Path(args.live_v5))
     print(f"  {len(v5)} trades")
 
     # Filter live for "external only" (not involving SUBMISSION)

@@ -698,6 +698,16 @@ MEMBER_OVERRIDES["leo_fusion_b_v10"] = {
     },
 }
 
+# Legacy round-1 IPR-only alias kept for tests and old research notes.
+MEMBER_OVERRIDES["leo_reg_lin_round1_v5"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+        ),
+    },
+}
+
 
 MEMBER_OVERRIDES["leo_osmium_only"] = {
     1: {

@@ -4,12 +4,14 @@
 2. Drop unused params per product
 3. Validate AST + write
 """
+import argparse
 import re
 import ast
 import sys
 from pathlib import Path
 
-SRC = Path("C:/Users/LéoRENAULT/Documents/projet/prosperity/IMC_PROSPERITY_4_COMPETITION/prosperity/strategies/round_4/leo/r4_champion_FINAL.py")
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SRC = ROOT / "prosperity" / "strategies" / "round_4" / "leo" / "r4_champion_FINAL.py"
 
 
 def strip_comments(text: str) -> str:
@@ -81,13 +83,18 @@ def drop_unused_params(text: str) -> tuple[str, int]:
 
 
 def main():
-    text = SRC.read_text(encoding="utf-8")
+    parser = argparse.ArgumentParser(description="Aggressively compact the round-4 final strategy file.")
+    parser.add_argument("--src", default=str(DEFAULT_SRC), help="Path to the strategy source file to compact.")
+    args = parser.parse_args()
+    src = Path(args.src)
+
+    text = src.read_text(encoding="utf-8")
     before = len(text.encode())
     text = strip_comments(text)
     text, saved_params = drop_unused_params(text)
     # Validate
     ast.parse(text)
-    SRC.write_text(text, encoding="utf-8")
+    src.write_text(text, encoding="utf-8")
     after = len(text.encode())
     print(f"Before: {before:,} bytes")
     print(f"After:  {after:,} bytes  ({100*after/100000:.2f}% of 100KB)")
