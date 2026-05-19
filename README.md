@@ -58,7 +58,6 @@ What is not fully production-grade yet:
 |-- README.md
 |-- TODO.md
 |-- requirements.txt
-|-- requirements-optional.txt
 |-- prosperity/                  # trading framework
 |   |-- config.py               # round and member configs
 |   |-- strategies/            # strategy implementations
@@ -167,12 +166,6 @@ Windows / PowerShell:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-```
-
-Optional notebook stack:
-
-```powershell
-python -m pip install -r requirements-optional.txt
 ```
 
 ## Core Commands
