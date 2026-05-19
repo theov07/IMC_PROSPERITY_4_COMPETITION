@@ -11,6 +11,8 @@
       <br>
       <strong>Théo Verdelhan</strong>
       <br>
+      Paris Dauphine University
+      <br>
       <a href="https://fr.linkedin.com/in/theoverdelhan">LinkedIn</a>
       <br>
       <a href="https://github.com/theov07">GitHub</a>
@@ -22,6 +24,8 @@
       <br>
       <strong>Léo Renault</strong>
       <br>
+      Paris Dauphine University
+      <br>
       <a href="https://fr.linkedin.com/in/leorenault">LinkedIn</a>
       <br>
       <a href="https://github.com/Leho777">GitHub</a>
@@ -32,6 +36,8 @@
       </a>
       <br>
       <strong>Thibaut Desauty</strong>
+      <br>
+      University of Chicago
       <br>
       <a href="https://www.linkedin.com/in/thibautdesauty">LinkedIn</a>
       <br>
