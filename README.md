@@ -12,6 +12,8 @@
       <strong>Théo Verdelhan</strong>
       <br>
       <a href="https://fr.linkedin.com/in/theoverdelhan">LinkedIn</a>
+      <br>
+      <a href="https://github.com/theov07">GitHub</a>
     </td>
     <td align="center" width="220">
       <a href="https://fr.linkedin.com/in/leorenault">
@@ -21,6 +23,8 @@
       <strong>Léo Renault</strong>
       <br>
       <a href="https://fr.linkedin.com/in/leorenault">LinkedIn</a>
+      <br>
+      <a href="https://github.com/Leho777">GitHub</a>
     </td>
     <td align="center" width="220">
       <a href="https://www.linkedin.com/in/thibautdesauty">
@@ -30,6 +34,8 @@
       <strong>Thibaut Desauty</strong>
       <br>
       <a href="https://www.linkedin.com/in/thibautdesauty">LinkedIn</a>
+      <br>
+      <a href="https://github.com/thibaut-dst">GitHub</a>
     </td>
   </tr>
 </table>
