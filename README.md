@@ -2,13 +2,37 @@
 
 <p align="center"><strong>IMC Prosperity 4 - Team Trading Research Repository</strong></p>
 
-<p align="center">
-  <a href="https://fr.linkedin.com/in/theoverdelhan">Théo Verdelhan</a>
-  ·
-  <a href="https://fr.linkedin.com/in/leorenault">Léo Renault</a>
-  ·
-  <a href="https://www.linkedin.com/in/thibautdesauty">Thibaut Desauty</a>
-</p>
+<table align="center">
+  <tr>
+    <td align="center" width="220">
+      <a href="https://fr.linkedin.com/in/theoverdelhan">
+        <img src="https://github.com/theov07.png?size=200" width="96" alt="Théo Verdelhan">
+      </a>
+      <br>
+      <strong>Théo Verdelhan</strong>
+      <br>
+      <a href="https://fr.linkedin.com/in/theoverdelhan">LinkedIn</a>
+    </td>
+    <td align="center" width="220">
+      <a href="https://fr.linkedin.com/in/leorenault">
+        <img src="https://github.com/Leho777.png?size=200" width="96" alt="Léo Renault">
+      </a>
+      <br>
+      <strong>Léo Renault</strong>
+      <br>
+      <a href="https://fr.linkedin.com/in/leorenault">LinkedIn</a>
+    </td>
+    <td align="center" width="220">
+      <a href="https://www.linkedin.com/in/thibautdesauty">
+        <img src="https://github.com/thibaut-dst.png?size=200" width="96" alt="Thibaut Desauty">
+      </a>
+      <br>
+      <strong>Thibaut Desauty</strong>
+      <br>
+      <a href="https://www.linkedin.com/in/thibautdesauty">LinkedIn</a>
+    </td>
+  </tr>
+</table>
 
 <p align="center">
   <em>A six-round quantitative trading project built around research discipline, fast iteration, and collaborative execution.</em>
@@ -38,12 +62,6 @@ It should be read primarily as a working record of how we approached the competi
 ## Team
 
 **RELATIVISTIC QUANTS** was built around a three-person collaboration:
-
-| Member | Public profile |
-|---|---|
-| **Théo Verdelhan** | [LinkedIn](https://fr.linkedin.com/in/theoverdelhan) |
-| **Léo Renault** | [LinkedIn](https://fr.linkedin.com/in/leorenault) |
-| **Thibaut Desauty** | [LinkedIn](https://www.linkedin.com/in/thibautdesauty) |
 
 All three of us contributed across the full lifecycle of the project:
 
