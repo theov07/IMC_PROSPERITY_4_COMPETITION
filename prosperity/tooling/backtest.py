@@ -18,8 +18,12 @@ from prosperity.tooling.data import MarketDataLoader
 
 
 def _resolve_strategy_alias(name: str) -> str:
-    # After round 1 refactor, round 1 dispatchers live in submissions/round_1/.
-    # Round 2 per-member dispatchers live in submissions/round_2/<member>/.
+    # Prefer the modular dispatcher for any named member config tracked in
+    # prosperity.config. Generated submissions/ wrappers are optional now.
+    if name in MEMBER_OVERRIDES:
+        return "prosperity.strategies.trader"
+    if "." in name:
+        return name
     candidates = [
         f"submissions.{name}",
         f"submissions.round_1.{name}",
@@ -223,6 +227,9 @@ class BacktestEngine:
         module = importlib.import_module(self.strategy_module)
         if not hasattr(module, "Trader"):
             raise ValueError(f"Strategy module {self.strategy_module} does not expose Trader")
+        if self.strategy_module == "prosperity.strategies.trader":
+            member = self.strategy_name if self.strategy_name in MEMBER_OVERRIDES else "champion"
+            return module.Trader(round_num=self.round_num, member=member)
         return module.Trader()
 
     def _get_position_limits(self) -> Dict[str, int]:

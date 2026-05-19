@@ -698,6 +698,16 @@ MEMBER_OVERRIDES["leo_fusion_b_v10"] = {
     },
 }
 
+# Legacy round-1 IPR-only alias kept for tests and old research notes.
+MEMBER_OVERRIDES["leo_reg_lin_round1_v5"] = {
+    1: {
+        "ASH_COATED_OSMIUM": None,
+        "INTARIAN_PEPPER_ROOT": _override(
+            MEMBER_OVERRIDES["leo_fusion_b_v2"][1]["INTARIAN_PEPPER_ROOT"],
+        ),
+    },
+}
+
 
 MEMBER_OVERRIDES["leo_osmium_only"] = {
     1: {
@@ -16320,7 +16330,7 @@ MEMBER_OVERRIDES["r4_v11_M22_M67_micro"] = _v7_conditional(
 
 
 # v12 — Trader-PnL-driven weights (TRADE LIKE THE WINNERS)
-# DATA-DRIVEN finding from scripts/trader_alpha_hunt.py:
+# DATA-DRIVEN finding from scripts/round_4/trader_alpha_hunt.py:
 #   Mark 14 = INFORMED (+49,713 implied PnL, +22.89/trade) ← we were FADING this!
 #   Mark 01 = INFORMED (+10,278 / +5.58)                    ← we were fading
 #   Mark 67 = INFORMED (+1,746 / +10.58)                    ← we ignore

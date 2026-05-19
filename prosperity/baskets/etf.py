@@ -6,7 +6,7 @@ or PCA-PC1 weighted), and the deviation of any single member from this
 fair value. If the deviation is mean-reverting (verified offline), we
 can MM around the equilibrium.
 
-Pre-computed weight schemes (from research/structure_analysis/pca_analysis.py):
+Pre-computed weight schemes (from research/round_5/structure_analysis/pca_analysis.py):
   - SNACKPACK_PC1: long RASP, short STRAW+PIST  (60% var)
   - SNACKPACK_PC2: long VAN, short CHOC          (35% var)
   - PEBBLES_PC1:  XL vs (XS+S+M+L)               (top loadings)

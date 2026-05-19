@@ -1,6 +1,6 @@
 """Impulse-pause MM: skip a side temporarily after a SNACKPACK group shock.
 
-Validated by impulse-response analysis (research/structure_analysis):
+Validated by impulse-response analysis (research/round_5/structure_analysis):
   - SNACKPACK group shock +2σ → 7 other groups move -0.21 to -0.33σ at lag=1
   - The signal decays quickly (lag-5 = 5% of magnitude)
   - Direction: opposite (so SNACKPACK +shock → others go DOWN next tick)

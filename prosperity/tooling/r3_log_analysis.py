@@ -1320,7 +1320,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--no-html", action="store_true", help="Do not write the single-file Plotly HTML report")
     parser.add_argument("--sidecars", action="store_true", help="Also write JSON/Markdown sidecar summaries")
     parser.add_argument("--symbol", action="append", help="Accepted for compatibility; Round 3 analysis always uses all products")
-    parser.add_argument("--edge", type=float, default=1.0, help="Accepted for compatibility with scripts/analyze_log.py")
+    parser.add_argument("--edge", type=float, default=1.0, help="Accepted for compatibility with scripts/shared/analyze_log.py")
     parser.add_argument("--plotly", action="store_true", help="Accepted for compatibility; Round 3 output is static PNG")
     parser.add_argument("--backtest-json", help="Accepted for compatibility; not used by the Round 3 log analyzer")
     args = parser.parse_args(list(argv) if argv is not None else None)

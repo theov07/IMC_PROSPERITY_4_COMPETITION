@@ -1,361 +1,435 @@
-# IMC Prosperity 4 Competition Framework
+# RELATIVISTIC QUANTS
 
-State as of `2026-04-14` (round 1 active).
+<p align="center"><strong>IMC Prosperity 4 - Team Trading Research Repository</strong></p>
 
-This repository is the shared trading framework for the team. It is built to let us:
+<p align="center">
+  <a href="https://fr.linkedin.com/in/theoverdelhan">Théo Verdelhan</a>
+  ·
+  <a href="https://fr.linkedin.com/in/leorenault">Léo Renault</a>
+  ·
+  <a href="https://www.linkedin.com/in/thibautdesauty">Thibaut Desauty</a>
+</p>
 
-- research products quickly when a round opens
-- compare multiple strategy variants side by side
-- backtest locally on historical CSV data
-- inspect official logs after submissions
-- export a single-file `Trader` ready for the IMC site
+<p align="center">
+  <em>A six-round quantitative trading project built around research discipline, fast iteration, and collaborative execution.</em>
+</p>
 
-## Current State
+---
 
-What is already in place:
+## Overview
 
-- modular strategy framework under `prosperity/`
-- member-specific variants under `submissions/`
-- round-aware config registry in `prosperity/config.py`
-- local backtester with aggressive and heuristic passive fills
-- strategy comparison tool
-- parameter sweep / grid search tool
-- official log parser and trade plotter
-- interactive dashboard for logs and replayed data
-- single-file submission exporter
-- latency benchmark script
-- unit and smoke tests
-- team workspace and shared competition playbook
+This repository is the public showcase of **RELATIVISTIC QUANTS**, our team entry for the **IMC Prosperity 4** trading competition.
 
-What is good enough to use now:
+Rather than presenting a single polished strategy in isolation, this repo shows what the full project actually looked like:
 
-- round 0 research and iteration
-- exporting and uploading a strategy to the IMC site
-- reviewing official logs after a run
-- comparing `champion`, `leo`, `theo`, and `pietro`
-- ranking local runs by both pnl and robustness proxies
-- auto-reconciling official logs against a local backtest when a matching artifact is found
-- reviewing per-symbol markouts, quote-age diagnostics, inventory episodes, and participant-aware official stats
+- understanding each new round from scratch
+- building and improving a shared trading framework under time pressure
+- testing teammate ideas in parallel
+- reviewing official logs after every important submission
+- solving manual trading and market design side-challenges
+- merging the best components into stronger final candidates
 
-What is not fully production-grade yet:
+It should be read primarily as a working record of how we approached the competition:
 
-- local passive fill simulation is still heuristic
-- future rounds are scaffolded, but only round 0 is fully configured
-- no canonical experiment registry yet
-- local-vs-official reconciliation now exists, but still needs richer diagnostics
-- exporter is functional, but should be made more tightly coupled to the modular source of truth
-- dashboard and analyzer auto-discovery for backtest JSON is best-effort, not guaranteed
-- observation schema support for future rounds is still generic / best-effort rather than fully round-aware
+- a **research archive** of what we studied round by round
+- a **team workflow system** for building, comparing, and shipping strategies
+- a **record of decisions** showing how we moved from baseline ideas to integrated champion variants
 
-## Repository Layout
+## Team
 
-```text
-.
-|-- main.py                      # default local entrypoint -> submissions.champion
-|-- backtest.py                  # root wrapper for the backtest CLI
-|-- datamodel.py                 # Prosperity-compatible datamodel
-|-- Makefile                     # common helper commands
-|-- README.md
-|-- TODO.md
-|-- requirements.txt
-|-- requirements-optional.txt
-|-- prosperity/                  # trading framework
-|   |-- config.py               # round and member configs
-|   |-- strategies/            # strategy implementations
-|   |-- signals/               # bot and prediction helpers
-|   `-- tooling/               # backtest, compare, dashboard, logs, sweeps
-|-- submissions/               # member-facing entrypoints
-|-- scripts/                   # operational scripts
-|-- research/                  # exploratory analysis tools
-|-- data/                      # historical CSV inputs, grouped by round_0/, round_1/, ...
-|-- examples/                  # official sample logs
-|-- artifacts/                 # generated outputs
-|-- tests/                     # unit and smoke tests
-|-- team/                      # team notes and workflow
-`-- docs/                      # wiki notes and archived material
+**RELATIVISTIC QUANTS** was built around a three-person collaboration:
+
+| Member | Public profile |
+|---|---|
+| **Théo Verdelhan** | [LinkedIn](https://fr.linkedin.com/in/theoverdelhan) |
+| **Léo Renault** | [LinkedIn](https://fr.linkedin.com/in/leorenault) |
+| **Thibaut Desauty** | [LinkedIn](https://www.linkedin.com/in/thibautdesauty) |
+
+All three of us contributed across the full lifecycle of the project:
+
+- market exploration when new rounds opened
+- alpha research and strategy iteration
+- backtesting, diagnostics, and official-log review
+- manual challenge modeling and decision-making
+- final submission selection and integration
+
+So while some branches naturally reflect who pushed a specific idea the hardest at a given moment, the project was never split into rigid roles. The strongest results in this repo came from **overlapping contributions**, fast idea exchange, and repeated hybridization between our research directions.
+
+More broadly, this repository reflects a shared trajectory: all three of us want to build toward **quantitative research**, and this project became a practical training ground for modeling, experimentation, and collaborative problem-solving under pressure.
+
+## What This Repo Contains
+
+This is the actual working archive of a team that competed across six rounds. It includes:
+
+- shared framework code that stayed usable throughout the competition
+- round-by-round research notes and strategy variants
+- manual challenge modeling and decision tools
+- final candidate summaries and post-submission reviews
+- preserved results that are representative of our progress, even if we were not one of the top-ranked teams overall
+
+## At a Glance
+
+| Topic | Snapshot |
+|---|---|
+| Duration | 6 rounds of iterative development |
+| Team name | **RELATIVISTIC QUANTS** |
+| Working style | shared framework + parallel teammate branches + champion merge path |
+| Manual trading | covered across multiple rounds with dedicated research and optimization |
+| Final scale | up to **50 products** in the last round |
+| Best archived leaderboard placement | **Round 1 algorithmic: rank 77 worldwide, rank 1 in France** |
+| Largest archived final candidate | **1,038,132** 3-day backtest PnL in Round 5 |
+| Representative live result in repo | **+64,195** live PnL on a fresh Round 3 session |
+| Framework status | tested, executable, and organized for public review |
+
+## Selected Results
+
+While this repository covers the full six-round project, the most relevant result to highlight from a pure algorithmic trading standpoint is our **Round 1** finish.
+
+- **Round 1 algorithmic leaderboard:** **rank 77 worldwide**
+- **Round 1 algorithmic leaderboard in France:** **rank 1**
+- **Archived Round 1 final PnL:** **107,674 XIRECs**
+
+That result matters to us because it came early in the competition and validated the framework and research process we had put in place. It gave us a base to keep building on in later rounds involving manual trading, market design, options, counterparties, and larger multi-product systems.
+
+## The Project Story, Round by Round
+
+### Round 0 - Building the base layer
+
+Round 0 was where we created the foundation that the rest of the project depended on.
+
+At that stage, the important thing was not sophistication. It was speed, clarity, and having a common environment that all three of us could trust. We put in place the first shared backtesting workflow, the core strategy configuration pattern, baseline market-making logic, and the first version of the "champion" integration path.
+
+This round matters in the repo because it established the discipline used later:
+
+- one place to define active products and limits
+- one common backtester
+- one way to compare variants
+- one export path for competition submissions
+
+Without that structure, the later hybrid work would have been much messier.
+
+### Round 1 - From baseline quoting to signal-aware trading
+
+Round 1 was the first real jump in sophistication. The team moved beyond simple spread capture and began working on more signal-aware quoting behavior, especially around inventory and short-term directional structure.
+
+This is where the repo starts to show differentiated thinking:
+
+- teammate-specific variants appeared more clearly
+- regression-style and trend-sensitive logic began to replace purely mechanical baselines
+- the framework started to support richer experimentation without breaking the shared workflow
+
+Archived leaderboard analysis preserved in this repo places the team at:
+
+- **107,674 final PnL**
+- **rank 77 globally**
+- **rank 1 in France**
+
+That result became more than a score. It also became data for later rounds: we reused the leaderboard distributions when we modeled field behavior and manual challenge dynamics in Round 2.
+
+### Round 2 - Market design, manual optimization, and strategy synthesis
+
+Round 2 is where the project became much more than "just trading code".
+
+We had two distinct layers of work:
+
+1. **Algorithmic strategy development**
+2. **Manual and market design analysis**
+
+On the algorithmic side, the repo shows how teammate ideas started to combine more directly. Round 2 contains several places where one person's structure became the base for another person's improvement, especially around quoting logic, gap behavior, and order-book exploitation.
+
+On the manual side, we treated the competition problems as quantitative decision problems:
+
+- value estimation for the **Market Access Fee** auction
+- break-even analysis
+- scenario modeling for adversary behavior
+- tournament-regret adjustments
+- data-driven optimization for the **"Invest and Expand"** challenge
+
+The final archived recommendation for the Round 2 manual allocation problem was:
+
+- **Research = 12%**
+- **Scale = 35%**
+- **Speed = 53%**
+
+What makes Round 2 especially interesting for a public reader is that it shows our range:
+
+- trading strategy work
+- statistical modeling
+- game theory reasoning
+- practical decision-making under uncertainty
+
+### Round 3 - Options, volatility structure, and live probing
+
+Round 3 was a major step up in complexity.
+
+The competition introduced a structure with an underlying plus a full option chain, and the repo reflects that shift very clearly. This is where our project started to look much more like a small quant research lab:
+
+- implied volatility smile analysis
+- Greeks and portfolio exposure analysis
+- option-chain diagnostics
+- live probes to test behavior under competition conditions
+- hybrid strategies mixing passive market making, directional filters, and option overlays
+
+This round also made collaboration more valuable than ever. No single person had to own every subproblem. The repo shows different teammates pushing:
+
+- option-specific logic
+- underlying behavior analysis
+- volatility and smile diagnostics
+- live-safe execution adjustments
+
+The archived Round 3 submissions record a final uploaded candidate at:
+
+- **240,918 backtest PnL**
+- **56,858 drawdown**
+- **4.237 PnL/DD ratio**
+
+And the round summary archived in the repo also highlights a strong live outcome:
+
+- **+64,195 PnL on a fresh full live session**
+
+Round 3 is probably the clearest example in the repo of our shift from simple strategy iteration toward broader quantitative research.
+
+### Round 4 - Counterparty-aware alpha and robustness filtering
+
+Round 4 introduced a different kind of challenge: information about who was trading.
+
+That changed the style of research. The repo shows a clear move toward:
+
+- participant-aware log review
+- trader-specific flow analysis
+- fading specific counterparties
+- order-book imbalance adjustments
+- selective disabling of components that became toxic in new conditions
+
+This round is also a good example of the team being disciplined rather than dogmatic. We did not insist on keeping every product live just because it had worked before. In the archived notes and final candidates, some products were deliberately disabled or downweighted when the evidence pointed that way.
+
+The best archived Round 4 champion candidate in the repo is:
+
+- **174,751 PnL**
+- **67,465 drawdown**
+- **2.59 PnL/DD ratio**
+
+Round 4 demonstrates something important for a reviewer: we were not only generating ideas, but also **filtering**, **rejecting**, and **de-risking** them when the market structure changed.
+
+### Round 5 - Scaling to 50 products and merging specialized alpha
+
+Round 5 was the large-scale systems round.
+
+The problem became much less about a few hand-tuned products and much more about managing a broad universe intelligently. The repository shows the team responding by moving toward:
+
+- structure analysis across product groups
+- pair relationships and anti-correlation overlays
+- carry-aware behavior
+- selective product dropping
+- specialist per-product strategies
+- hybrid assembly of multiple teammate alpha sources
+
+Round 5 is where the collaborative nature of the repo becomes impossible to miss. One of the strongest archived outcomes is an explicit **hybrid merge** between:
+
+- a Leo-led framework emphasizing pair and carry overlays
+- a Tibo-led framework emphasizing stronger directional and cross-group alpha
+
+The final archived hybrid candidate reaches:
+
+- **1,038,132** 3-day backtest PnL
+
+That number matters, but the more interesting point is *how* it was achieved:
+
+- by comparing product-level behavior
+- by not forcing one global style on every asset
+- by combining distinct teammate strengths into one integrated system
+
+Round 5 is the clearest expression of the collaborative style behind this repo.
+
+## Manual Trading and Market Design Challenges
+
+One of the strongest things about this repository is that it does not stop at the algorithmic side.
+
+We also tackled the manual and market-structure parts of the competition as serious quantitative problems.
+
+### Round 2 - "Invest and Expand"
+
+For the manual challenge, we did not just eyeball an allocation. We reconstructed the payoff landscape and modeled the problem as a field-dependent tournament:
+
+- exhaustive and semi-exhaustive scans
+- best-response reasoning
+- focal-point analysis
+- level-k style modeling
+- data-driven field assumptions using preserved leaderboard information
+
+That work is one of the best examples in the repo of turning a vague competition prompt into a proper optimization pipeline.
+
+### Round 2 - Market Access Fee auction
+
+We also built a full process to reason about the value of extra market access:
+
+- estimate the incremental value of the fee
+- use official logs to calibrate realistic impact
+- compute break-even levels
+- move from naive expected value to tournament-aware bidding
+
+This is exactly the kind of side-problem that often gets treated casually in competitions. In our case, it became a documented research stream of its own.
+
+### Round 3 and Round 4 - Manual trading remained part of the workflow
+
+Even when the headline technical difficulty moved toward options and counterparties, the manual side was still present in our decision process. The repo keeps the context, the research notes, and the logic used to think about those rounds as complete projects rather than isolated scripts.
+
+### Round 5 - Fee-aware allocation tool
+
+For the final manual challenge, we built a compact optimizer that converts alpha views into allocations under quadratic fees. It is small in code, but very representative in spirit:
+
+- state the economics clearly
+- write down the optimization
+- make assumptions explicit
+- build a reusable decision tool
+
+## How We Worked Together
+
+This repository is as much about **process** as it is about results.
+
+Our practical team workflow looked like this:
+
+1. **Open the new round and map the products**
+2. **Keep one stable baseline alive**
+3. **Split research directions across teammates**
+4. **Backtest and compare variants in a shared framework**
+5. **Review official logs as soon as fresh evidence arrived**
+6. **Promote only the strongest ideas into a champion branch**
+
+That workflow is visible throughout the repo:
+
+- teammate workspaces
+- champion and hybrid variants
+- archived final recommendations
+- notes comparing one teammate's mechanism to another's
+- scripts dedicated to reviewing live versus backtest behavior
+
+In other words, this was not a repo where three people worked separately and only merged at the end. It was a repo built to make **joint iteration** possible.
+
+## What the Framework Enabled
+
+Even though this README is intentionally project-oriented rather than code-oriented, the framework work matters because it is what made the team effective.
+
+At a high level, the shared infrastructure gave us:
+
+- a common backtesting layer
+- round-aware configuration
+- side-by-side strategy comparison
+- robustness diagnostics beyond raw PnL
+- official-log parsing and replay tooling
+- a path from modular research code to single-file competition submissions
+- a lightweight testing layer to keep the framework trustworthy
+
+That infrastructure reduced friction between research and execution. It let us spend more time deciding *what* to test, and less time rebuilding the same workflow every time a new round opened.
+
+## Representative Artifacts
+
+### Round 1 - Archived leaderboard positioning
+
+<p align="center">
+  <img src="docs/assets/readme/r1_rank_vs_pnl.png" alt="Round 1 leaderboard position" width="900">
+</p>
+
+<p align="center">
+  <em>Archived leaderboard analysis preserved in the repo and later reused as part of field modeling work.</em>
+</p>
+
+### Round 2 - Manual challenge landscape
+
+<p align="center">
+  <img src="docs/assets/readme/r2_manual_speed_landscape.png" alt="Round 2 manual speed landscape" width="900">
+</p>
+
+<p align="center">
+  <em>Round 2 manual work was treated as a quantitative optimization problem, not a gut-feel decision.</em>
+</p>
+
+### Round 3 - Volatility research and strategy comparison
+
+<p align="center">
+  <img src="docs/assets/readme/r3_volatility_smile.png" alt="Round 3 volatility smile" width="48%">
+  <img src="docs/assets/readme/r3_strategy_comparison.png" alt="Round 3 strategy comparison" width="48%">
+</p>
+
+<p align="center">
+  <em>Round 3 combined options diagnostics, volatility structure work, and direct comparison between strategy families.</em>
+</p>
+
+### Round 4 - Backtest dashboard for the final champion candidate
+
+<p align="center">
+  <img src="docs/assets/readme/r4_backtest_dashboard.png" alt="Round 4 backtest dashboard" width="900">
+</p>
+
+<p align="center">
+  <em>The Round 4 dashboard made the final candidate legible at a glance: total PnL, drawdown, per-day contribution, and where the edge came from across the underlying and option strikes.</em>
+</p>
+
+### Round 5 - Structural analysis behind pair and carry overlays
+
+<p align="center">
+  <img src="docs/assets/readme/r5_group_structure.png" alt="Round 5 group structure analysis" width="900">
+</p>
+
+<p align="center">
+  <em>Round 5 was not only about scaling up. It was also about understanding which product families moved together, which ones diverged, and where pair structure was strong enough to justify specialized overlays.</em>
+</p>
+
+## Repository Guide
+
+This repository is large, so here is the best way to navigate it:
+
+- `prosperity/`
+  - the shared trading framework
+  - configuration, backtesting, diagnostics, and strategy modules
+- `research/`
+  - round-specific studies, notebooks, manual challenge work, and structural analysis
+- `scripts/`
+  - operational tools for analysis, dashboards, exports, and validation
+- `artifacts/submissions/`
+  - archived final candidates, selection notes, and round summaries
+- `artifacts/analysis/`
+  - generated research visuals and review outputs
+- `team/`
+  - teammate notes, playbooks, and coordination material
+- `docs/`
+  - guides, preserved references, and presentation assets
+
+## Good Places to Start Reading
+
+If you only have a few minutes and want the most representative pieces:
+
+- this `README.md`
+- `research/round_2/manual_round_2/FINDINGS.md`
+- `research/round_2/round_2_MAF/FINDINGS.md`
+- `artifacts/submissions/round_3/README.md`
+- `artifacts/submissions/round_4/_BASELINE/README.md`
+- `artifacts/submissions/round_5/FINAL_v3000_HYBRID.md`
+
+Those files give a strong picture of the team’s style: strategy development, quantitative reasoning, manual challenge modeling, and final integration work.
+
+## Minimal Quick Start
+
+For anyone who wants to run the repository locally:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 -m pytest tests -q
+python3 backtest.py --strategy champion --round 0 --days -2 --execution-rule queue
 ```
 
-## Execution Flow
+## Why This Repo Matters
 
-Default local flow:
+The point of this repository is not that it presents a perfect competition outcome.
 
-```text
-main.py
-  -> submissions/<member>.py       # champion by default; edit CURRENT_MEMBER in trader.py
-    -> prosperity/strategies/trader.py
-      -> prosperity/config.py
-        -> selected strategy per product
-```
+What it does show is a way of working that is useful far beyond a trading competition:
 
-The root `main.py` is intentionally thin. The active member is controlled by `CURRENT_MEMBER` in `prosperity/strategies/trader.py`. The file you upload to IMC should be the exported single-file submission generated by `scripts/export_submission.py`.
+- turning messy problems into structured experiments
+- combining quantitative reasoning with practical engineering
+- collaborating under deadline pressure without losing rigor
+- using post-trade review as a real source of research feedback
+- integrating multiple people’s strengths into stronger final systems
 
-## Strategy Modules
-
-Generic / framework strategies:
-
-- `market_maker` — round-0 style fair-value market making
-- `avellaneda_stoikov` — inventory-aware quoting model
-- `stat_arb` — basket / synthetic-value mean reversion
-- `black_scholes` — options / voucher pricing
-- `conversion_arb` — cross-market conversion arbitrage
-- `signal_trader` — bot-following directional strategy
-- `mm_first` — first-pass market maker baseline
-- `buy_and_hold` — passive long baseline
-
-Naive tight-MM family (iterative round-0 baselines, see `prosperity/strategies/naive_tight_mm*.py`):
-
-- `naive_tight_mm`, `naive_tight_mm_v2` … `naive_tight_mm_v12`, `v14` … `v17`, `v23`, `v24`
-- `trend_biased_mm_v18`
-- `book_following_trend_mm_v19`, `v20`, `v21`
-
-Round 1 research strategies (`prosperity/strategies/round_1/`):
-
-- `round1_regression_top_book`
-- `round1_regression_mm_v3`, `v4`, `v5`
-
-Key source files:
-
-- `prosperity/strategies/market_maker.py`, `avellaneda_stoikov.py`, `stat_arb.py`, `black_scholes.py`, `conversion_arb.py`, `signal_trader.py`, `mm_first.py`, `buy_and_hold.py`
-- `prosperity/strategies/naive_tight_mm*.py` — Léo's quoting iterations
-- `prosperity/strategies/round_1/regression_*.py` — Léo's round-1 regression-based quoters
-
-Signal and research helpers:
-
-- `prosperity/signals/bot_detector.py`
-- `prosperity/signals/predictor.py`
-- `research/analysis.py`
-- `research/visualizer/`
-
-## Member Variants
-
-Submission entrypoints live in `submissions/`. Baselines:
-
-- `champion.py`, `leo.py`, `theo.py`, `pietro.py`
-
-Round-0 iterations (Léo's naive tight-MM family):
-
-- `leo_naive.py`, `leo_naive_v1_max.py`, `leo_naive_v2.py` … `leo_naive_v8.py`
-
-Round-1 iterations:
-
-- `leo_round1_naive.py`, `leo_round1_naive_v7.py`, `leo_round1_naive_v8.py`
-- `leo_reg_lin_round1.py`, `leo_reg_lin_round1_v2.py` … `leo_reg_lin_round1_v5.py` (+ `v4_1`)
-- `theo_round1.py`, `theo_round1_v10.py` … `theo_round1_v24.py` (incl. `v14a/b/c/d`)
-
-Tibo variants:
-
-- `tibo_AvSt.py`, `tibo_mm.py`, `tibo_mm_first.py`, `tibo_naive_mm.py`
-
-Utility wrapper:
-
-- `buy_and_hold.py`
-
-The member wrappers are intentionally thin. Their behavior comes from:
-
-- `prosperity/config.py` (`MEMBER_OVERRIDES`)
-- `prosperity/strategies/trader.py` (`CURRENT_MEMBER`)
-
-The old standalone root strategy that previously lived in `main.py` is archived in:
-
-- `docs/old/legacy_strategies/main_standalone_ema_mm.py`
-
-## Environment Setup
-
-Windows / PowerShell:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-```
-
-Optional notebook stack:
-
-```powershell
-python -m pip install -r requirements-optional.txt
-```
-
-## Core Commands
-
-Backtest one strategy:
-
-```powershell
-python backtest.py --strategy champion --round 0 --days -2 -1 --execution-rule queue
-```
-
-Compare multiple strategies:
-
-```powershell
-python -m prosperity.tooling.compare --strategies champion leo theo pietro --round 0 --days -2 -1 --execution-rule queue
-```
-
-Rank by robustness instead of raw PnL:
-
-```powershell
-python -m prosperity.tooling.compare --strategies champion leo theo pietro --round 0 --days -2 -1 --execution-rule realistic --rank-by drawdown
-```
-
-Run a parameter sweep:
-
-```powershell
-python -m prosperity.tooling.grid_search --strategy champion --round 0 --days -2 -1 --execution-rule queue --param "EMERALDS.ema_alpha=0.05,0.10,0.15" --param "TOMATOES.quote_half_spread=1,2,3"
-```
-
-Sweep with robustness-aware ranking:
-
-```powershell
-python -m prosperity.tooling.grid_search --strategy champion --round 0 --days -2 -1 --execution-rule realistic --rank-by inventory_pressure --param "EMERALDS.ema_alpha=0.05,0.10,0.15"
-```
-
-Analyze raw round CSV data:
-
-```powershell
-python research/analysis.py --data-dir data --round 0 --day -2
-```
-
-`--data-dir data` remains the default even with the nested layout. The framework now resolves files automatically from `data/round_<n>/...`, so round 0 and round 1 can coexist cleanly under the same root.
-
-Review an official log with static plots:
-
-```powershell
-python scripts/analyze_log.py --log examples\official_logs\16248.log --outdir artifacts\analysis
-```
-
-Review an official log and auto-reconcile against a local backtest JSON:
-
-```powershell
-python -m prosperity.tooling.logs --log logs\leo_round0_naiveV8\84616.json --backtest-json artifacts\backtest_results.json --symbol EMERALDS
-```
-
-If `--backtest-json` is omitted, the log analyzer now tries a best-effort auto-discovery inside `artifacts/` before falling back to log-only analysis. The analyzer also prints participant-aware summaries with post-trade markouts by horizon.
-
-Reconcile a local backtest with an official submission:
-
-```powershell
-python -m prosperity.tooling.reconcile --log logs\leo_round0_naiveV8\84616.json --backtest-json artifacts\backtest_results.json
-```
-
-Launch the interactive dashboard:
-
-```powershell
-python -m prosperity.tooling.dashboard --log examples\official_logs\16248.log
-```
-
-When `--log` is provided, the dashboard now tries to auto-discover a matching local backtest JSON in `artifacts/`. If a confident match is found, it auto-runs reconciliation in the terminal before starting. If not, pass `--backtest-json` explicitly.
-
-Current dashboard diagnostics now include:
-
-- backtest diagnostics cards per symbol: fill efficiency, per-side fill efficiency, quote age / refresh / stale exposure, inventory episodes, pnl attribution, and multi-horizon markouts
-- IMC diagnostics cards per symbol: participant-aware trade summaries and official post-trade markouts
-- live vs backtest comparison cards per symbol: fills, side fill-rate proxy, quoted spread, and headline markouts
-- live vs backtest overlay chart: position path, cumulative fills, and quoted spread
-- IMC trade-flow panel: signed trade flow vs our own signed submission flow
-- observation / conversion traces in backtest view when the underlying CSV data exposes them
-
-Benchmark latency:
-
-```powershell
-python scripts/benchmark_strategy.py --strategy champion --day -2
-```
-
-Run tests:
-
-```powershell
-python -m unittest
-```
-
-## Exporting For The IMC Site
-
-Generate a single-file submission:
-
-```powershell
-python scripts\export_submission.py --member champion --round 0 --output artifacts\submissions\champion_submission.py
-```
-
-Supported members:
-
-- `champion`
-- `leo`
-- `theo`
-- `pietro`
-
-Recommended upload workflow:
-
-1. Backtest locally.
-2. Benchmark latency.
-3. Export the single-file submission.
-4. Compile-check the exported file locally if needed.
-5. Upload the exported file to the IMC site.
-6. Save the submission id and official log.
-
-## Makefile Shortcuts
-
-Useful shortcuts:
-
-- `make setup`
-- `make test`
-- `make backtest STRATEGY=champion ROUND=0`
-- `make compare ROUND=0`
-- `make grid-search STRATEGY=champion ROUND=0 ARGS="..."`
-- `make analyze ROUND=0 DAY=-2`
-- `make dashboard LOG=examples/official_logs/16248.log`
-- `make dashboard-static LOG=examples/official_logs/16248.log`
-- `make benchmark STRATEGY=champion`
-- `make export MEMBER=champion`
-
-## Team Workflow
-
-Shared round-day guide:
-
-- `team/shared/competition_playbook.md`
-
-Member workspaces:
-
-- `team/leo/README.md`
-- `team/theo/README.md`
-- `team/pietro/README.md`
-
-Recommended operating model:
-
-1. Keep one stable baseline alive at all times.
-2. Use member branches for one main idea each.
-3. Compare variants quickly with `compare` and `grid_search`.
-4. Export only from a known tested config.
-5. Review official logs immediately after every serious submission.
-
-## Validation Already In Place
-
-The framework has already been exercised locally with:
-
-- strategy backtests on round 0 data
-- export of a single-file submission
-- official log analysis
-- dashboard import checks
-- latency benchmark
-- unit and smoke tests under `tests/`
-
-## Known Limitations
-
-- The backtester does not reproduce true exchange queue priority.
-- Passive fills are modeled heuristically; the default is now a one-iteration queue heuristic, not exact FIFO.
-- Round 0 and round 1 are fully configured and under active iteration (ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT). Rounds 2–5 remain templates pending product reveal.
-- Some advanced strategies exist as modules but still need real round-specific calibration before they can be trusted competitively.
-- The exporter works today, but should eventually be generated from a stricter canonical source to reduce drift risk.
-- `.env` is currently present at the repository root and should not remain tracked long term.
-
-## Important Files
-
-- `prosperity/config.py`: round config and member overrides
-- `prosperity/strategies/trader.py`: universal dispatcher
-- `prosperity/tooling/backtest.py`: replay engine
-- `prosperity/tooling/compare.py`: side-by-side ranking
-- `prosperity/tooling/grid_search.py`: parameter sweeps
-- `prosperity/tooling/dashboard.py`: interactive review UI
-- `prosperity/tooling/logs.py`: official log parsing and plotting
-- `scripts/export_submission.py`: single-file exporter
-- `team/shared/competition_playbook.md`: operating checklist
-- `docs/old/`: archived code and legacy material
-
-## Bottom Line
-
-This repo is already a strong round-0 competition base. It is good enough to research, backtest, export, upload, and review results quickly. The next step is not to rebuild everything again, but to harden the workflow around experiment tracking, official/local calibration, and round-specific strategies as new products are revealed.
+That is what **RELATIVISTIC QUANTS** really built here.
