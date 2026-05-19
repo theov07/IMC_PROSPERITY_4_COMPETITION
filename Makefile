@@ -28,7 +28,7 @@ grid-search:  ## Run grid search (needs --param flags, see docs)
 	$(PYTHON) -m prosperity.tooling.grid_search --strategy $(STRATEGY) --round $(ROUND) $(ARGS)
 
 analyze:  ## Analyze round data (ROUND=0 DAY=-2)
-	$(PYTHON) research/analysis.py --round $(ROUND) --day $(or $(DAY),-2)
+	$(PYTHON) research/shared/analysis.py --round $(ROUND) --day $(or $(DAY),-2)
 
 dashboard:  ## Launch interactive dashboard (LOG=path/to/log.json)
 	$(PYTHON) -m prosperity.tooling.dashboard --log $(LOG)

@@ -1,7 +1,7 @@
-"""Extend research/analysis-round5.ipynb with means/variance/PCA/clustering analysis."""
+"""Extend research/round_5/analysis-round5.ipynb with means/variance/PCA/clustering analysis."""
 import json
 
-with open('research/analysis-round5.ipynb') as f:
+with open('research/round_5/analysis-round5.ipynb') as f:
     nb = json.load(f)
 
 # Define new cells
@@ -286,7 +286,7 @@ if len(nb['cells']) >= 14:
 else:
     nb['cells'].extend(new_cells)
 
-with open('research/analysis-round5.ipynb', 'w') as f:
+with open('research/round_5/analysis-round5.ipynb', 'w') as f:
     json.dump(nb, f, indent=1)
 
 print(f"Notebook now has {len(nb['cells'])} cells")

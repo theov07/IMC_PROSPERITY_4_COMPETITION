@@ -1,4 +1,4 @@
-"""Static HTML Plotly version of research/visualizer/dashboard.py.
+"""Static HTML Plotly version of research/shared/visualizer/dashboard.py.
 
 Generates a self-contained HTML report with per-product charts (mid + best
 bid/ask, spread, imbalance, signed trade markers, cumulative volume) for the

@@ -55,13 +55,13 @@ Role:
 ### Generer des graphes dans `artifacts/visualizer_output/`
 
 ```powershell
-python research\visualizer\main.py
+python research\shared\visualizer\main.py
 ```
 
 ### Analyse texte + JSON d'un jour
 
 ```powershell
-python research\analysis.py --data-dir data --round 0 --day -2
+python research\shared\analysis.py --data-dir data --round 0 --day -2
 ```
 
 Utilise cette phase avant de coder pour voir:
@@ -317,7 +317,7 @@ python scripts\export_submission.py --member champion --round 0 --output artifac
 ## 14. Notes importantes
 
 - Il y a deux dashboards differents:
-  - `research/visualizer/dashboard.py` pour la recherche sur la data brute
+- `research/shared/visualizer/dashboard.py` pour la recherche sur la data brute
   - `prosperity/tooling/dashboard.py` pour les backtests et logs
 - Ils n'utilisent plus le meme port par defaut:
   - research: `8051`

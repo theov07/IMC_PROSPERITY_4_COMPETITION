@@ -9,7 +9,7 @@
 ### Exploration
 ```bash
 # Launch interactive data explorer (before you start coding)
-python research/visualizer/dashboard.py
+python research/shared/visualizer/dashboard.py
 # → Opens http://localhost:8050
 ```
 
@@ -96,7 +96,7 @@ If `--backtest-json` is omitted, the dashboard now tries a best-effort auto-disc
 When a new round opens, **before you write any strategy code**, explore the data to understand market structure.
 
 ```bash
-python research/visualizer/main.py
+python research/shared/visualizer/main.py
 ```
 
 **What this tool does:**
