@@ -5,7 +5,7 @@
 <table align="center">
   <tr>
     <td align="center" width="220">
-      <a href="https://github.com/theov07">
+      <a href="https://fr.linkedin.com/in/theoverdelhan">
         <img src="https://github.com/theov07.png?size=200" width="96" alt="Théo Verdelhan">
       </a>
       <br>
@@ -13,10 +13,12 @@
       <br>
       Paris Dauphine University
       <br>
+      <a href="https://fr.linkedin.com/in/theoverdelhan">LinkedIn</a>
+      <br>
       <a href="https://github.com/theov07">GitHub</a>
     </td>
     <td align="center" width="220">
-      <a href="https://github.com/Leho777">
+      <a href="https://fr.linkedin.com/in/leorenault">
         <img src="https://github.com/Leho777.png?size=200" width="96" alt="Léo Renault">
       </a>
       <br>
@@ -24,18 +26,18 @@
       <br>
       Paris Dauphine University
       <br>
+      <a href="https://fr.linkedin.com/in/leorenault">LinkedIn</a>
+      <br>
       <a href="https://github.com/Leho777">GitHub</a>
     </td>
     <td align="center" width="220">
-      <a href="https://www.linkedin.com/in/thibautdesauty">
-        <img src="https://github.com/thibaut-dst.png?size=200" width="96" alt="dst">
+      <a href="https://github.com/thibaut-dst">
+        <img src="https://github.com/thibaut-dst.png?size=200" width="96" alt="Thibaut dst">
       </a>
       <br>
-      <strong>dst</strong>
+      <strong>Thibaut dst</strong>
       <br>
       University of Chicago
-      <br>
-      <a href="https://www.linkedin.com/in/thibautdesauty">LinkedIn</a>
       <br>
       <a href="https://github.com/thibaut-dst">GitHub</a>
     </td>
