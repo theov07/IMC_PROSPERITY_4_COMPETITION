@@ -336,16 +336,8 @@ python3 -m pytest tests -q
 python3 backtest.py --strategy champion --round 0 --days -2 --execution-rule queue
 ```
 
-## Why This Repo Matters
+## Closing Note
 
-The point of this repository is not that it presents a perfect competition outcome.
+This repository is meant to preserve the research process behind our IMC Prosperity 4 run: the framework we used, the ideas we tested, the manual challenges we modeled, and the archived candidates we selected along the way.
 
-What it does show is a way of working that carries beyond a trading competition:
-
-- turning messy problems into structured experiments
-- combining quantitative reasoning with practical engineering
-- collaborating under deadline pressure without losing rigor
-- using post-trade review as a real source of research feedback
-- integrating multiple people’s strengths into stronger final systems
-
-That is what **RELATIVISTIC QUANTS** really built here.
+It does not represent a single final strategy in isolation. It is the working record of a six-round quantitative trading project built through iteration, review, and integration.
